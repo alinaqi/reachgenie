@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import RedirectResponse
 from datetime import timedelta
 import csv
 import io
@@ -41,8 +42,14 @@ from src.bland_client import BlandClient
 app = FastAPI(
     title="Outbound AI SDR API",
     description="API for SDR automation with AI",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/docs")
 
 # Add CORS middleware
 app.add_middleware(
