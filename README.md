@@ -49,7 +49,7 @@ SUPABASE_KEY=your_supabase_key
 JWT_SECRET_KEY=your_secret_key
 ```
 
-5. Run the application:
+5. To run the development server with auto-reload:
 ```bash
 uvicorn src.main:app --reload
 ```
@@ -61,40 +61,6 @@ The API will be available at `http://localhost:8000`
 Once the server is running, you can access the interactive API documentation at:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-
-## API Endpoints
-
-### Authentication
-- POST `/api/auth/signup` - Create a new user account
-- POST `/api/auth/login` - Login and get access token
-- POST `/api/auth/reset-password` - Request password reset
-
-### Company Management
-- POST `/api/companies` - Create a new company
-- POST `/api/companies/{company_id}/products` - Add a product to company
-- GET `/api/companies/{company_id}/products` - Get company products
-
-### Lead Management
-- POST `/api/companies/{company_id}/leads/upload` - Upload leads via CSV
-- GET `/api/companies/{company_id}/leads` - Get company leads
-
-### Call Management
-- POST `/api/calls/start` - Start a new call
-- GET `/api/calls/{call_id}/summary` - Get call summary
-
-## Security
-
-- JWT token-based authentication
-- Password hashing using bcrypt
-- CORS middleware configured
-- Environment variables for sensitive data
-
-## Development
-
-To run the development server with auto-reload:
-```bash
-uvicorn src.main:app --reload
-```
 
 ## License
 
