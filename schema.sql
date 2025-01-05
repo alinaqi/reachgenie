@@ -52,5 +52,6 @@ CREATE TABLE IF NOT EXISTS calls (
     duration INTEGER,
     sentiment TEXT,
     summary TEXT,
+    bland_call_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 ); 
