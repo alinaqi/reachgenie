@@ -15,12 +15,18 @@ from src.models import (
 from src.database import (
     create_user,
     get_user_by_email,
-    create_company,
+    db_create_company,
     get_companies_by_user_id,
-    create_product,
+    db_create_product,
     get_products_by_company,
     create_lead,
-    get_leads_by_company
+    get_leads_by_company,
+    create_call,
+    get_call_summary,
+    get_lead_by_id,
+    get_product_by_id,
+    update_call_details,
+    get_company_by_id
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -103,7 +109,7 @@ async def create_company(
     company: CompanyCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    return await create_company(
+    return await db_create_company(
         current_user["id"],
         company.name,
         company.address,
@@ -119,7 +125,7 @@ async def create_product(
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await create_product(company_id, product.product_name, product.description)
+    return await db_create_product(company_id, product.product_name, product.description)
 
 @app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
 async def get_products(
@@ -193,26 +199,38 @@ async def start_call(
     product_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
+    # Get user's companies
+    user_companies = await get_companies_by_user_id(current_user["id"])
+    company_ids = [str(company["id"]) for company in user_companies]
+    
     # Get the lead and product details
     lead = await get_lead_by_id(lead_id)
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+    if not lead or str(lead["company_id"]) not in company_ids:
+        raise HTTPException(status_code=404, detail="Lead not found or unauthorized access")
         
     product = await get_product_by_id(product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    if not product or str(product["company_id"]) not in company_ids:
+        raise HTTPException(status_code=404, detail="Product not found or unauthorized access")
+    
+    # Get company details
+    company = await get_company_by_id(product["company_id"])
         
     # Generate the script based on product details
-    script = f"""You are an AI sales representative for {product['product_name']}. 
-    Your goal is to introduce the product and understand if there's interest.
-    Key points about the product: {product['description']}
+    script = f"""You are Alex, an AI sales representative at {company['name']} for {product['product_name']} 
+    calling {lead['name']} about {product['product_name']}. 
+    Your goal is to introduce the product to the lead and understand if there's interest.
+    Key points about the product are: {product['description']}
     
     Start with a friendly introduction, explain the product briefly, and gauge interest.
     Be professional, friendly, and respect the person's time."""
     
     # Initialize Bland client and start the call
     settings = get_settings()
-    bland_client = BlandClient(settings.bland_api_key, settings.bland_api_url)
+    bland_client = BlandClient(
+        api_key=settings.bland_api_key,
+        base_url=settings.bland_api_url,
+        webhook_base_url=settings.webhook_base_url
+    )
     
     try:
         bland_response = await bland_client.start_call(
