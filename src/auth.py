@@ -48,4 +48,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(H
     user = await get_user_by_email(email)
     if user is None:
         raise credentials_exception
-    return user
+        
+    # Ensure we return a properly structured dictionary
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "created_at": user["created_at"]
+    }
