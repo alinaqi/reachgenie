@@ -26,6 +26,8 @@ from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings
 )
+from src.perplexity_enrichment import PerplexityEnricher
+from src.config import get_settings
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -147,6 +149,10 @@ async def upload_leads(
     csv_data = csv.DictReader(io.StringIO(contents.decode()))
     lead_count = 0
     
+    # Initialize Perplexity enricher
+    settings = get_settings()
+    enricher = PerplexityEnricher(settings.perplexity_api_key)
+    
     for row in csv_data:
         lead_data = {
             "name": row.get("name"),
@@ -159,6 +165,11 @@ async def upload_leads(
             "company_twitter": row.get("company_twitter"),
             "company_revenue": row.get("company_revenue")
         }
+        
+        # Enrich lead data with Perplexity if any required fields are missing
+        if not all([lead_data.get(field) for field in ["email","phone_number","job_title", "company_size", "company_revenue","company_facebook","company_twitter"]]):
+            lead_data = await enricher.enrich_lead_data(lead_data)
+        
         await create_lead(company_id, lead_data)
         lead_count += 1
     
