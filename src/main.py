@@ -10,7 +10,8 @@ from uuid import UUID
 
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
-    CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token
+    CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
+    BlandWebhookPayload
 )
 from src.database import (
     create_user,
@@ -26,7 +27,8 @@ from src.database import (
     get_lead_by_id,
     get_product_by_id,
     update_call_details,
-    get_company_by_id
+    get_company_by_id,
+    update_call_webhook_data
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -261,3 +263,34 @@ async def get_call_details(
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
     return call 
+
+@app.post("/api/calls/webhook")
+async def handle_bland_webhook(payload: BlandWebhookPayload):
+    try:
+        # Extract required fields from the payload
+        bland_call_id = payload.call_id
+        duration = payload.corrected_duration
+        sentiment = payload.analysis.get('sentiment', 'neutral')
+        summary = payload.summary
+        
+        # Update the call record in the database
+        updated_call = await update_call_webhook_data(
+            bland_call_id=bland_call_id,
+            duration=duration,
+            sentiment=sentiment,
+            summary=summary
+        )
+        
+        if not updated_call:
+            raise HTTPException(
+                status_code=404,
+                detail="Call record not found"
+            )
+            
+        return {"status": "success", "message": "Call details updated"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process webhook: {str(e)}"
+        ) 

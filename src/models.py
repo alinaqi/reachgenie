@@ -73,4 +73,10 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    email: Optional[str] = None 
+    email: Optional[str] = None
+
+class BlandWebhookPayload(BaseModel):
+    call_id: str
+    summary: str
+    corrected_duration: str
+    analysis: dict 
