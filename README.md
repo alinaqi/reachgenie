@@ -36,7 +36,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-For bcrypt system level dependency errors, you need to install/update by running the following command:
+For bcrypt system level dependency errors, you need to install/update by running the following command inside your virtual environment:
 
 ```bash
 pip install --upgrade pip setuptools wheel

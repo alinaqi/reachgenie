@@ -128,6 +128,10 @@ async def get_products(
         raise HTTPException(status_code=404, detail="Company not found")
     return await get_products_by_company(company_id)
 
+@app.get("/api/companies", response_model=List[CompanyInDB])
+async def get_companies(current_user: dict = Depends(get_current_user)):
+    return await get_companies_by_user_id(current_user["id"])
+
 # Lead Management endpoints
 @app.post("/api/companies/{company_id}/leads/upload")
 async def upload_leads(
