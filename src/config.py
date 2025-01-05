@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     perplexity_api_key: str
+    bland_api_key: str
+    bland_api_url: str = "https://api.bland.ai"
 
     class Config:
         env_file = ".env"

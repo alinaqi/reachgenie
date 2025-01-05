@@ -66,6 +66,7 @@ class CallInDB(CallBase):
     duration: Optional[int] = None
     sentiment: Optional[str] = None
     summary: Optional[str] = None
+    bland_call_id: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str

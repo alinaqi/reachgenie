@@ -28,6 +28,7 @@ from src.auth import (
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
+from src.bland_client import BlandClient
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -192,7 +193,46 @@ async def start_call(
     product_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
-    return await create_call(lead_id, product_id)
+    # Get the lead and product details
+    lead = await get_lead_by_id(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    # Generate the script based on product details
+    script = f"""You are an AI sales representative for {product['product_name']}. 
+    Your goal is to introduce the product and understand if there's interest.
+    Key points about the product: {product['description']}
+    
+    Start with a friendly introduction, explain the product briefly, and gauge interest.
+    Be professional, friendly, and respect the person's time."""
+    
+    # Initialize Bland client and start the call
+    settings = get_settings()
+    bland_client = BlandClient(settings.bland_api_key, settings.bland_api_url)
+    
+    try:
+        bland_response = await bland_client.start_call(
+            phone_number=lead['phone_number'],
+            script=script
+        )
+        
+        # Create call record in database
+        call = await create_call(lead_id, product_id)
+        
+        # Update call with Bland call ID
+        await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
+        
+        return call
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initiate call: {str(e)}"
+        )
 
 @app.get("/api/calls/{call_id}", response_model=CallInDB)
 async def get_call_details(

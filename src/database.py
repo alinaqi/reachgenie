@@ -70,4 +70,19 @@ async def update_call_summary(call_id: UUID, duration: int, sentiment: str, summ
 
 async def get_call_summary(call_id: UUID):
     response = supabase.table('calls').select('*').eq('id', str(call_id)).execute()
-    return response.data[0] if response.data else None 
+    return response.data[0] if response.data else None
+
+async def get_lead_by_id(lead_id: UUID):
+    response = supabase.table('leads').select('*').eq('id', str(lead_id)).execute()
+    return response.data[0] if response.data else None
+
+async def get_product_by_id(product_id: UUID):
+    response = supabase.table('products').select('*').eq('id', str(product_id)).execute()
+    return response.data[0] if response.data else None
+
+async def update_call_details(call_id: UUID, bland_call_id: str):
+    call_data = {
+        'bland_call_id': bland_call_id
+    }
+    response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
+    return response.data[0] 
