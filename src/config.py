@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     perplexity_api_key: str
     bland_api_key: str
     bland_api_url: str = "https://api.bland.ai"
+    webhook_base_url: str = "http://localhost:8000"  # Default for local development
 
     class Config:
         env_file = ".env"

@@ -19,7 +19,7 @@ async def get_companies_by_user_id(user_id: UUID):
     response = supabase.table('companies').select('*').eq('user_id', str(user_id)).execute()
     return response.data
 
-async def create_company(user_id: UUID, name: str, address: Optional[str], industry: Optional[str]):
+async def db_create_company(user_id: UUID, name: str, address: Optional[str], industry: Optional[str]):
     company_data = {
         'user_id': str(user_id),
         'name': name,
@@ -29,7 +29,7 @@ async def create_company(user_id: UUID, name: str, address: Optional[str], indus
     response = supabase.table('companies').insert(company_data).execute()
     return response.data[0]
 
-async def create_product(company_id: UUID, product_name: str, description: Optional[str]):
+async def db_create_product(company_id: UUID, product_name: str, description: Optional[str]):
     product_data = {
         'company_id': str(company_id),
         'product_name': product_name,
@@ -85,4 +85,8 @@ async def update_call_details(call_id: UUID, bland_call_id: str):
         'bland_call_id': bland_call_id
     }
     response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
-    return response.data[0] 
+    return response.data[0]
+
+async def get_company_by_id(company_id: UUID):
+    response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 
