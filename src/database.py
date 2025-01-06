@@ -138,3 +138,18 @@ async def get_calls_by_companies(company_ids: List[str]):
             unique_calls.append(call)
     
     return unique_calls 
+
+async def get_calls_by_company_id(company_id: UUID):
+    # Get calls with their related data
+    response = supabase.table('calls').select(
+        '*,leads(*),products(*)'
+    ).eq('company_id', str(company_id)).execute()
+    
+    # Add lead_name and product_name to each call record
+    calls = []
+    for call in response.data:
+        call['lead_name'] = call['leads']['name'] if call.get('leads') else None
+        call['product_name'] = call['products']['product_name'] if call.get('products') else None
+        calls.append(call)
+    
+    return calls 

@@ -30,7 +30,7 @@ from src.database import (
     update_call_details,
     get_company_by_id,
     update_call_webhook_data,
-    get_calls_by_companies
+    get_calls_by_company_id
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -320,11 +320,14 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             detail=f"Failed to process webhook: {str(e)}"
         ) 
 
-@app.get("/api/calls", response_model=List[CallInDB])
-async def get_calls(current_user: dict = Depends(get_current_user)):
-    # Get user's companies
-    user_companies = await get_companies_by_user_id(current_user["id"])
-    company_ids = [str(company["id"]) for company in user_companies]
+@app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB])
+async def get_company_calls(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
     
-    # Get all calls for these companies
-    return await get_calls_by_companies(company_ids) 
+    return await get_calls_by_company_id(company_id) 
