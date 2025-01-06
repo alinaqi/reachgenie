@@ -51,10 +51,11 @@ async def get_leads_by_company(company_id: UUID):
     response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
     return response.data
 
-async def create_call(lead_id: UUID, product_id: UUID):
+async def create_call(lead_id: UUID, product_id: UUID, company_id: UUID):
     call_data = {
         'lead_id': str(lead_id),
-        'product_id': str(product_id)
+        'product_id': str(product_id),
+        'company_id': str(company_id)
     }
     response = supabase.table('calls').insert(call_data).execute()
     return response.data[0]

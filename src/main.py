@@ -218,27 +218,29 @@ async def get_leads(
     return await get_leads_by_company(company_id)
 
 # Calling functionality endpoints
-@app.post("/api/calls/start", response_model=CallInDB)
+@app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB)
 async def start_call(
+    company_id: UUID,
     lead_id: UUID,
     product_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
-    # Get user's companies
-    user_companies = await get_companies_by_user_id(current_user["id"])
-    company_ids = [str(company["id"]) for company in user_companies]
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
     
     # Get the lead and product details
     lead = await get_lead_by_id(lead_id)
-    if not lead or str(lead["company_id"]) not in company_ids:
-        raise HTTPException(status_code=404, detail="Lead not found or unauthorized access")
+    if not lead or str(lead["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Lead not found or does not belong to this company")
         
     product = await get_product_by_id(product_id)
-    if not product or str(product["company_id"]) not in company_ids:
-        raise HTTPException(status_code=404, detail="Product not found or unauthorized access")
+    if not product or str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Product not found or does not belong to this company")
     
     # Get company details
-    company = await get_company_by_id(product["company_id"])
+    company = await get_company_by_id(company_id)
         
     # Generate the script based on product details
     script = f"""You are Alex, an AI sales representative at {company['name']} for {product['product_name']} 
@@ -263,8 +265,8 @@ async def start_call(
             script=script
         )
         
-        # Create call record in database
-        call = await create_call(lead_id, product_id)
+        # Create call record in database with company_id
+        call = await create_call(lead_id, product_id, company_id)
         
         # Update call with Bland call ID
         await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
