@@ -150,6 +150,21 @@ async def get_products(
 async def get_companies(current_user: dict = Depends(get_current_user)):
     return await get_companies_by_user_id(current_user["id"])
 
+@app.get("/api/companies/{company_id}", response_model=CompanyInDB)
+async def get_company(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    return company
+
 # Lead Management endpoints
 @app.post("/api/companies/{company_id}/leads/upload")
 async def upload_leads(
