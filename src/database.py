@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from src.config import get_settings
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 settings = get_settings()
@@ -98,4 +98,42 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
         'summary': summary
     }
     response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
-    return response.data[0] if response.data else None 
+    return response.data[0] if response.data else None
+
+async def get_calls_by_companies(company_ids: List[str]):
+    # Get all leads for the companies
+    leads_response = supabase.table('leads').select('id').in_('company_id', company_ids).execute()
+    lead_ids = [lead['id'] for lead in leads_response.data]
+    
+    # Get all products for the companies
+    products_response = supabase.table('products').select('id').in_('company_id', company_ids).execute()
+    product_ids = [product['id'] for product in products_response.data]
+    
+    # Get calls that match either lead_id or product_id
+    if not lead_ids and not product_ids:
+        return []
+        
+    # Get calls with their related data
+    response = supabase.table('calls').select(
+        '*,leads(*),products(*)'
+    ).in_('lead_id', lead_ids).execute()
+    
+    # Get calls for products if there are any product IDs
+    if product_ids:
+        product_response = supabase.table('calls').select(
+            '*,leads(*),products(*)'
+        ).in_('product_id', product_ids).execute()
+        response.data.extend(product_response.data)
+    
+    # Remove duplicates and add lead_name and product_name
+    seen_ids = set()
+    unique_calls = []
+    for call in response.data:
+        if call['id'] not in seen_ids:
+            seen_ids.add(call['id'])
+            # Add lead_name and product_name to the call record
+            call['lead_name'] = call['leads']['name'] if call.get('leads') else None
+            call['product_name'] = call['products']['product_name'] if call.get('products') else None
+            unique_calls.append(call)
+    
+    return unique_calls 

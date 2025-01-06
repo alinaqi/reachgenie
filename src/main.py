@@ -29,7 +29,8 @@ from src.database import (
     get_product_by_id,
     update_call_details,
     get_company_by_id,
-    update_call_webhook_data
+    update_call_webhook_data,
+    get_calls_by_companies
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -316,3 +317,12 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             status_code=500,
             detail=f"Failed to process webhook: {str(e)}"
         ) 
+
+@app.get("/api/calls", response_model=List[CallInDB])
+async def get_calls(current_user: dict = Depends(get_current_user)):
+    # Get user's companies
+    user_companies = await get_companies_by_user_id(current_user["id"])
+    company_ids = [str(company["id"]) for company in user_companies]
+    
+    # Get all calls for these companies
+    return await get_calls_by_companies(company_ids) 
