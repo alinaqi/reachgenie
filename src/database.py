@@ -142,8 +142,8 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID):
     # Get calls with their related data
     response = supabase.table('calls').select(
-        '*,leads(*),products(*)'
-    ).eq('company_id', str(company_id)).execute()
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,leads(*),products(*)'
+    ).eq('company_id', str(company_id)).order('created_at', desc=True).execute()
     
     # Add lead_name and product_name to each call record
     calls = []

@@ -69,6 +69,7 @@ class CallInDB(CallBase):
     bland_call_id: Optional[str] = None
     lead_name: Optional[str] = None
     product_name: Optional[str] = None
+    created_at: datetime
 
 class Token(BaseModel):
     access_token: str
