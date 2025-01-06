@@ -38,7 +38,7 @@ class ProductInDB(ProductBase):
 
 class LeadBase(BaseModel):
     name: str
-    email: EmailStr
+    email: Optional[str]
     company: Optional[str] = None
     phone_number: str
     company_size: Optional[str] = None
