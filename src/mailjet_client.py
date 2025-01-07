@@ -9,6 +9,7 @@ class MailjetClient:
         self.sender_email = sender_email
         self.sender_name = sender_name
         self.base_url = "https://api.mailjet.com/v3.1"
+        self.settings = get_settings()
 
     async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str) -> Dict:
         """
@@ -43,7 +44,10 @@ class MailjetClient:
                             ],
                             "Subject": subject,
                             "HTMLPart": html_content,
-                            "CustomID": custom_id
+                            "CustomID": custom_id,
+                            "Headers": {
+                                "Reply-To": self.settings.mailjet_parse_email
+                            }
                         }
                     ]
                 }

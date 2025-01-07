@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     mailjet_api_secret: str
     mailjet_sender_email: str
     mailjet_sender_name: str
-    mailjet_webhook_secret: str  # Secret key for Mailjet webhook authentication
+    mailjet_webhook_secret: str
+    mailjet_parse_email: str  # Email address for parsing replies
 
     class Config:
         env_file = ".env"
