@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import RedirectResponse
-from datetime import timedelta
+from datetime import timedelta, datetime
 import csv
 import io
 from typing import List
@@ -33,7 +33,9 @@ from src.database import (
     get_calls_by_company_id,
     create_email_campaign,
     get_email_campaigns_by_company,
-    get_email_campaign_by_id
+    get_email_campaign_by_id,
+    get_leads_for_campaign,
+    create_email_log
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -42,6 +44,7 @@ from src.auth import (
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
+from src.mailjet_client import MailjetClient
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -388,3 +391,67 @@ async def get_email_campaign(
         raise HTTPException(status_code=404, detail="Email campaign not found")
     
     return campaign 
+
+async def send_campaign_emails(campaign_id: UUID):
+    """Background task to send campaign emails"""
+    settings = get_settings()
+    
+    # Initialize Mailjet client
+    mailjet = MailjetClient(
+        api_key=settings.mailjet_api_key,
+        api_secret=settings.mailjet_api_secret,
+        sender_email=settings.mailjet_sender_email,
+        sender_name=settings.mailjet_sender_name
+    )
+    
+    # Get campaign details
+    campaign = await get_email_campaign_by_id(campaign_id)
+    if not campaign:
+        return
+    
+    # Get all leads for the campaign
+    leads = await get_leads_for_campaign(campaign_id)
+    
+    # Send emails to each lead
+    for lead in leads:
+        try:
+            if lead.get('email'):  # Only send if lead has email
+                # Create email log first
+                email_log = await create_email_log(
+                    campaign_id=campaign_id,
+                    lead_id=lead['id'],
+                    sent_at=datetime.utcnow().isoformat()
+                )
+                
+                # Send email with log ID as CustomID
+                await mailjet.send_email(
+                    to_email=lead['email'],
+                    to_name=lead['name'],
+                    subject=campaign['email_subject'],
+                    html_content=campaign['email_body'],
+                    custom_id=str(email_log['id'])
+                )
+        except Exception as e:
+            print(f"Failed to send email to {lead.get('email')}: {str(e)}")
+            continue
+
+@app.post("/api/email-campaigns/{campaign_id}/run")
+async def run_email_campaign(
+    campaign_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    # Get the campaign
+    campaign = await get_email_campaign_by_id(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Email campaign not found")
+    
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+        raise HTTPException(status_code=404, detail="Email campaign not found")
+    
+    # Add email sending to background tasks
+    background_tasks.add_task(send_campaign_emails, campaign_id)
+    
+    return {"message": "Email campaign started successfully"} 

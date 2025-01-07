@@ -172,4 +172,23 @@ async def get_email_campaigns_by_company(company_id: UUID):
 
 async def get_email_campaign_by_id(campaign_id: UUID):
     response = supabase.table('email_campaigns').select('*').eq('id', str(campaign_id)).execute()
-    return response.data[0] if response.data else None 
+    return response.data[0] if response.data else None
+
+async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: str):
+    log_data = {
+        'campaign_id': str(campaign_id),
+        'lead_id': str(lead_id),
+        'sent_at': sent_at
+    }
+    response = supabase.table('email_logs').insert(log_data).execute()
+    return response.data[0]
+
+async def get_leads_for_campaign(campaign_id: UUID):
+    # First get the campaign to get company_id
+    campaign = await get_email_campaign_by_id(campaign_id)
+    if not campaign:
+        return []
+    
+    # Then get all leads for that company
+    response = supabase.table('leads').select('*').eq('company_id', campaign['company_id']).execute()
+    return response.data 
