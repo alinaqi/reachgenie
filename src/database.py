@@ -2,6 +2,7 @@ from supabase import create_client, Client
 from src.config import get_settings
 from typing import Optional, List
 from uuid import UUID
+from datetime import datetime
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)

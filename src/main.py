@@ -455,3 +455,20 @@ async def run_email_campaign(
     background_tasks.add_task(send_campaign_emails, campaign_id)
     
     return {"message": "Email campaign started successfully"} 
+
+@app.post("/api/incoming-email")
+async def handle_mailjet_webhook(
+    secret: str,
+    payload: dict  # Accept any JSON payload
+):
+    # Validate webhook secret
+    settings = get_settings()
+    if secret != settings.mailjet_webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook secret"
+        )
+    
+    # Log the entire payload for inspection
+    print(f"Received Mailjet webhook payload: {payload}")
+    return {"status": "success", "message": "Event received"} 
