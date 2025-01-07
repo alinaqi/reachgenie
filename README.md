@@ -42,14 +42,15 @@ For bcrypt system level dependency errors, you need to install/update by running
 pip install --upgrade pip setuptools wheel
 ```
 
-4. Create a `.env` file in the root directory with the following variables:
-```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
-JWT_SECRET_KEY=your_secret_key
+4. Copy the `.env.example` file to create your own `.env` file:
+```bash
+cp .env.example .env
 ```
 
-5. To run the development server with auto-reload:
+5. Update the `.env` file with your actual credentials
+
+
+6. To run the development server with auto-reload:
 ```bash
 uvicorn src.main:app --reload
 ```
