@@ -11,3 +11,4 @@ python-jose==3.3.0
 email-validator==2.2.0
 httpx[http2]==0.27.2
 bcrypt==4.2.1
+openai==1.59.4
