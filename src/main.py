@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -6,8 +6,13 @@ from fastapi.responses import RedirectResponse
 from datetime import timedelta, datetime
 import csv
 import io
+import logging
 from typing import List
 from uuid import UUID
+from openai import AsyncOpenAI
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
@@ -35,7 +40,8 @@ from src.database import (
     get_email_campaigns_by_company,
     get_email_campaign_by_id,
     get_leads_for_campaign,
-    create_email_log
+    create_email_log,
+    update_email_log_sentiment
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -458,17 +464,61 @@ async def run_email_campaign(
 
 @app.post("/api/incoming-email")
 async def handle_mailjet_webhook(
-    secret: str,
-    payload: dict  # Accept any JSON payload
+    request: Request,
+    secret: str = Query(..., description="Webhook secret key for authentication")
 ):
-    # Validate webhook secret
+    """
+    Handle incoming email webhook from Mailjet
+    """
     settings = get_settings()
-    if secret != settings.mailjet_webhook_secret:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid webhook secret"
-        )
     
-    # Log the entire payload for inspection
-    print(f"Received Mailjet webhook payload: {payload}")
-    return {"status": "success", "message": "Event received"} 
+    # Validate webhook secret
+    if secret != settings.mailjet_webhook_secret:
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    
+    # Get webhook payload
+    payload = await request.json()
+    
+    # Extract CustomID and email content
+    custom_id = payload.get('CustomID')
+    email_text = payload.get('Text-part', '')
+    
+    if not custom_id:
+        raise HTTPException(status_code=400, detail="Missing CustomID")
+    
+    # Initialize OpenAI client
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    
+    # Analyze sentiment using OpenAI
+    prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
+    Positive: Indicates interest or willingness to proceed.
+    Neutral: Requests more information or clarification.
+    Negative: Indicates disinterest or rejection.
+    
+    Email reply:
+    {email_text}
+    
+    Respond with only one word: Positive, Neutral, or Negative."""
+    
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0,
+        max_tokens=10
+    )
+    
+    sentiment = response.choices[0].message.content.strip()
+    
+    # Update email log with sentiment
+    try:
+        email_log_id = UUID(custom_id)
+        await update_email_log_sentiment(email_log_id, sentiment.lower())
+    except ValueError:
+        logger.error(f"Invalid UUID in CustomID: {custom_id}")
+    except Exception as e:
+        logger.error(f"Error updating email log sentiment: {str(e)}")
+    
+    return {"status": "success"} 

@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from src.config import get_settings
-from typing import Optional, List
+from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
 
@@ -193,3 +193,20 @@ async def get_leads_for_campaign(campaign_id: UUID):
     # Then get all leads for that company
     response = supabase.table('leads').select('*').eq('company_id', campaign['company_id']).execute()
     return response.data 
+
+async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
+    """
+    Update the reply_sentiment for an email log
+    
+    Args:
+        email_log_id: UUID of the email log record
+        reply_sentiment: The sentiment category (positive, neutral, negative)
+        
+    Returns:
+        Dict containing the updated record
+    """
+    response = supabase.table('email_logs').update({
+        'reply_sentiment': reply_sentiment
+    }).eq('id', str(email_log_id)).execute()
+    
+    return response.data[0] if response.data else None 
