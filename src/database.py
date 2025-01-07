@@ -168,4 +168,8 @@ async def create_email_campaign(company_id: UUID, name: str, description: Option
 
 async def get_email_campaigns_by_company(company_id: UUID):
     response = supabase.table('email_campaigns').select('*').eq('company_id', str(company_id)).execute()
-    return response.data 
+    return response.data
+
+async def get_email_campaign_by_id(campaign_id: UUID):
+    response = supabase.table('email_campaigns').select('*').eq('id', str(campaign_id)).execute()
+    return response.data[0] if response.data else None 

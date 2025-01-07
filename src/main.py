@@ -32,7 +32,8 @@ from src.database import (
     update_call_webhook_data,
     get_calls_by_company_id,
     create_email_campaign,
-    get_email_campaigns_by_company
+    get_email_campaigns_by_company,
+    get_email_campaign_by_id
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -369,4 +370,21 @@ async def get_company_email_campaigns(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_email_campaigns_by_company(company_id) 
+    return await get_email_campaigns_by_company(company_id)
+
+@app.get("/api/email-campaigns/{campaign_id}", response_model=EmailCampaignInDB)
+async def get_email_campaign(
+    campaign_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    # Get the campaign
+    campaign = await get_email_campaign_by_id(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Email campaign not found")
+    
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+        raise HTTPException(status_code=404, detail="Email campaign not found")
+    
+    return campaign 
