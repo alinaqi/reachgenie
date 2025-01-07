@@ -82,4 +82,19 @@ class BlandWebhookPayload(BaseModel):
     call_id: str
     summary: str
     corrected_duration: str
-    analysis: dict 
+    analysis: dict
+
+class EmailCampaignBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    product_id: UUID
+    email_subject: str
+    email_body: str
+
+class EmailCampaignCreate(EmailCampaignBase):
+    pass
+
+class EmailCampaignInDB(EmailCampaignBase):
+    id: UUID
+    company_id: UUID
+    created_at: datetime 

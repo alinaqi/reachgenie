@@ -12,7 +12,7 @@ from uuid import UUID
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
-    BlandWebhookPayload
+    BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB
 )
 from src.database import (
     create_user,
@@ -30,7 +30,8 @@ from src.database import (
     update_call_details,
     get_company_by_id,
     update_call_webhook_data,
-    get_calls_by_company_id
+    get_calls_by_company_id,
+    create_email_campaign
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -330,4 +331,29 @@ async def get_company_calls(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_calls_by_company_id(company_id) 
+    return await get_calls_by_company_id(company_id)
+
+@app.post("/api/companies/{company_id}/email-campaigns", response_model=EmailCampaignInDB)
+async def create_company_email_campaign(
+    company_id: UUID,
+    campaign: EmailCampaignCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Validate product belongs to company
+    product = await get_product_by_id(campaign.product_id)
+    if not product or str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Product not found or does not belong to this company")
+    
+    return await create_email_campaign(
+        company_id=company_id,
+        name=campaign.name,
+        description=campaign.description,
+        product_id=campaign.product_id,
+        email_subject=campaign.email_subject,
+        email_body=campaign.email_body
+    ) 
