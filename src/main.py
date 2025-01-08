@@ -45,7 +45,8 @@ from src.database import (
     get_email_campaign_by_id,
     get_leads_for_campaign,
     create_email_log,
-    update_email_log_sentiment
+    update_email_log_sentiment,
+    create_email_log_detail
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
