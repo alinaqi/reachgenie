@@ -502,6 +502,17 @@ async def handle_mailjet_webhook(
     email_text = payload.get('Text-part', '')
     headers = payload.get('Headers', {})
     from_email = payload.get('Sender', '')  # Get sender's email
+    from_field = payload.get('From', '')    # Get the full From field
+    
+    # Extract name from From field (format: "Name <email@domain.com>")
+    recipient_name = from_email.split('@')[0]  # Default to email username
+    if from_field:
+        try:
+            # Try to extract name from "Name <email>" format
+            if '<' in from_field and '>' in from_field:
+                recipient_name = from_field.split('<')[0].strip()
+        except Exception as e:
+            logger.error(f"Error extracting name from From field: {str(e)}")
     
     # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
     message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
@@ -598,14 +609,14 @@ async def handle_mailjet_webhook(
                 response_subject = f"Re: {subject}" if not subject.startswith('Re:') else subject
                 await mailjet.send_email(
                     to_email=from_email,
-                    to_name=from_email.split('@')[0],
+                    to_name=recipient_name,
                     subject=response_subject,
                     html_content=formatted_reply,
                     custom_id=str(email_log_id),  # Use the same email_log_id
                     email_log_id=email_log_id,    # Use the same email_log_id
                     sender_type='assistant'       # This is an assistant response
                 )
-                logger.info(f"Sent AI response to {from_email}")
+                logger.info(f"Sent AI response to {from_email} ({recipient_name})")
                 
             except Exception as e:
                 logger.error(f"Failed to create email_log_detail or send response: {str(e)}")
