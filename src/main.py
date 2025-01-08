@@ -579,11 +579,12 @@ async def handle_mailjet_webhook(
                 ai_reply = response.choices[0].message.content.strip()
                 
                 # Format AI reply with HTML
-                formatted_reply = f"""
+                html_template = """
                 <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                    {ai_reply.replace('\n', '<br>')}
+                    {}
                 </div>
                 """
+                formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
                 
                 # Initialize Mailjet client for sending the response
                 mailjet = MailjetClient(
