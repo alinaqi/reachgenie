@@ -489,47 +489,65 @@ async def handle_mailjet_webhook(
     
     # Get webhook payload
     payload = await request.json()
+    logger.info(f"Received webhook payload: {payload}")
     
-    # Extract CustomID and email content
+    # Extract CustomID, email content and headers
     custom_id = payload.get('CustomID')
     email_text = payload.get('Text-part', '')
+    message_id = payload.get('Message-ID', '')  # Get Message-ID from the email headers
+    subject = payload.get('Subject', '')
     
     if not custom_id:
         raise HTTPException(status_code=400, detail="Missing CustomID")
     
-    # Initialize OpenAI client
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    
-    # Analyze sentiment using OpenAI
-    prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
-    Positive: Indicates interest or willingness to proceed.
-    Neutral: Requests more information or clarification.
-    Negative: Indicates disinterest or rejection.
-    
-    Email reply:
-    {email_text}
-    
-    Respond with only one word: Positive, Neutral, or Negative."""
-    
-    response = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0,
-        max_tokens=10
-    )
-    
-    sentiment = response.choices[0].message.content.strip()
-    
-    # Update email log with sentiment
     try:
+        # Create email_log_details record
         email_log_id = UUID(custom_id)
+        if message_id:
+            try:
+                await create_email_log_detail(
+                    email_logs_id=email_log_id,
+                    message_id=message_id,
+                    email_subject=subject,
+                    email_body=email_text
+                )
+                logger.info(f"Created email_log_detail for message_id: {message_id}")
+            except Exception as e:
+                logger.error(f"Failed to create email_log_detail: {str(e)}")
+        
+        # Initialize OpenAI client
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Analyze sentiment using OpenAI
+        prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
+        Positive: Indicates interest or willingness to proceed.
+        Neutral: Requests more information or clarification.
+        Negative: Indicates disinterest or rejection.
+        
+        Email reply:
+        {email_text}
+        
+        Respond with only one word: Positive, Neutral, or Negative."""
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0,
+            max_tokens=10
+        )
+        
+        sentiment = response.choices[0].message.content.strip()
+        
+        # Update email log with sentiment
         await update_email_log_sentiment(email_log_id, sentiment.lower())
+        logger.info(f"Updated email_log sentiment to: {sentiment}")
+        
     except ValueError:
         logger.error(f"Invalid UUID in CustomID: {custom_id}")
     except Exception as e:
-        logger.error(f"Error updating email log sentiment: {str(e)}")
+        logger.error(f"Error processing webhook: {str(e)}")
     
     return {"status": "success"} 
