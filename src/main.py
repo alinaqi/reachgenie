@@ -7,7 +7,7 @@ from datetime import timedelta, datetime
 import csv
 import io
 import logging
-from typing import List
+from typing import List, Dict
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
