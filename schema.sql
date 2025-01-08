@@ -78,3 +78,13 @@ CREATE TABLE IF NOT EXISTS email_logs (
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Email log details table
+CREATE TABLE IF NOT EXISTS email_log_details (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email_logs_id UUID REFERENCES email_logs(id),
+    message_id TEXT NOT NULL UNIQUE,
+    email_subject TEXT,
+    email_body TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

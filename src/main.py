@@ -12,6 +12,10 @@ from uuid import UUID
 from openai import AsyncOpenAI
 
 # Configure logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 from src.models import (
@@ -400,6 +404,7 @@ async def get_email_campaign(
 
 async def send_campaign_emails(campaign_id: UUID):
     """Background task to send campaign emails"""
+    logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
     settings = get_settings()
     
     # Initialize Mailjet client
@@ -413,32 +418,38 @@ async def send_campaign_emails(campaign_id: UUID):
     # Get campaign details
     campaign = await get_email_campaign_by_id(campaign_id)
     if not campaign:
+        logger.error(f"Campaign not found: {campaign_id}")
         return
     
     # Get all leads for the campaign
     leads = await get_leads_for_campaign(campaign_id)
+    logger.info(f"Found {len(leads)} leads for campaign")
     
     # Send emails to each lead
     for lead in leads:
         try:
             if lead.get('email'):  # Only send if lead has email
+                logger.info(f"Sending email to {lead['email']}")
                 # Create email log first
                 email_log = await create_email_log(
                     campaign_id=campaign_id,
                     lead_id=lead['id'],
                     sent_at=datetime.utcnow().isoformat()
                 )
+                logger.info(f"Created email_log with id: {email_log['id']}")
                 
-                # Send email with log ID as CustomID
+                # Send email with log ID as CustomID and for email_log_details
                 await mailjet.send_email(
                     to_email=lead['email'],
                     to_name=lead['name'],
                     subject=campaign['email_subject'],
                     html_content=campaign['email_body'],
-                    custom_id=str(email_log['id'])
+                    custom_id=str(email_log['id']),
+                    email_log_id=email_log['id']
                 )
+                logger.info(f"Successfully sent email to {lead['email']}")
         except Exception as e:
-            print(f"Failed to send email to {lead.get('email')}: {str(e)}")
+            logger.error(f"Failed to send email to {lead.get('email')}: {str(e)}")
             continue
 
 @app.post("/api/email-campaigns/{campaign_id}/run")

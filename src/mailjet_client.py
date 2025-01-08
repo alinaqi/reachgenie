@@ -1,6 +1,11 @@
 import httpx
 from typing import Dict, List
 from src.config import get_settings
+from src.database import create_email_log_detail
+from uuid import UUID
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MailjetClient:
     def __init__(self, api_key: str, api_secret: str, sender_email: str, sender_name: str):
@@ -11,7 +16,7 @@ class MailjetClient:
         self.base_url = "https://api.mailjet.com/v3.1"
         self.settings = get_settings()
 
-    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str) -> Dict:
+    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str, email_log_id: UUID = None) -> Dict:
         """
         Send an email using Mailjet API
         
@@ -21,6 +26,7 @@ class MailjetClient:
             subject: Email subject
             html_content: Email body in HTML format
             custom_id: Custom ID to track the email
+            email_log_id: Optional UUID of the email_logs record to link with
             
         Returns:
             Dict containing the response from Mailjet
@@ -55,5 +61,36 @@ class MailjetClient:
             
             if response.status_code not in [200, 201]:
                 raise Exception(f"Mailjet API error: {response.text}")
+            
+            response_data = response.json()
+            logger.info(f"Mailjet response: {response_data}")
+            
+            # Extract Message-ID from the response and create log detail if email_log_id is provided
+            if email_log_id and response_data.get('Messages'):
+                message = response_data['Messages'][0]
+                logger.info(f"Message data: {message}")
                 
-            return response.json() 
+                # Try to get Message-ID from different possible locations
+                message_id = None
+                if message.get('To') and len(message['To']) > 0:
+                    to_data = message['To'][0]
+                    if to_data.get('MessageID'):
+                        message_id = str(to_data['MessageID'])
+                        logger.info(f"Found MessageID: {message_id}")
+                
+                if message_id:
+                    try:
+                        logger.info(f"Creating email_log_detail with message_id: {message_id}")
+                        await create_email_log_detail(
+                            email_logs_id=email_log_id,
+                            message_id=message_id,
+                            email_subject=subject,
+                            email_body=html_content
+                        )
+                        logger.info("Successfully created email_log_detail")
+                    except Exception as e:
+                        logger.error(f"Failed to create email_log_detail: {str(e)}")
+                else:
+                    logger.error("No MessageID found in response")
+                
+            return response_data 

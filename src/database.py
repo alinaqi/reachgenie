@@ -210,3 +210,13 @@ async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -
     }).eq('id', str(email_log_id)).execute()
     
     return response.data[0] if response.data else None 
+
+async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str):
+    log_detail_data = {
+        'email_logs_id': str(email_logs_id),
+        'message_id': message_id,
+        'email_subject': email_subject,
+        'email_body': email_body
+    }
+    response = supabase.table('email_log_details').insert(log_detail_data).execute()
+    return response.data[0] 
