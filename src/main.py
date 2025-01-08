@@ -10,6 +10,7 @@ import logging
 from typing import List
 from uuid import UUID
 from openai import AsyncOpenAI
+import json
 
 # Configure logger
 logging.basicConfig(
@@ -476,6 +477,29 @@ async def run_email_campaign(
     
     return {"message": "Email campaign started successfully"} 
 
+async def book_appointment(email: str, name: str) -> Dict[str, str]:
+    """
+    Create a Calendly scheduling link for the lead
+    
+    Args:
+        email: Lead's email address
+        name: Lead's name
+        
+    Returns:
+        Dict containing the Calendly scheduling link
+    """
+    settings = get_settings()
+    
+    # Using Calendly direct scheduling link
+    # The URL parameters will pre-fill the booking form
+    calendly_url = f"https://calendly.com/{settings.calendly_username}/30min"
+    scheduling_url = f"{calendly_url}?name={name}&email={email}"
+    
+    return {
+        "booking_url": scheduling_url,
+        "message": "You can schedule a meeting at your preferred time using this link."
+    }
+
 @app.post("/api/incoming-email")
 async def handle_mailjet_webhook(
     request: Request,
@@ -541,6 +565,28 @@ async def handle_mailjet_webhook(
                 conversation_history = await get_email_conversation_history(email_log_id)
                 logger.info(f"Found {len(conversation_history)} messages in conversation history")
                 
+                # Define the function for OpenAI
+                functions = [
+                    {
+                        "name": "book_appointment",
+                        "description": "Book a meeting or appointment with the lead",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string",
+                                    "description": "Lead's email address"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Lead's name"
+                                }
+                            },
+                            "required": ["email", "name"]
+                        }
+                    }
+                ]
+                
                 # Format conversation for OpenAI
                 messages = [
                     {
@@ -551,7 +597,8 @@ async def handle_mailjet_webhook(
                         1. Keep responses concise and focused on addressing the customer's needs and concerns
                         2. If a customer expresses disinterest, acknowledge it politely and end the conversation
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
-                        4. Always maintain a professional and courteous tone
+                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function
+                        5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
                         - Start with a greeting on a new line
@@ -579,15 +626,49 @@ async def handle_mailjet_webhook(
                         "content": msg['email_body']
                     })
                 
-                # Get AI response
+                # Get AI response with function calling
                 response = await client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=messages,
+                    functions=functions,
+                    function_call="auto",
                     temperature=0.7,
                     max_tokens=500
                 )
                 
-                ai_reply = response.choices[0].message.content.strip()
+                response_message = response.choices[0].message
+                
+                # Handle function calling if present
+                booking_info = None
+                if response_message.function_call:
+                    if response_message.function_call.name == "book_appointment":
+                        # Parse the function arguments
+                        function_args = json.loads(response_message.function_call.arguments)
+                        
+                        # Call the booking function
+                        booking_info = await book_appointment(
+                            email=function_args["email"],
+                            name=function_args["name"]
+                        )
+                        
+                        # Add the function response to the messages
+                        messages.append({
+                            "role": "function",
+                            "name": "book_appointment",
+                            "content": json.dumps(booking_info)
+                        })
+                        
+                        # Get the final response with the booking information
+                        final_response = await client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=messages,
+                            temperature=0.7,
+                            max_tokens=500
+                        )
+                        
+                        ai_reply = final_response.choices[0].message.content.strip()
+                else:
+                    ai_reply = response_message.content.strip()
                 
                 # Format AI reply with HTML
                 html_template = """

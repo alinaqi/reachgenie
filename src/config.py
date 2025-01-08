@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     mailjet_webhook_secret: str
     mailjet_parse_email: str  # Email address for parsing replies
     openai_api_key: str  # OpenAI API key for sentiment analysis
+    calendly_username: str = "sdr-ai"  # Default value, should be overridden in .env
 
     class Config:
         env_file = ".env"
