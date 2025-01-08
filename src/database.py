@@ -227,7 +227,7 @@ async def get_email_conversation_history(email_logs_id: UUID):
     Get all email messages for a given email_log_id ordered by creation time
     """
     response = supabase.table('email_log_details').select(
-        'message_id,email_subject,email_body,created_at'
+        'message_id,email_subject,email_body,sender_type,created_at'
     ).eq('email_logs_id', str(email_logs_id)).order('created_at', desc=False).execute()
     
     return response.data 

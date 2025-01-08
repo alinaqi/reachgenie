@@ -486,6 +486,9 @@ async def handle_mailjet_webhook(
     """
     settings = get_settings()
     
+    # Initialize OpenAI client at the start
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    
     # Validate webhook secret
     if secret != settings.mailjet_webhook_secret:
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
@@ -508,8 +511,9 @@ async def handle_mailjet_webhook(
         raise HTTPException(status_code=400, detail="Missing CustomID")
     
     try:
-        # Create email_log_details record
         email_log_id = UUID(custom_id)
+        
+        # Create email_log_details record for the incoming email
         if message_id:
             try:
                 logger.info(f"Attempting to create email_log_detail with message_id: {message_id}")
@@ -545,9 +549,6 @@ async def handle_mailjet_webhook(
                         "content": msg['email_body']
                     })
                 
-                # Initialize OpenAI client
-                client = AsyncOpenAI(api_key=settings.openai_api_key)
-                
                 # Get AI response
                 response = await client.chat.completions.create(
                     model="gpt-4o-mini",
@@ -582,8 +583,10 @@ async def handle_mailjet_webhook(
             except Exception as e:
                 logger.error(f"Failed to create email_log_detail or send response: {str(e)}")
                 logger.error(f"email_log_id: {email_log_id}, message_id: {message_id}")
+                raise  # Re-raise to be caught by outer try-except
         else:
             logger.error("No Message-ID found in headers")
+            return {"status": "error", "message": "No Message-ID found in headers"}
         
         # Analyze sentiment using OpenAI
         prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
@@ -614,8 +617,10 @@ async def handle_mailjet_webhook(
         
     except ValueError:
         logger.error(f"Invalid UUID in CustomID: {custom_id}")
+        return {"status": "error", "message": "Invalid UUID in CustomID"}
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
         logger.exception("Full traceback:")
+        return {"status": "error", "message": str(e)}
     
     return {"status": "success"} 
