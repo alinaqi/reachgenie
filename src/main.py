@@ -46,7 +46,8 @@ from src.database import (
     get_leads_for_campaign,
     create_email_log,
     update_email_log_sentiment,
-    create_email_log_detail
+    create_email_log_detail,
+    get_email_conversation_history
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -446,7 +447,8 @@ async def send_campaign_emails(campaign_id: UUID):
                     subject=campaign['email_subject'],
                     html_content=campaign['email_body'],
                     custom_id=str(email_log['id']),
-                    email_log_id=email_log['id']
+                    email_log_id=email_log['id'],
+                    sender_type='assistant'  # This is an assistant-initiated email
                 )
                 logger.info(f"Successfully sent email to {lead['email']}")
         except Exception as e:
@@ -496,6 +498,7 @@ async def handle_mailjet_webhook(
     custom_id = payload.get('CustomID')
     email_text = payload.get('Text-part', '')
     headers = payload.get('Headers', {})
+    from_email = payload.get('Sender', '')  # Get sender's email
     
     # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
     message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
@@ -514,17 +517,73 @@ async def handle_mailjet_webhook(
                     email_logs_id=email_log_id,
                     message_id=message_id,
                     email_subject=subject,
-                    email_body=email_text
+                    email_body=email_text,
+                    sender_type='user'  # This is a user reply
                 )
                 logger.info(f"Successfully created email_log_detail for message_id: {message_id}")
+                
+                # Get the conversation history
+                conversation_history = await get_email_conversation_history(email_log_id)
+                logger.info(f"Found {len(conversation_history)} messages in conversation history")
+                
+                # Format conversation for OpenAI
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """You are an AI sales assistant. Your goal is to engage with potential customers professionally and helpfully.
+                        Keep responses concise and focused on addressing the customer's needs and concerns.
+                        If a customer expresses disinterest, acknowledge it politely and end the conversation.
+                        If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps.
+                        Always maintain a professional and courteous tone."""
+                    }
+                ]
+                
+                # Add conversation history
+                for msg in conversation_history:
+                    messages.append({
+                        "role": msg['sender_type'],  # Use the stored sender_type
+                        "content": msg['email_body']
+                    })
+                
+                # Initialize OpenAI client
+                client = AsyncOpenAI(api_key=settings.openai_api_key)
+                
+                # Get AI response
+                response = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=500
+                )
+                
+                ai_reply = response.choices[0].message.content.strip()
+                
+                # Initialize Mailjet client for sending the response
+                mailjet = MailjetClient(
+                    api_key=settings.mailjet_api_key,
+                    api_secret=settings.mailjet_api_secret,
+                    sender_email=settings.mailjet_sender_email,
+                    sender_name=settings.mailjet_sender_name
+                )
+                
+                # Send AI's response using the same email_log_id
+                response_subject = f"Re: {subject}" if not subject.startswith('Re:') else subject
+                await mailjet.send_email(
+                    to_email=from_email,
+                    to_name=from_email.split('@')[0],
+                    subject=response_subject,
+                    html_content=ai_reply,
+                    custom_id=str(email_log_id),  # Use the same email_log_id
+                    email_log_id=email_log_id,    # Use the same email_log_id
+                    sender_type='assistant'       # This is an assistant response
+                )
+                logger.info(f"Sent AI response to {from_email}")
+                
             except Exception as e:
-                logger.error(f"Failed to create email_log_detail: {str(e)}")
+                logger.error(f"Failed to create email_log_detail or send response: {str(e)}")
                 logger.error(f"email_log_id: {email_log_id}, message_id: {message_id}")
         else:
             logger.error("No Message-ID found in headers")
-        
-        # Initialize OpenAI client
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
         
         # Analyze sentiment using OpenAI
         prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
@@ -537,7 +596,7 @@ async def handle_mailjet_webhook(
         
         Respond with only one word: Positive, Neutral, or Negative."""
         
-        response = await client.chat.completions.create(
+        sentiment_response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
@@ -547,7 +606,7 @@ async def handle_mailjet_webhook(
             max_tokens=10
         )
         
-        sentiment = response.choices[0].message.content.strip()
+        sentiment = sentiment_response.choices[0].message.content.strip()
         
         # Update email log with sentiment
         await update_email_log_sentiment(email_log_id, sentiment.lower())

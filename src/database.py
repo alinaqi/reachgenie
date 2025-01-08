@@ -211,12 +211,23 @@ async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -
     
     return response.data[0] if response.data else None 
 
-async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str):
+async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str, sender_type: str):
     log_detail_data = {
         'email_logs_id': str(email_logs_id),
         'message_id': message_id,
         'email_subject': email_subject,
-        'email_body': email_body
+        'email_body': email_body,
+        'sender_type': sender_type
     }
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
     return response.data[0] 
+
+async def get_email_conversation_history(email_logs_id: UUID):
+    """
+    Get all email messages for a given email_log_id ordered by creation time
+    """
+    response = supabase.table('email_log_details').select(
+        'message_id,email_subject,email_body,created_at'
+    ).eq('email_logs_id', str(email_logs_id)).order('created_at', desc=False).execute()
+    
+    return response.data 

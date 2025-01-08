@@ -16,7 +16,7 @@ class MailjetClient:
         self.base_url = "https://api.mailjet.com/v3.1"
         self.settings = get_settings()
 
-    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str, email_log_id: UUID = None) -> Dict:
+    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str, email_log_id: UUID = None, sender_type: str = 'assistant') -> Dict:
         """
         Send an email using Mailjet API
         
@@ -27,6 +27,7 @@ class MailjetClient:
             html_content: Email body in HTML format
             custom_id: Custom ID to track the email
             email_log_id: Optional UUID of the email_logs record to link with
+            sender_type: Type of sender ('user' or 'assistant'), defaults to 'assistant'
             
         Returns:
             Dict containing the response from Mailjet
@@ -85,7 +86,8 @@ class MailjetClient:
                             email_logs_id=email_log_id,
                             message_id=message_id,
                             email_subject=subject,
-                            email_body=html_content
+                            email_body=html_content,
+                            sender_type=sender_type
                         )
                         logger.info("Successfully created email_log_detail")
                     except Exception as e:
