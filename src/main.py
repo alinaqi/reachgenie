@@ -495,7 +495,10 @@ async def handle_mailjet_webhook(
     # Extract CustomID, email content and headers
     custom_id = payload.get('CustomID')
     email_text = payload.get('Text-part', '')
-    message_id = payload.get('Message-ID', '')  # Get Message-ID from the email headers
+    headers = payload.get('Headers', {})
+    
+    # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
+    message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
     subject = payload.get('Subject', '')
     
     if not custom_id:
@@ -506,15 +509,19 @@ async def handle_mailjet_webhook(
         email_log_id = UUID(custom_id)
         if message_id:
             try:
+                logger.info(f"Attempting to create email_log_detail with message_id: {message_id}")
                 await create_email_log_detail(
                     email_logs_id=email_log_id,
                     message_id=message_id,
                     email_subject=subject,
                     email_body=email_text
                 )
-                logger.info(f"Created email_log_detail for message_id: {message_id}")
+                logger.info(f"Successfully created email_log_detail for message_id: {message_id}")
             except Exception as e:
                 logger.error(f"Failed to create email_log_detail: {str(e)}")
+                logger.error(f"email_log_id: {email_log_id}, message_id: {message_id}")
+        else:
+            logger.error("No Message-ID found in headers")
         
         # Initialize OpenAI client
         client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -550,5 +557,6 @@ async def handle_mailjet_webhook(
         logger.error(f"Invalid UUID in CustomID: {custom_id}")
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
+        logger.exception("Full traceback:")
     
     return {"status": "success"} 
