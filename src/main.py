@@ -535,10 +535,29 @@ async def handle_mailjet_webhook(
                     {
                         "role": "system",
                         "content": """You are an AI sales assistant. Your goal is to engage with potential customers professionally and helpfully.
-                        Keep responses concise and focused on addressing the customer's needs and concerns.
-                        If a customer expresses disinterest, acknowledge it politely and end the conversation.
-                        If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps.
-                        Always maintain a professional and courteous tone."""
+                        
+                        Guidelines for responses:
+                        1. Keep responses concise and focused on addressing the customer's needs and concerns
+                        2. If a customer expresses disinterest, acknowledge it politely and end the conversation
+                        3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
+                        4. Always maintain a professional and courteous tone
+                        
+                        Format your responses with proper structure:
+                        - Start with a greeting on a new line
+                        - Use paragraphs to separate different points
+                        - Add a line break between paragraphs
+                        - End with a professional signature on a new line
+                        
+                        Example format:
+                        Hello [Name],
+                        
+                        [First point or response to their question]
+                        
+                        [Additional information or next steps if needed]
+                        
+                        Best regards,
+                        [Your name]
+                        Sales Team"""
                     }
                 ]
                 
@@ -559,6 +578,13 @@ async def handle_mailjet_webhook(
                 
                 ai_reply = response.choices[0].message.content.strip()
                 
+                # Format AI reply with HTML
+                formatted_reply = f"""
+                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                    {ai_reply.replace('\n', '<br>')}
+                </div>
+                """
+                
                 # Initialize Mailjet client for sending the response
                 mailjet = MailjetClient(
                     api_key=settings.mailjet_api_key,
@@ -573,7 +599,7 @@ async def handle_mailjet_webhook(
                     to_email=from_email,
                     to_name=from_email.split('@')[0],
                     subject=response_subject,
-                    html_content=ai_reply,
+                    html_content=formatted_reply,
                     custom_id=str(email_log_id),  # Use the same email_log_id
                     email_log_id=email_log_id,    # Use the same email_log_id
                     sender_type='assistant'       # This is an assistant response
