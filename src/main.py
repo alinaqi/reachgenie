@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
-    BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB
+    BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
+    CampaignGenerationRequest, CampaignGenerationResponse
 )
 from src.database import (
     create_user,
@@ -802,3 +803,71 @@ async def handle_mailjet_webhook(
         return {"status": "error", "message": str(e)}
     
     return {"status": "success"} 
+
+@app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
+async def generate_campaign(
+    request: CampaignGenerationRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate campaign content using OpenAI based on achievement text."""
+    settings = get_settings()
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    
+    prompt = f"""Based on the following achievement or success story, generate compelling campaign content.
+    
+    Achievement: {request.achievement_text}
+    
+    Generate three components and return them in a JSON object with the following structure:
+    {{
+        "description": "A brief campaign description (2-3 sentences)",
+        "email_subject": "An attention-grabbing email subject line (1 line)",
+        "email_body": "A persuasive email body (2-3 paragraphs)"
+    }}
+
+    Important guidelines:
+    1. Do not use any placeholders or variables (e.g., no [Name], [Company], etc.)
+    2. Write the content in a way that works without personalization
+    3. Use inclusive language that works for any recipient
+    4. For email body, write complete content that can be sent as-is without any modifications
+    5. For company references, use general terms like 'we', 'our team', or 'our company'
+
+    Ensure the response is a valid JSON object with these exact field names.
+    Do not include any other text or formatting outside the JSON object."""
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are an expert marketing copywriter specializing in B2B campaigns. Generate content without placeholders or variables that would need replacement. Always respond with valid JSON."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1000,
+            response_format={ "type": "json_object" }
+        )
+        
+        content = response.choices[0].message.content.strip()
+        campaign_content = json.loads(content)
+        
+        return CampaignGenerationResponse(
+            description=campaign_content["description"],
+            email_subject=campaign_content["email_subject"],
+            email_body=campaign_content["email_body"]
+        )
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing JSON response: {str(e)}")
+        logging.error(f"Raw content: {content}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse campaign content"
+        )
+    except Exception as e:
+        logging.error(f"Error generating campaign content: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate campaign content"
+        ) 

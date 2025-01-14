@@ -97,4 +97,13 @@ class EmailCampaignCreate(EmailCampaignBase):
 class EmailCampaignInDB(EmailCampaignBase):
     id: UUID
     company_id: UUID
-    created_at: datetime 
+    created_at: datetime
+
+# Campaign generation models
+class CampaignGenerationRequest(BaseModel):
+    achievement_text: str
+
+class CampaignGenerationResponse(BaseModel):
+    description: str
+    email_subject: str
+    email_body: str 
