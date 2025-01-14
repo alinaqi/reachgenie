@@ -817,8 +817,9 @@ async def generate_campaign(
     
     Achievement: {request.achievement_text}
     
-    Generate three components and return them in a JSON object with the following structure:
+    Generate four components and return them in a JSON object with the following structure:
     {{
+        "campaign_name": "A short, memorable name for the campaign (3-5 words)",
         "description": "A brief campaign description (2-3 sentences)",
         "email_subject": "An attention-grabbing email subject line (1 line)",
         "email_body": "A persuasive email body (2-3 paragraphs)"
@@ -830,6 +831,7 @@ async def generate_campaign(
     3. Use inclusive language that works for any recipient
     4. For email body, write complete content that can be sent as-is without any modifications
     5. For company references, use general terms like 'we', 'our team', or 'our company'
+    6. The campaign name should be concise and memorable, reflecting the achievement or offer
 
     Ensure the response is a valid JSON object with these exact field names.
     Do not include any other text or formatting outside the JSON object."""
@@ -853,6 +855,7 @@ async def generate_campaign(
         campaign_content = json.loads(content)
         
         return CampaignGenerationResponse(
+            campaign_name=campaign_content["campaign_name"],
             description=campaign_content["description"],
             email_subject=campaign_content["email_subject"],
             email_body=campaign_content["email_body"]

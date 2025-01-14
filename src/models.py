@@ -104,6 +104,7 @@ class CampaignGenerationRequest(BaseModel):
     achievement_text: str
 
 class CampaignGenerationResponse(BaseModel):
+    campaign_name: str
     description: str
     email_subject: str
     email_body: str 
