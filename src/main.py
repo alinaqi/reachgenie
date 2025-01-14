@@ -200,6 +200,8 @@ async def upload_leads(
     csv_text = contents.decode()
     csv_data = csv.DictReader(io.StringIO(csv_text))
     lead_count = 0
+    skipped_count = 0
+    unmapped_headers = set()
     
     # Get CSV headers
     headers = csv_data.fieldnames
@@ -245,6 +247,12 @@ Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched He
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse header mapping")
     
+    # Log unmapped headers
+    for header, mapped_field in header_mapping.items():
+        if mapped_field is None:
+            unmapped_headers.add(header)
+            logger.info(f"Unmapped header found: {header}")
+    
     # Initialize Perplexity enricher
     enricher = PerplexityEnricher(settings.perplexity_api_key)
     
@@ -257,6 +265,12 @@ Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched He
             if expected_field and csv_header in row:
                 lead_data[expected_field] = row[csv_header]
         
+        # Skip record if name is not present
+        if not lead_data.get('name'):
+            logger.info(f"Skipping record due to missing name field: {row}")
+            skipped_count += 1
+            continue
+        
         # Enrich lead data with Perplexity if any required fields are missing
         if not all([lead_data.get(field) for field in ["email", "phone_number", "job_title", "company_size", "company_revenue", "company_facebook", "company_twitter"]]):
             lead_data = await enricher.enrich_lead_data(lead_data)
@@ -264,7 +278,12 @@ Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched He
         await create_lead(company_id, lead_data)
         lead_count += 1
     
-    return {"message": "Leads uploaded successfully", "lead_count": lead_count}
+    return {
+        "message": "Leads upload completed",
+        "leads_saved": lead_count,
+        "leads_skipped": skipped_count,
+        "unmapped_headers": list(unmapped_headers)
+    }
 
 @app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB])
 async def get_leads(
