@@ -87,7 +87,6 @@ class BlandWebhookPayload(BaseModel):
 class EmailCampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
-    product_id: UUID
     email_subject: str
     email_body: str
 

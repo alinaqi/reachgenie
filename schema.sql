@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
     name TEXT NOT NULL,
     description TEXT,
     company_id UUID REFERENCES companies(id),
-    product_id UUID REFERENCES products(id),
     email_subject TEXT NOT NULL,
     email_body TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

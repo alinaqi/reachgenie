@@ -422,16 +422,10 @@ async def create_company_email_campaign(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Validate product belongs to company
-    product = await get_product_by_id(campaign.product_id)
-    if not product or str(product["company_id"]) != str(company_id):
-        raise HTTPException(status_code=404, detail="Product not found or does not belong to this company")
-    
     return await create_email_campaign(
         company_id=company_id,
         name=campaign.name,
         description=campaign.description,
-        product_id=campaign.product_id,
         email_subject=campaign.email_subject,
         email_body=campaign.email_body
     )
