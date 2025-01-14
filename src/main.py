@@ -197,28 +197,68 @@ async def upload_leads(
         raise HTTPException(status_code=404, detail="Company not found")
     
     contents = await file.read()
-    csv_data = csv.DictReader(io.StringIO(contents.decode()))
+    csv_text = contents.decode()
+    csv_data = csv.DictReader(io.StringIO(csv_text))
     lead_count = 0
     
-    # Initialize Perplexity enricher
+    # Get CSV headers
+    headers = csv_data.fieldnames
+    if not headers:
+        raise HTTPException(status_code=400, detail="CSV file has no headers")
+    
+    # Initialize OpenAI client
     settings = get_settings()
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    
+    # Create a prompt to map headers to expected fields
+    prompt = f"""Map the following CSV headers to the expected lead data fields. Return a JSON object where keys are the CSV headers and values are the corresponding expected field names.
+
+CSV Headers: {', '.join(headers)}
+
+Expected fields:
+- name (for full name)
+- email (for email address)
+- company (for company name)
+- phone_number (for phone number)
+- company_size (for number of employees)
+- job_title (for job title/position)
+- company_facebook (for Facebook URL)
+- company_twitter (for Twitter URL)
+- company_revenue (for company revenue)
+
+Return ONLY a valid JSON object mapping CSV headers to expected field names. If a header doesn't map to any expected field, map it to null.
+Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched Header": null}}"""
+
+    # Get header mapping from OpenAI
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant that maps CSV headers to expected field names. Respond only with valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0,
+        max_tokens=500
+    )
+    
+    try:
+        header_mapping = json.loads(response.choices[0].message.content.strip())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Failed to parse header mapping")
+    
+    # Initialize Perplexity enricher
     enricher = PerplexityEnricher(settings.perplexity_api_key)
     
+    # Process each row with the mapped headers
     for row in csv_data:
-        lead_data = {
-            "name": row.get("name"),
-            "email": row.get("email"),
-            "company": row.get("company"),
-            "phone_number": row.get("phone_number"),
-            "company_size": row.get("company_size"),
-            "job_title": row.get("job_title"),
-            "company_facebook": row.get("company_facebook"),
-            "company_twitter": row.get("company_twitter"),
-            "company_revenue": row.get("company_revenue")
-        }
+        lead_data = {}
+        
+        # Map CSV data to expected fields using the header mapping
+        for csv_header, expected_field in header_mapping.items():
+            if expected_field and csv_header in row:
+                lead_data[expected_field] = row[csv_header]
         
         # Enrich lead data with Perplexity if any required fields are missing
-        if not all([lead_data.get(field) for field in ["email","phone_number","job_title", "company_size", "company_revenue","company_facebook","company_twitter"]]):
+        if not all([lead_data.get(field) for field in ["email", "phone_number", "job_title", "company_size", "company_revenue", "company_facebook", "company_twitter"]]):
             lead_data = await enricher.enrich_lead_data(lead_data)
         
         await create_lead(company_id, lead_data)
