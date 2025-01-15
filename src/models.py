@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
@@ -106,4 +106,11 @@ class CampaignGenerationResponse(BaseModel):
     campaign_name: str
     description: str
     email_subject: str
-    email_body: str 
+    email_body: str
+
+# Leads upload response model
+class LeadsUploadResponse(BaseModel):
+    message: str
+    leads_saved: int
+    leads_skipped: int
+    unmapped_headers: List[str] 

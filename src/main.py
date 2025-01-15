@@ -23,7 +23,8 @@ from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
-    CampaignGenerationRequest, CampaignGenerationResponse
+    CampaignGenerationRequest, CampaignGenerationResponse,
+    LeadsUploadResponse
 )
 from src.database import (
     create_user,
@@ -187,7 +188,7 @@ async def get_company(
     return company
 
 # Lead Management endpoints
-@app.post("/api/companies/{company_id}/leads/upload")
+@app.post("/api/companies/{company_id}/leads/upload", response_model=LeadsUploadResponse)
 async def upload_leads(
     company_id: UUID,
     file: UploadFile = File(...),
@@ -279,12 +280,12 @@ Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched He
         await create_lead(company_id, lead_data)
         lead_count += 1
     
-    return {
-        "message": "Leads upload completed",
-        "leads_saved": lead_count,
-        "leads_skipped": skipped_count,
-        "unmapped_headers": list(unmapped_headers)
-    }
+    return LeadsUploadResponse(
+        message="Leads upload completed",
+        leads_saved=lead_count,
+        leads_skipped=skipped_count,
+        unmapped_headers=list(unmapped_headers)
+    )
 
 @app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB])
 async def get_leads(
