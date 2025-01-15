@@ -189,9 +189,15 @@ async def get_leads_for_campaign(campaign_id: UUID):
     if not campaign:
         return []
     
-    # Then get all leads for that company
-    response = supabase.table('leads').select('*').eq('company_id', campaign['company_id']).execute()
-    return response.data 
+    # Get only leads that have an email address (not null and not empty)
+    response = supabase.table('leads')\
+        .select('*')\
+        .eq('company_id', campaign['company_id'])\
+        .neq('email', None)\
+        .neq('email', '')\
+        .execute()
+    
+    return response.data
 
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
