@@ -4,7 +4,6 @@ from functools import lru_cache
 class Settings(BaseSettings):
     jwt_secret_key: str
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
     supabase_url: str
     supabase_key: str
     perplexity_api_key: str
