@@ -25,7 +25,7 @@ from src.models import (
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
-    LeadsUploadResponse
+    LeadsUploadResponse, CronofyAuthResponse
 )
 from src.database import (
     create_user,
@@ -870,7 +870,7 @@ async def generate_campaign(
             detail="Failed to generate campaign content"
         ) 
 
-@app.get("/api/companies/{company_id}/cronofy-auth")
+@app.get("/api/companies/{company_id}/cronofy-auth", response_model=CronofyAuthResponse)
 async def cronofy_auth(
     company_id: UUID,
     code: str = Query(..., description="Authorization code from Cronofy"),
@@ -881,7 +881,7 @@ async def cronofy_auth(
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     settings = get_settings()
     cronofy = pycronofy.Client(
         client_id=settings.cronofy_client_id,
@@ -889,6 +889,8 @@ async def cronofy_auth(
     )
     
     auth = cronofy.get_authorization_from_code(code, redirect_uri=redirect_url)
-    logger.info(f"Cronofy authorization: {auth}")
     
-    return {"message": "Cronofy authentication code received", "code": code, "auth": auth} 
+    return CronofyAuthResponse(
+        access_token=auth['access_token'],
+        refresh_token=auth['refresh_token']
+    ) 

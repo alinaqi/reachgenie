@@ -113,4 +113,8 @@ class LeadsUploadResponse(BaseModel):
     message: str
     leads_saved: int
     leads_skipped: int
-    unmapped_headers: List[str] 
+    unmapped_headers: List[str]
+
+class CronofyAuthResponse(BaseModel):
+    access_token: str
+    refresh_token: str 
