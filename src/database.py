@@ -236,3 +236,10 @@ async def get_email_conversation_history(email_logs_id: UUID):
     ).eq('email_logs_id', str(email_logs_id)).order('created_at', desc=False).execute()
     
     return response.data 
+
+async def update_company_cronofy_tokens(company_id: UUID, access_token: str, refresh_token: str):
+    response = supabase.table('companies').update({
+        'cronofy_access_token': access_token,
+        'cronofy_refresh_token': refresh_token
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 

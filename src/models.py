@@ -116,5 +116,5 @@ class LeadsUploadResponse(BaseModel):
     unmapped_headers: List[str]
 
 class CronofyAuthResponse(BaseModel):
-    access_token: str
-    refresh_token: str 
+    message: str
+ 

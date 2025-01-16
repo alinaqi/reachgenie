@@ -51,7 +51,8 @@ from src.database import (
     create_email_log,
     update_email_log_sentiment,
     create_email_log_detail,
-    get_email_conversation_history
+    get_email_conversation_history,
+    update_company_cronofy_tokens
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -890,7 +891,11 @@ async def cronofy_auth(
     
     auth = cronofy.get_authorization_from_code(code, redirect_uri=redirect_url)
     
-    return CronofyAuthResponse(
+    # Update company with Cronofy tokens
+    await update_company_cronofy_tokens(
+        company_id=company_id,
         access_token=auth['access_token'],
         refresh_token=auth['refresh_token']
-    ) 
+    )
+    
+    return CronofyAuthResponse(message="Successfully connected to Cronofy") 

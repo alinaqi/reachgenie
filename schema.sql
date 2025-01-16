@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     address TEXT,
     industry TEXT,
+    cronofy_access_token TEXT,
+    cronofy_refresh_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
