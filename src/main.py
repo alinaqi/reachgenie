@@ -52,7 +52,8 @@ from src.database import (
     update_email_log_sentiment,
     create_email_log_detail,
     get_email_conversation_history,
-    update_company_cronofy_tokens
+    update_company_cronofy_tokens,
+    update_company_cronofy_profile
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -891,9 +892,35 @@ async def cronofy_auth(
     
     auth = cronofy.get_authorization_from_code(code, redirect_uri=redirect_url)
     
-    # Update company with Cronofy tokens
-    await update_company_cronofy_tokens(
+    # Get user info and profiles
+    user_info = cronofy.userinfo()
+    logger.info(f"Cronofy user info: {user_info}")
+    
+    # Get profile and calendar information from userinfo
+    cronofy_data = user_info.get('cronofy.data', {})
+    profiles = cronofy_data.get('profiles', [])
+    
+    if not profiles:
+        raise HTTPException(status_code=400, detail="No calendar profiles found")
+    
+    first_profile = profiles[0]
+    
+    # Find primary calendar ID from userinfo
+    default_calendar_id = None
+    for calendar in first_profile.get('profile_calendars', []):
+        if calendar.get('calendar_primary'):
+            default_calendar_id = calendar['calendar_id']
+            break
+    
+    if not default_calendar_id:
+        raise HTTPException(status_code=400, detail="No primary calendar found")
+    
+    # Update company with Cronofy profile information
+    await update_company_cronofy_profile(
         company_id=company_id,
+        provider=first_profile['provider_name'],
+        linked_email=user_info['email'],
+        default_calendar=default_calendar_id,
         access_token=auth['access_token'],
         refresh_token=auth['refresh_token']
     )
