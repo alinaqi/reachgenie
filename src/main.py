@@ -874,6 +874,7 @@ async def generate_campaign(
 async def cronofy_auth(
     company_id: UUID,
     code: str = Query(..., description="Authorization code from Cronofy"),
+    redirect_url: str = Query(..., description="Redirect URL used in the authorization request"),
     current_user: dict = Depends(get_current_user)
 ):
     # Validate company access
@@ -887,7 +888,7 @@ async def cronofy_auth(
         client_secret=settings.cronofy_client_secret
     )
     
-    auth = cronofy.get_authorization_from_code(code)
+    auth = cronofy.get_authorization_from_code(code, redirect_uri=redirect_url)
     logger.info(f"Cronofy authorization: {auth}")
     
     return {"message": "Cronofy authentication code received", "code": code, "auth": auth} 
