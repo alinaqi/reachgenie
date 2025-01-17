@@ -18,9 +18,10 @@ CREATE TABLE IF NOT EXISTS companies (
     industry TEXT,
     cronofy_access_token TEXT,
     cronofy_refresh_token TEXT,
-    provider TEXT,
-    linked_cronofy_email TEXT,
-    cronofy_default_calendar TEXT,
+    cronofy_provider TEXT,
+    cronofy_linked_email TEXT,
+    cronofy_default_calendar_id TEXT,
+    cronofy_default_calendar_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

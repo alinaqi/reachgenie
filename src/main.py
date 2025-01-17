@@ -905,11 +905,13 @@ async def cronofy_auth(
     
     first_profile = profiles[0]
     
-    # Find primary calendar ID from userinfo
+    # Find primary calendar ID and name from userinfo
     default_calendar_id = None
+    default_calendar_name = None
     for calendar in first_profile.get('profile_calendars', []):
         if calendar.get('calendar_primary'):
             default_calendar_id = calendar['calendar_id']
+            default_calendar_name = calendar['calendar_name']
             break
     
     if not default_calendar_id:
@@ -921,6 +923,7 @@ async def cronofy_auth(
         provider=first_profile['provider_name'],
         linked_email=user_info['email'],
         default_calendar=default_calendar_id,
+        default_calendar_name=default_calendar_name,
         access_token=auth['access_token'],
         refresh_token=auth['refresh_token']
     )

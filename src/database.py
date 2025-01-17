@@ -249,13 +249,15 @@ async def update_company_cronofy_profile(
     provider: str,
     linked_email: str,
     default_calendar: str,
+    default_calendar_name: str,
     access_token: str,
     refresh_token: str
 ):
     response = supabase.table('companies').update({
-        'provider': provider,
-        'linked_cronofy_email': linked_email,
-        'cronofy_default_calendar': default_calendar,
+        'cronofy_provider': provider,
+        'cronofy_linked_email': linked_email,
+        'cronofy_default_calendar_id': default_calendar,
+        'cronofy_default_calendar_name': default_calendar_name,
         'cronofy_access_token': access_token,
         'cronofy_refresh_token': refresh_token
     }).eq('id', str(company_id)).execute()
