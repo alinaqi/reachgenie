@@ -262,3 +262,14 @@ async def update_company_cronofy_profile(
         'cronofy_refresh_token': refresh_token
     }).eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None 
+
+async def clear_company_cronofy_data(company_id: UUID):
+    response = supabase.table('companies').update({
+        'cronofy_provider': None,
+        'cronofy_linked_email': None,
+        'cronofy_default_calendar_id': None,
+        'cronofy_default_calendar_name': None,
+        'cronofy_access_token': None,
+        'cronofy_refresh_token': None
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 

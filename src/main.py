@@ -53,7 +53,8 @@ from src.database import (
     create_email_log_detail,
     get_email_conversation_history,
     update_company_cronofy_tokens,
-    update_company_cronofy_profile
+    update_company_cronofy_profile,
+    clear_company_cronofy_data
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -929,3 +930,18 @@ async def cronofy_auth(
     )
     
     return CronofyAuthResponse(message="Successfully connected to Cronofy") 
+
+@app.delete("/api/companies/{company_id}/calendar", response_model=CronofyAuthResponse)
+async def disconnect_calendar(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Clear all Cronofy-related data
+    await clear_company_cronofy_data(company_id)
+    
+    return CronofyAuthResponse(message="Successfully disconnected calendar") 
