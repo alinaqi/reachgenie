@@ -535,13 +535,12 @@ async def run_email_campaign(
     
     return {"message": "Email campaign started successfully"} 
 
-async def book_appointment(email: str, name: str) -> Dict[str, str]:
+async def book_appointment(email: str) -> Dict[str, str]:
     """
     Create a Calendly scheduling link for the lead
     
     Args:
         email: Lead's email address
-        name: Lead's name
         
     Returns:
         Dict containing the Calendly scheduling link
@@ -551,7 +550,7 @@ async def book_appointment(email: str, name: str) -> Dict[str, str]:
     # Using Calendly direct scheduling link
     # The URL parameters will pre-fill the booking form
     calendly_url = f"https://calendly.com/{settings.calendly_username}/30min"
-    scheduling_url = f"{calendly_url}?name={name}&email={email}"
+    scheduling_url = f"{calendly_url}?email={email}"
     
     return {
         "booking_url": scheduling_url,
@@ -634,13 +633,9 @@ async def handle_mailjet_webhook(
                                 "email": {
                                     "type": "string",
                                     "description": "Lead's email address"
-                                },
-                                "name": {
-                                    "type": "string",
-                                    "description": "Lead's name"
                                 }
                             },
-                            "required": ["email", "name"]
+                            "required": ["email"]
                         }
                     }
                 ]
@@ -672,7 +667,6 @@ async def handle_mailjet_webhook(
                         [Additional information or next steps if needed]
                         
                         Best regards,
-                        [Your name]
                         Sales Team"""
                     }
                 ]
@@ -705,8 +699,7 @@ async def handle_mailjet_webhook(
                         
                         # Call the booking function
                         booking_info = await book_appointment(
-                            email=function_args["email"],
-                            name=function_args["name"]
+                            email=function_args["email"]
                         )
                         
                         # Add the function response to the messages
