@@ -941,6 +941,25 @@ async def disconnect_calendar(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Get company to get the access token
+    company = await get_company_by_id(company_id)
+    if not company or not company.get('cronofy_access_token'):
+        raise HTTPException(status_code=400, detail="No Cronofy connection found")
+    
+    # Initialize Cronofy client and revoke authorization
+    settings = get_settings()
+    cronofy = pycronofy.Client(
+        client_id=settings.cronofy_client_id,
+        client_secret=settings.cronofy_client_secret,
+        access_token=company['cronofy_access_token']
+    )
+    
+    try:
+        cronofy.revoke_authorization()
+    except Exception as e:
+        logger.error(f"Error revoking Cronofy authorization: {str(e)}")
+        # Continue with clearing data even if revoke fails
+    
     # Clear all Cronofy-related data
     await clear_company_cronofy_data(company_id)
     
