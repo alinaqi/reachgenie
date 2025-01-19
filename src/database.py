@@ -236,3 +236,51 @@ async def get_email_conversation_history(email_logs_id: UUID):
     ).eq('email_logs_id', str(email_logs_id)).order('created_at', desc=False).execute()
     
     return response.data 
+
+async def update_company_cronofy_tokens(company_id: UUID, access_token: str, refresh_token: str):
+    response = supabase.table('companies').update({
+        'cronofy_access_token': access_token,
+        'cronofy_refresh_token': refresh_token
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 
+
+async def update_company_cronofy_profile(
+    company_id: UUID,
+    provider: str,
+    linked_email: str,
+    default_calendar: str,
+    default_calendar_name: str,
+    access_token: str,
+    refresh_token: str
+):
+    response = supabase.table('companies').update({
+        'cronofy_provider': provider,
+        'cronofy_linked_email': linked_email,
+        'cronofy_default_calendar_id': default_calendar,
+        'cronofy_default_calendar_name': default_calendar_name,
+        'cronofy_access_token': access_token,
+        'cronofy_refresh_token': refresh_token
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 
+
+async def clear_company_cronofy_data(company_id: UUID):
+    response = supabase.table('companies').update({
+        'cronofy_provider': None,
+        'cronofy_linked_email': None,
+        'cronofy_default_calendar_id': None,
+        'cronofy_default_calendar_name': None,
+        'cronofy_access_token': None,
+        'cronofy_refresh_token': None
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None 
+
+async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
+    """Get company_id from email_log through campaign and company relationship"""
+    response = supabase.table('email_logs')\
+        .select('campaign_id,email_campaigns(company_id)')\
+        .eq('id', str(email_log_id))\
+        .execute()
+    
+    if response.data and response.data[0].get('email_campaigns'):
+        return UUID(response.data[0]['email_campaigns']['company_id'])
+    return None 

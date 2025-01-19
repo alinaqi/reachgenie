@@ -16,7 +16,7 @@ class MailjetClient:
         self.base_url = "https://api.mailjet.com/v3.1"
         self.settings = get_settings()
 
-    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, custom_id: str, email_log_id: UUID = None, sender_type: str = 'assistant') -> Dict:
+    async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, email_log_id: UUID = None, sender_type: str = 'assistant', in_reply_to: str = None) -> Dict:
         """
         Send an email using Mailjet API
         
@@ -25,14 +25,24 @@ class MailjetClient:
             to_name: Recipient's name
             subject: Email subject
             html_content: Email body in HTML format
-            custom_id: Custom ID to track the email
             email_log_id: Optional UUID of the email_logs record to link with
             sender_type: Type of sender ('user' or 'assistant'), defaults to 'assistant'
+            in_reply_to: Optional Message-ID to reply to
             
         Returns:
             Dict containing the response from Mailjet
         """
         async with httpx.AsyncClient() as client:
+            # Prepare headers
+            headers = {
+                "Reply-To": f"{self.settings.mailjet_parse_email.split('@')[0]}+{str(email_log_id)}@{self.settings.mailjet_parse_email.split('@')[1]}" if email_log_id else self.settings.mailjet_parse_email
+            }
+            
+            # Add In-Reply-To header if present
+            if in_reply_to:
+                headers["In-Reply-To"] = in_reply_to
+            
+            # Send the email
             response = await client.post(
                 f"{self.base_url}/send",
                 auth=(self.api_key, self.api_secret),
@@ -51,10 +61,7 @@ class MailjetClient:
                             ],
                             "Subject": subject,
                             "HTMLPart": html_content,
-                            "CustomID": custom_id,
-                            "Headers": {
-                                "Reply-To": self.settings.mailjet_parse_email
-                            }
+                            "Headers": headers
                         }
                     ]
                 }
@@ -71,7 +78,7 @@ class MailjetClient:
                 message = response_data['Messages'][0]
                 logger.info(f"Message data: {message}")
                 
-                # Try to get Message-ID from different possible locations
+                # Get the numeric MessageID from the response
                 message_id = None
                 if message.get('To') and len(message['To']) > 0:
                     to_data = message['To'][0]

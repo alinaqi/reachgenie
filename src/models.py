@@ -17,6 +17,10 @@ class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None
     industry: Optional[str] = None
+    cronofy_provider: Optional[str] = None
+    cronofy_linked_email: Optional[str] = None
+    cronofy_default_calendar_name: Optional[str] = None
+    cronofy_default_calendar_id: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
     pass
@@ -113,4 +117,8 @@ class LeadsUploadResponse(BaseModel):
     message: str
     leads_saved: int
     leads_skipped: int
-    unmapped_headers: List[str] 
+    unmapped_headers: List[str]
+
+class CronofyAuthResponse(BaseModel):
+    message: str
+ 

@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     address TEXT,
     industry TEXT,
+    cronofy_access_token TEXT,
+    cronofy_refresh_token TEXT,
+    cronofy_provider TEXT,
+    cronofy_linked_email TEXT,
+    cronofy_default_calendar_id TEXT,
+    cronofy_default_calendar_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -73,7 +79,6 @@ CREATE TABLE IF NOT EXISTS email_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     campaign_id UUID REFERENCES email_campaigns(id),
     lead_id UUID REFERENCES leads(id),
-    reply_sentiment TEXT,
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

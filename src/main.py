@@ -11,6 +11,9 @@ from typing import List, Dict
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
+import pycronofy
+import uuid
+import asyncio
 
 # Configure logger
 logging.basicConfig(
@@ -24,7 +27,7 @@ from src.models import (
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
-    LeadsUploadResponse
+    LeadsUploadResponse, CronofyAuthResponse
 )
 from src.database import (
     create_user,
@@ -50,7 +53,11 @@ from src.database import (
     create_email_log,
     update_email_log_sentiment,
     create_email_log_detail,
-    get_email_conversation_history
+    get_email_conversation_history,
+    update_company_cronofy_tokens,
+    update_company_cronofy_profile,
+    clear_company_cronofy_data,
+    get_company_id_from_email_log
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -486,28 +493,39 @@ async def send_campaign_emails(campaign_id: UUID):
     for lead in leads:
         try:
             if lead.get('email'):  # Only send if lead has email
-                logger.info(f"Sending email to {lead['email']}")
-                # Create email log first
-                email_log = await create_email_log(
-                    campaign_id=campaign_id,
-                    lead_id=lead['id'],
-                    sent_at=datetime.utcnow().isoformat()
-                )
-                logger.info(f"Created email_log with id: {email_log['id']}")
+                logger.info(f"Processing email for lead: {lead['email']}")
                 
-                # Send email with log ID as CustomID and for email_log_details
-                await mailjet.send_email(
-                    to_email=lead['email'],
-                    to_name=lead['name'],
-                    subject=campaign['email_subject'],
-                    html_content=campaign['email_body'],
-                    custom_id=str(email_log['id']),
-                    email_log_id=email_log['id'],
-                    sender_type='assistant'  # This is an assistant-initiated email
-                )
-                logger.info(f"Successfully sent email to {lead['email']}")
+                # Create email log first and wait for it to complete
+                try:
+                    email_log = await create_email_log(
+                        campaign_id=campaign_id,
+                        lead_id=lead['id'],
+                        sent_at=datetime.utcnow().isoformat()
+                    )
+                    logger.info(f"Created email_log with id: {email_log['id']}")
+                except Exception as e:
+                    logger.error(f"Error creating email log: {str(e)}")
+                    continue
+                # Log the data we're about to send
+                logger.info(f"Preparing to send email with custom_id: {str(email_log['id'])}")
+                
+                # Only proceed with sending email after email_log is created
+                try:
+                    await mailjet.send_email(
+                        to_email=lead['email'],
+                        to_name=lead['name'],
+                        subject=campaign['email_subject'],
+                        html_content=campaign['email_body'],
+                        email_log_id=email_log['id'],
+                        sender_type='assistant'
+                    )
+                    logger.info(f"Successfully sent email to {lead['email']} with custom_id: {str(email_log['id'])}")
+                except Exception as e:
+                    logger.error(f"Error sending email: {str(e)}")
+                    continue
+                
         except Exception as e:
-            logger.error(f"Failed to send email to {lead.get('email')}: {str(e)}")
+            logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
             continue
 
 @app.post("/api/email-campaigns/{campaign_id}/run")
@@ -531,28 +549,57 @@ async def run_email_campaign(
     
     return {"message": "Email campaign started successfully"} 
 
-async def book_appointment(email: str, name: str) -> Dict[str, str]:
+async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
     """
-    Create a Calendly scheduling link for the lead
+    Create a calendar event using Cronofy
     
     Args:
+        company_id: UUID of the company
         email: Lead's email address
-        name: Lead's name
         
     Returns:
-        Dict containing the Calendly scheduling link
+        Dict containing the event details
     """
     settings = get_settings()
     
-    # Using Calendly direct scheduling link
-    # The URL parameters will pre-fill the booking form
-    calendly_url = f"https://calendly.com/{settings.calendly_username}/30min"
-    scheduling_url = f"{calendly_url}?name={name}&email={email}"
+    # Get company to get Cronofy credentials
+    company = await get_company_by_id(company_id)
+    if not company or not company.get('cronofy_access_token'):
+        raise HTTPException(status_code=400, detail="No Cronofy connection found")
     
-    return {
-        "booking_url": scheduling_url,
-        "message": "You can schedule a meeting at your preferred time using this link."
+    # Initialize Cronofy client
+    cronofy = pycronofy.Client(
+        client_id=settings.cronofy_client_id,
+        client_secret=settings.cronofy_client_secret,
+        access_token=company['cronofy_access_token']
+    )
+    
+    # Create event 30 minutes from now
+    start_time = datetime.utcnow() + timedelta(minutes=30)
+    end_time = start_time + timedelta(minutes=30)
+    
+    event = {
+        'event_id': str(uuid.uuid4()),
+        'summary': 'Sales Discussion',
+        'start': start_time.isoformat(),
+        'end': end_time.isoformat(),
+        'attendees': {
+            'invite': [{'email': email}]
+        }
     }
+    
+    try:
+        cronofy.upsert_event(
+            calendar_id=company['cronofy_default_calendar_id'],
+            event=event
+        )
+        
+        return {
+            "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
+        }
+    except Exception as e:
+        logger.error(f"Error creating Cronofy event: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to schedule meeting")
 
 @app.post("/api/incoming-email")
 async def handle_mailjet_webhook(
@@ -573,14 +620,23 @@ async def handle_mailjet_webhook(
     
     # Get webhook payload
     payload = await request.json()
-    logger.info(f"Received webhook payload: {payload}")
-    
-    # Extract CustomID, email content and headers
-    custom_id = payload.get('CustomID')
+    logger.info(f"Received webhook payload: {json.dumps(payload, indent=2)}")
+        
     email_text = payload.get('Text-part', '')
     headers = payload.get('Headers', {})
     from_email = payload.get('Sender', '')  # Get sender's email
     from_field = payload.get('From', '')    # Get the full From field
+    to_email = payload.get('To', '')        # Get the To field
+    
+    # Extract email_log_id from To field
+    try:
+        # Format: prefix+email_log_id@domain
+        email_log_id_str = to_email.split('+')[1].split('@')[0]
+        email_log_id = UUID(email_log_id_str)
+        logger.info(f"Extracted email_log_id from To field: {email_log_id}")
+    except (IndexError, ValueError) as e:
+        logger.error(f"Failed to extract valid email_log_id from To field: {to_email}")
+        raise HTTPException(status_code=400, detail="Invalid or missing email_log_id in To field")
     
     # Extract name from From field (format: "Name <email@domain.com>")
     recipient_name = from_email.split('@')[0]  # Default to email username
@@ -595,13 +651,8 @@ async def handle_mailjet_webhook(
     # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
     message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
     subject = payload.get('Subject', '')
-    
-    if not custom_id:
-        raise HTTPException(status_code=400, detail="Missing CustomID")
-    
-    try:
-        email_log_id = UUID(custom_id)
         
+    try:
         # Create email_log_details record for the incoming email
         if message_id:
             try:
@@ -619,6 +670,11 @@ async def handle_mailjet_webhook(
                 conversation_history = await get_email_conversation_history(email_log_id)
                 logger.info(f"Found {len(conversation_history)} messages in conversation history")
                 
+                # Get company_id from email_log
+                company_id = await get_company_id_from_email_log(email_log_id)
+                if not company_id:
+                    raise HTTPException(status_code=400, detail="Could not find company for this conversation")
+                
                 # Define the function for OpenAI
                 functions = [
                     {
@@ -627,16 +683,16 @@ async def handle_mailjet_webhook(
                         "parameters": {
                             "type": "object",
                             "properties": {
+                                "company_id": {
+                                    "type": "string",
+                                    "description": "UUID of the company"
+                                },
                                 "email": {
                                     "type": "string",
                                     "description": "Lead's email address"
-                                },
-                                "name": {
-                                    "type": "string",
-                                    "description": "Lead's name"
                                 }
                             },
-                            "required": ["email", "name"]
+                            "required": ["company_id", "email"]
                         }
                     }
                 ]
@@ -645,13 +701,13 @@ async def handle_mailjet_webhook(
                 messages = [
                     {
                         "role": "system",
-                        "content": """You are an AI sales assistant. Your goal is to engage with potential customers professionally and helpfully.
+                        "content": f"""You are an AI sales assistant. Your goal is to engage with potential customers professionally and helpfully.
                         
                         Guidelines for responses:
                         1. Keep responses concise and focused on addressing the customer's needs and concerns
                         2. If a customer expresses disinterest, acknowledge it politely and end the conversation
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
-                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function
+                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function with company_id: {company_id}
                         5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
@@ -668,7 +724,6 @@ async def handle_mailjet_webhook(
                         [Additional information or next steps if needed]
                         
                         Best regards,
-                        [Your name]
                         Sales Team"""
                     }
                 ]
@@ -701,8 +756,8 @@ async def handle_mailjet_webhook(
                         
                         # Call the booking function
                         booking_info = await book_appointment(
-                            email=function_args["email"],
-                            name=function_args["name"]
+                            company_id=UUID(function_args["company_id"]),
+                            email=function_args["email"]
                         )
                         
                         # Add the function response to the messages
@@ -747,9 +802,9 @@ async def handle_mailjet_webhook(
                     to_name=recipient_name,
                     subject=response_subject,
                     html_content=formatted_reply,
-                    custom_id=str(email_log_id),  # Use the same email_log_id
                     email_log_id=email_log_id,    # Use the same email_log_id
-                    sender_type='assistant'       # This is an assistant response
+                    sender_type='assistant',      # This is an assistant response
+                    in_reply_to=message_id        # Pass the Message-ID from the incoming email
                 )
                 logger.info(f"Sent AI response to {from_email} ({recipient_name})")
                 
@@ -759,44 +814,13 @@ async def handle_mailjet_webhook(
                 raise  # Re-raise to be caught by outer try-except
         else:
             logger.error("No Message-ID found in headers")
-            return {"status": "error", "message": "No Message-ID found in headers"}
-        
-        # Analyze sentiment using OpenAI
-        prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
-        Positive: Indicates interest or willingness to proceed.
-        Neutral: Requests more information or clarification.
-        Negative: Indicates disinterest or rejection.
-        
-        Email reply:
-        {email_text}
-        
-        Respond with only one word: Positive, Neutral, or Negative."""
-        
-        sentiment_response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0,
-            max_tokens=10
-        )
-        
-        sentiment = sentiment_response.choices[0].message.content.strip()
-        
-        # Update email log with sentiment
-        await update_email_log_sentiment(email_log_id, sentiment.lower())
-        logger.info(f"Updated email_log sentiment to: {sentiment}")
-        
-    except ValueError:
-        logger.error(f"Invalid UUID in CustomID: {custom_id}")
-        return {"status": "error", "message": "Invalid UUID in CustomID"}
+            return {"status": "error", "message": "No Message-ID found in headers"}        
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
         logger.exception("Full traceback:")
         return {"status": "error", "message": str(e)}
     
-    return {"status": "success"} 
+    return {"status": "success"}
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
 async def generate_campaign(
@@ -868,3 +892,95 @@ async def generate_campaign(
             status_code=500,
             detail="Failed to generate campaign content"
         ) 
+
+@app.get("/api/companies/{company_id}/cronofy-auth", response_model=CronofyAuthResponse)
+async def cronofy_auth(
+    company_id: UUID,
+    code: str = Query(..., description="Authorization code from Cronofy"),
+    redirect_url: str = Query(..., description="Redirect URL used in the authorization request"),
+    current_user: dict = Depends(get_current_user)
+):
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    settings = get_settings()
+    cronofy = pycronofy.Client(
+        client_id=settings.cronofy_client_id,
+        client_secret=settings.cronofy_client_secret
+    )
+    
+    auth = cronofy.get_authorization_from_code(code, redirect_uri=redirect_url)
+    
+    # Get user info and profiles
+    user_info = cronofy.userinfo()
+    logger.info(f"Cronofy user info: {user_info}")
+    
+    # Get profile and calendar information from userinfo
+    cronofy_data = user_info.get('cronofy.data', {})
+    profiles = cronofy_data.get('profiles', [])
+    
+    if not profiles:
+        raise HTTPException(status_code=400, detail="No calendar profiles found")
+    
+    first_profile = profiles[0]
+    
+    # Find primary calendar ID and name from userinfo
+    default_calendar_id = None
+    default_calendar_name = None
+    for calendar in first_profile.get('profile_calendars', []):
+        if calendar.get('calendar_primary'):
+            default_calendar_id = calendar['calendar_id']
+            default_calendar_name = calendar['calendar_name']
+            break
+    
+    if not default_calendar_id:
+        raise HTTPException(status_code=400, detail="No primary calendar found")
+    
+    # Update company with Cronofy profile information
+    await update_company_cronofy_profile(
+        company_id=company_id,
+        provider=first_profile['provider_name'],
+        linked_email=user_info['email'],
+        default_calendar=default_calendar_id,
+        default_calendar_name=default_calendar_name,
+        access_token=auth['access_token'],
+        refresh_token=auth['refresh_token']
+    )
+    
+    return CronofyAuthResponse(message="Successfully connected to Cronofy") 
+
+@app.delete("/api/companies/{company_id}/calendar", response_model=CronofyAuthResponse)
+async def disconnect_calendar(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get company to get the access token
+    company = await get_company_by_id(company_id)
+    if not company or not company.get('cronofy_access_token'):
+        raise HTTPException(status_code=400, detail="No Cronofy connection found")
+    
+    # Initialize Cronofy client and revoke authorization
+    settings = get_settings()
+    cronofy = pycronofy.Client(
+        client_id=settings.cronofy_client_id,
+        client_secret=settings.cronofy_client_secret,
+        access_token=company['cronofy_access_token']
+    )
+    
+    try:
+        cronofy.revoke_authorization()
+    except Exception as e:
+        logger.error(f"Error revoking Cronofy authorization: {str(e)}")
+        # Continue with clearing data even if revoke fails
+    
+    # Clear all Cronofy-related data
+    await clear_company_cronofy_data(company_id)
+    
+    return CronofyAuthResponse(message="Successfully disconnected calendar") 
