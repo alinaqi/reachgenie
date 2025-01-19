@@ -803,7 +803,8 @@ async def handle_mailjet_webhook(
                     subject=response_subject,
                     html_content=formatted_reply,
                     email_log_id=email_log_id,    # Use the same email_log_id
-                    sender_type='assistant'       # This is an assistant response
+                    sender_type='assistant',      # This is an assistant response
+                    in_reply_to=message_id        # Pass the Message-ID from the incoming email
                 )
                 logger.info(f"Sent AI response to {from_email} ({recipient_name})")
                 
