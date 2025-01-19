@@ -273,3 +273,14 @@ async def clear_company_cronofy_data(company_id: UUID):
         'cronofy_refresh_token': None
     }).eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None 
+
+async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
+    """Get company_id from email_log through campaign and company relationship"""
+    response = supabase.table('email_logs')\
+        .select('campaign_id,email_campaigns(company_id)')\
+        .eq('id', str(email_log_id))\
+        .execute()
+    
+    if response.data and response.data[0].get('email_campaigns'):
+        return UUID(response.data[0]['email_campaigns']['company_id'])
+    return None 
