@@ -562,6 +562,9 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
     """
     settings = get_settings()
     
+    logger.info(f"Company ID: {company_id}")
+    logger.info(f"Attendee/Lead Email: {email}")
+
     # Get company to get Cronofy credentials
     company = await get_company_by_id(company_id)
     if not company or not company.get('cronofy_access_token'):
@@ -691,12 +694,12 @@ async def handle_mailjet_webhook(
                                     "type": "string",
                                     "description": "UUID of the company"
                                 },
-                                "email": {
+                                "attendee_email": {
                                     "type": "string",
-                                    "description": "Lead's email address"
+                                    "description": "Email address of the attendee to invite to the meeting"
                                 }
                             },
-                            "required": ["company_id", "email"]
+                            "required": ["company_id", "attendee_email"]
                         }
                     }
                 ]
@@ -761,7 +764,7 @@ async def handle_mailjet_webhook(
                         # Call the booking function
                         booking_info = await book_appointment(
                             company_id=UUID(function_args["company_id"]),
-                            email=function_args["email"]
+                            email=function_args["attendee_email"]
                         )
                         
                         # Add the function response to the messages
