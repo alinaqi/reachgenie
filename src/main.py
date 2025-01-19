@@ -578,11 +578,15 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
     start_time = datetime.utcnow() + timedelta(minutes=30)
     end_time = start_time + timedelta(minutes=30)
     
+    # Format times in ISO 8601 format with Z suffix for UTC
+    start_time_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    
     event = {
         'event_id': str(uuid.uuid4()),
         'summary': 'Sales Discussion',
-        'start': start_time.isoformat(),
-        'end': end_time.isoformat(),
+        'start': start_time_str,
+        'end': end_time_str,
         'attendees': {
             'invite': [{'email': email}]
         }
