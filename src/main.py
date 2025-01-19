@@ -621,16 +621,22 @@ async def handle_mailjet_webhook(
     # Get webhook payload
     payload = await request.json()
     logger.info(f"Received webhook payload: {json.dumps(payload, indent=2)}")
-    
-    # Extract CustomID, email content and headers
-    custom_id = payload.get('CustomID')
-    logger.info(f"Extracted CustomID: {custom_id}")
-    logger.info(f"Full payload keys: {list(payload.keys())}")
-    
+        
     email_text = payload.get('Text-part', '')
     headers = payload.get('Headers', {})
     from_email = payload.get('Sender', '')  # Get sender's email
     from_field = payload.get('From', '')    # Get the full From field
+    to_email = payload.get('To', '')        # Get the To field
+    
+    # Extract email_log_id from To field
+    try:
+        # Format: prefix+email_log_id@domain
+        email_log_id_str = to_email.split('+')[1].split('@')[0]
+        email_log_id = UUID(email_log_id_str)
+        logger.info(f"Extracted email_log_id from To field: {email_log_id}")
+    except (IndexError, ValueError) as e:
+        logger.error(f"Failed to extract valid email_log_id from To field: {to_email}")
+        raise HTTPException(status_code=400, detail="Invalid or missing email_log_id in To field")
     
     # Extract name from From field (format: "Name <email@domain.com>")
     recipient_name = from_email.split('@')[0]  # Default to email username
@@ -645,14 +651,8 @@ async def handle_mailjet_webhook(
     # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
     message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
     subject = payload.get('Subject', '')
-    
-    if not custom_id:
-        logger.error(f" Missing CustomID")
-        raise HTTPException(status_code=400, detail="Missing CustomID")
-    
-    try:
-        email_log_id = UUID(custom_id)
         
+    try:
         # Create email_log_details record for the incoming email
         if message_id:
             try:
@@ -813,44 +813,13 @@ async def handle_mailjet_webhook(
                 raise  # Re-raise to be caught by outer try-except
         else:
             logger.error("No Message-ID found in headers")
-            return {"status": "error", "message": "No Message-ID found in headers"}
-        
-        # Analyze sentiment using OpenAI
-        prompt = f"""Based on the following email reply, categorize the sentiment as one of: Positive, Neutral, or Negative.
-        Positive: Indicates interest or willingness to proceed.
-        Neutral: Requests more information or clarification.
-        Negative: Indicates disinterest or rejection.
-        
-        Email reply:
-        {email_text}
-        
-        Respond with only one word: Positive, Neutral, or Negative."""
-        
-        sentiment_response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that categorizes email sentiment."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0,
-            max_tokens=10
-        )
-        
-        sentiment = sentiment_response.choices[0].message.content.strip()
-        
-        # Update email log with sentiment
-        await update_email_log_sentiment(email_log_id, sentiment.lower())
-        logger.info(f"Updated email_log sentiment to: {sentiment}")
-        
-    except ValueError:
-        logger.error(f"Invalid UUID in CustomID: {custom_id}")
-        return {"status": "error", "message": "Invalid UUID in CustomID"}
+            return {"status": "error", "message": "No Message-ID found in headers"}        
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
         logger.exception("Full traceback:")
         return {"status": "error", "message": str(e)}
     
-    return {"status": "success"} 
+    return {"status": "success"}
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
 async def generate_campaign(

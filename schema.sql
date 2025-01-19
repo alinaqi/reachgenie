@@ -79,7 +79,6 @@ CREATE TABLE IF NOT EXISTS email_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     campaign_id UUID REFERENCES email_campaigns(id),
     lead_id UUID REFERENCES leads(id),
-    reply_sentiment TEXT,
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
