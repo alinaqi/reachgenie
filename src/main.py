@@ -516,7 +516,6 @@ async def send_campaign_emails(campaign_id: UUID):
                         to_name=lead['name'],
                         subject=campaign['email_subject'],
                         html_content=campaign['email_body'],
-                        custom_id=str(email_log['id']),
                         email_log_id=email_log['id'],
                         sender_type='assistant'
                     )
@@ -803,7 +802,6 @@ async def handle_mailjet_webhook(
                     to_name=recipient_name,
                     subject=response_subject,
                     html_content=formatted_reply,
-                    custom_id=str(email_log_id),  # Use the same email_log_id
                     email_log_id=email_log_id,    # Use the same email_log_id
                     sender_type='assistant'       # This is an assistant response
                 )
