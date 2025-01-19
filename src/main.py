@@ -626,17 +626,17 @@ async def handle_mailjet_webhook(
     headers = payload.get('Headers', {})
     from_email = payload.get('Sender', '')  # Get sender's email
     from_field = payload.get('From', '')    # Get the full From field
-    to_email = payload.get('To', '')        # Get the To field
+    recipient_email = payload.get('Recipient', '')  # Get the Recipient field
     
-    # Extract email_log_id from To field
+    # Extract email_log_id from Recipient field
     try:
         # Format: prefix+email_log_id@domain
-        email_log_id_str = to_email.split('+')[1].split('@')[0]
+        email_log_id_str = recipient_email.split('+')[1].split('@')[0]
         email_log_id = UUID(email_log_id_str)
-        logger.info(f"Extracted email_log_id from To field: {email_log_id}")
+        logger.info(f"Extracted email_log_id from Recipient field: {email_log_id}")
     except (IndexError, ValueError) as e:
-        logger.error(f"Failed to extract valid email_log_id from To field: {to_email}")
-        raise HTTPException(status_code=400, detail="Invalid or missing email_log_id in To field")
+        logger.error(f"Failed to extract valid email_log_id from Recipient field: {recipient_email}")
+        raise HTTPException(status_code=400, detail="Invalid or missing email_log_id in Recipient field")
     
     # Extract name from From field (format: "Name <email@domain.com>")
     recipient_name = from_email.split('@')[0]  # Default to email username
