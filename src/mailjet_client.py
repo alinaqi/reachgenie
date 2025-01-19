@@ -32,6 +32,7 @@ class MailjetClient:
             Dict containing the response from Mailjet
         """
         async with httpx.AsyncClient() as client:
+            # Send the email
             response = await client.post(
                 f"{self.base_url}/send",
                 auth=(self.api_key, self.api_secret),
@@ -51,7 +52,7 @@ class MailjetClient:
                             "Subject": subject,
                             "HTMLPart": html_content,
                             "Headers": {
-                                "Reply-To": self.settings.mailjet_parse_email
+                                "Reply-To": f"{self.settings.mailjet_parse_email.split('@')[0]}+{str(email_log_id)}@{self.settings.mailjet_parse_email.split('@')[1]}" if email_log_id else self.settings.mailjet_parse_email
                             }
                         }
                     ]
@@ -69,7 +70,7 @@ class MailjetClient:
                 message = response_data['Messages'][0]
                 logger.info(f"Message data: {message}")
                 
-                # Try to get Message-ID from different possible locations
+                # Get the numeric MessageID from the response
                 message_id = None
                 if message.get('To') and len(message['To']) > 0:
                     to_data = message['To'][0]
