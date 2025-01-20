@@ -7,7 +7,7 @@ from datetime import timedelta, datetime
 import csv
 import io
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
@@ -549,13 +549,14 @@ async def run_email_campaign(
     
     return {"message": "Email campaign started successfully"} 
 
-async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
+async def book_appointment(company_id: UUID, email: str, start_time: datetime) -> Dict[str, str]:
     """
     Create a calendar event using Cronofy
     
     Args:
         company_id: UUID of the company
         email: Lead's email address
+        start_time: datetime for when the meeting should start
         
     Returns:
         Dict containing the event details
@@ -564,6 +565,7 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
     
     logger.info(f"Company ID: {company_id}")
     logger.info(f"Attendee/Lead Email: {email}")
+    logger.info(f"Meeting start time: {start_time}")
 
     # Get company to get Cronofy credentials
     company = await get_company_by_id(company_id)
@@ -578,8 +580,6 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
         refresh_token=company['cronofy_refresh_token']
     )
     
-    # Create event 30 minutes from now
-    start_time = datetime.utcnow() + timedelta(minutes=30)
     end_time = start_time + timedelta(minutes=30)
     
     # Format times in ISO 8601 format with Z suffix for UTC
@@ -730,7 +730,7 @@ async def handle_mailjet_webhook(
 5. The customer asks about demo or product demonstration
 6. The customer expresses interest in discussing pricing or specific features in detail
 
-The function will automatically schedule a 30-minute meeting starting from the next available time slot.""",
+The function will schedule a 30-minute meeting at the specified time.""",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -741,9 +741,14 @@ The function will automatically schedule a 30-minute meeting starting from the n
                                 "email": {
                                     "type": "string",
                                     "description": "Email address of the attendee - use the exact from_email provided in the system prompt"
+                                },
+                                "start_time": {
+                                    "type": "string",
+                                    "description": "ISO 8601 formatted date-time string for when the meeting should start (e.g. '2024-03-20T14:30:00Z')",
+                                    "format": "date-time"
                                 }
                             },
-                            "required": ["company_id", "email"]
+                            "required": ["company_id", "email", "start_time"]
                         }
                     }
                 ]
@@ -814,7 +819,8 @@ The function will automatically schedule a 30-minute meeting starting from the n
                         # Call the booking function
                         booking_info = await book_appointment(
                             company_id=UUID(function_args["company_id"]),
-                            email=function_args["email"]
+                            email=function_args["email"],
+                            start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00'))
                         )
                         
                         # Add the function response to the messages
