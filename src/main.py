@@ -792,12 +792,12 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
                         4. When handling meeting requests:
                            {
-                           '''- If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
+                           f'''- If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
                            - If they only mention a date (e.g., "tomorrow" or "next week"), ask them for their preferred time
                            - Only use the book_appointment function when you have both a specific date AND time
                            - Use the book_appointment function with:
-                             * company_id: {company_id}
-                             * email: {from_email}
+                             * company_id: "{str(company_id)}"
+                             * email: "{from_email}"
                              * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
                            '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
                            }
