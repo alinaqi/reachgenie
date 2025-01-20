@@ -784,7 +784,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                                 },
                                 "email_subject": {
                                     "type": "string",
-                                    "description": "Subject line from the email thread to use as the event summary"
+                                    "description": "Use the exact email_subject provided in the system prompt"
                                 }
                             },
                             "required": ["company_id", "email", "start_time", "email_subject"]
