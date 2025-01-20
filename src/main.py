@@ -571,7 +571,7 @@ async def run_email_campaign(
     
     return {"message": "Email campaign started successfully"} 
 
-async def book_appointment(company_id: UUID, email: str, start_time: datetime) -> Dict[str, str]:
+async def book_appointment(company_id: UUID, email: str, start_time: datetime, email_subject: str = "Sales Discussion") -> Dict[str, str]:
     """
     Create a calendar event using Cronofy
     
@@ -579,6 +579,7 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime) -
         company_id: UUID of the company
         email: Lead's email address
         start_time: datetime for when the meeting should start
+        email_subject: Subject line to use for the event summary
         
     Returns:
         Dict containing the event details
@@ -588,6 +589,7 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime) -
     logger.info(f"Company ID: {company_id}")
     logger.info(f"Attendee/Lead Email: {email}")
     logger.info(f"Meeting start time: {start_time}")
+    logger.info(f"Event summary: {email_subject}")
 
     # Get company to get Cronofy credentials
     company = await get_company_by_id(company_id)
@@ -610,7 +612,7 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime) -
     
     event = {
         'event_id': str(uuid.uuid4()),
-        'summary': 'Sales Discussion',
+        'summary': email_subject,
         'start': start_time_str,
         'end': end_time_str,
         'attendees': {
@@ -774,9 +776,13 @@ The function will schedule a 30-minute meeting at the specified time.""",
                                     "type": "string",
                                     "description": "ISO 8601 formatted date-time string for when the meeting should start (e.g. '2024-03-20T14:30:00Z')",
                                     "format": "date-time"
+                                },
+                                "email_subject": {
+                                    "type": "string",
+                                    "description": "Subject line from the email thread to use as the event summary"
                                 }
                             },
-                            "required": ["company_id", "email", "start_time"]
+                            "required": ["company_id", "email", "start_time", "email_subject"]
                         }
                     })
                 
@@ -798,6 +804,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                            - Use the book_appointment function with:
                              * company_id: "{str(company_id)}"
                              * email: "{from_email}"
+                             * email_subject: "{subject}"
                              * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
                            '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
                            }
@@ -861,7 +868,8 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         booking_info = await book_appointment(
                             company_id=UUID(function_args["company_id"]),
                             email=function_args["email"],
-                            start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00'))
+                            start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00')),
+                            email_subject=function_args["email_subject"]
                         )
                         
                         # Add the function response to the messages
