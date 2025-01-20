@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     supabase_url: str
     supabase_key: str
+    SUPABASE_SERVICE_KEY: str  # Changed to match .env file name
     perplexity_api_key: str
     bland_api_key: str
     bland_api_url: str = "https://api.bland.ai"
@@ -18,8 +19,9 @@ class Settings(BaseSettings):
     mailjet_parse_email: str  # Email address for parsing replies
     openai_api_key: str  # OpenAI API key for sentiment analysis
     calendly_username: str = "sdr-ai"  # Default value, should be overridden in .env
-    cronofy_client_id: str
-    cronofy_client_secret: str
+    cronofy_client_id: str = ""  # Made optional with default empty string
+    cronofy_client_secret: str = ""  # Made optional with default empty string
+    cronofy_redirect_uri: str = ""  # Made optional with default empty string
 
     class Config:
         env_file = ".env"

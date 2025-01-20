@@ -14,6 +14,8 @@ import json
 import pycronofy
 import uuid
 import asyncio
+from pydantic import BaseModel, Field
+from supabase import create_client, Client
 
 # Configure logger
 logging.basicConfig(
@@ -22,12 +24,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class TaskResponse(BaseModel):
+    task_id: UUID
+    message: str
+
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate, LeadCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
-    LeadsUploadResponse, CronofyAuthResponse
+    LeadsUploadResponse, CronofyAuthResponse, LeadResponse
 )
 from src.database import (
     create_user,
@@ -58,7 +64,10 @@ from src.database import (
     update_company_cronofy_profile,
     clear_company_cronofy_data,
     get_company_id_from_email_log,
-    update_product_details
+    update_product_details,
+    create_upload_task,
+    update_task_status,
+    get_task_status
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -216,104 +225,79 @@ async def get_company(
     return company
 
 # Lead Management endpoints
-@app.post("/api/companies/{company_id}/leads/upload", response_model=LeadsUploadResponse)
+@app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse)
 async def upload_leads(
+    background_tasks: BackgroundTasks,
     company_id: UUID,
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    file: UploadFile = File(...)
 ):
+    """
+    Upload leads from CSV file. The processing will be done in the background.
+    
+    Args:
+        background_tasks: FastAPI background tasks
+        company_id: UUID of the company
+        current_user: Current authenticated user
+        file: CSV file containing lead data
+        
+    Returns:
+        Task ID for tracking the upload progress
+    """
+    # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    contents = await file.read()
-    csv_text = contents.decode()
-    csv_data = csv.DictReader(io.StringIO(csv_text))
-    lead_count = 0
-    skipped_count = 0
-    unmapped_headers = set()
-    
-    # Get CSV headers
-    headers = csv_data.fieldnames
-    if not headers:
-        raise HTTPException(status_code=400, detail="CSV file has no headers")
-    
-    # Initialize OpenAI client
-    settings = get_settings()
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    
-    # Create a prompt to map headers to expected fields
-    prompt = f"""Map the following CSV headers to the expected lead data fields. Return a JSON object where keys are the CSV headers and values are the corresponding expected field names.
-
-CSV Headers: {', '.join(headers)}
-
-Expected fields:
-- name (for full name)
-- email (for email address)
-- company (for company name)
-- phone_number (for phone number)
-- company_size (for number of employees)
-- job_title (for job title/position)
-- company_facebook (for Facebook URL)
-- company_twitter (for Twitter URL)
-- company_revenue (for company revenue)
-
-Return ONLY a valid JSON object mapping CSV headers to expected field names. If a header doesn't map to any expected field, map it to null.
-Example format: {{"CSV Header 1": "name", "CSV Header 2": "email", "Unmatched Header": null}}"""
-
-    # Get header mapping from OpenAI
-    response = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant that maps CSV headers to expected field names. Respond only with valid JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0,
-        max_tokens=500
-    )
-    
     try:
-        header_mapping = json.loads(response.choices[0].message.content.strip())
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Failed to parse header mapping")
-    
-    # Log unmapped headers
-    for header, mapped_field in header_mapping.items():
-        if mapped_field is None:
-            unmapped_headers.add(header)
-            logger.info(f"Unmapped header found: {header}")
-    
-    # Initialize Perplexity enricher
-    enricher = PerplexityEnricher(settings.perplexity_api_key)
-    
-    # Process each row with the mapped headers
-    for row in csv_data:
-        lead_data = {}
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY  
+        )
         
-        # Map CSV data to expected fields using the header mapping
-        for csv_header, expected_field in header_mapping.items():
-            if expected_field and csv_header in row:
-                lead_data[expected_field] = row[csv_header]
+        # Generate unique file name
+        file_name = f"{company_id}/{uuid.uuid4()}.csv"
         
-        # Skip record if name is not present
-        if not lead_data.get('name'):
-            logger.info(f"Skipping record due to missing name field: {row}")
-            skipped_count += 1
-            continue
+        # Read and upload file content
+        file_content = await file.read()
+        if isinstance(file_content, str):
+            file_content = file_content.encode('utf-8')
         
-        # Enrich lead data with Perplexity if any required fields are missing
-        if not all([lead_data.get(field) for field in ["email", "phone_number", "job_title", "company_size", "company_revenue", "company_facebook", "company_twitter"]]):
-            lead_data = await enricher.enrich_lead_data(lead_data)
+        # Upload file to Supabase storage
+        storage = supabase.storage.from_("leads-uploads")
+        try:
+            storage.upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": "text/csv"}
+            )
+        except Exception as upload_error:
+            logger.error(f"Storage upload error: {str(upload_error)}")
+            raise HTTPException(status_code=500, detail="Failed to upload file to storage")
         
-        await create_lead(company_id, lead_data)
-        lead_count += 1
-    
-    return LeadsUploadResponse(
-        message="Leads upload completed",
-        leads_saved=lead_count,
-        leads_skipped=skipped_count,
-        unmapped_headers=list(unmapped_headers)
-    )
+        # Create task record
+        task_id = uuid.uuid4()
+        await create_upload_task(task_id, company_id, current_user["id"], file_name)
+        
+        # Add background task
+        background_tasks.add_task(
+            process_leads_upload,
+            company_id,
+            file_name,
+            current_user["id"],
+            task_id
+        )
+        
+        return TaskResponse(
+            task_id=task_id,
+            message="File upload started. Use the task ID to check the status."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting leads upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB])
 async def get_leads(
@@ -324,6 +308,98 @@ async def get_leads(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     return await get_leads_by_company(company_id)
+
+@app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse)
+async def get_lead(
+    company_id: UUID,
+    lead_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get complete lead data by ID.
+    
+    Args:
+        company_id: UUID of the company
+        lead_id: UUID of the lead to retrieve
+        current_user: Current authenticated user
+        
+    Returns:
+        Complete lead data including all fields
+        
+    Raises:
+        404: Lead not found
+        403: User doesn't have access to this lead
+    """
+    # Get lead data
+    lead = await get_lead_by_id(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check if lead belongs to the specified company
+    if str(lead["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Lead not found in this company")
+    
+    # Check if user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this company")
+    
+    # Convert numeric fields to proper types if they're strings
+    if lead.get("financials"):
+        if isinstance(lead["financials"], str):
+            try:
+                lead["financials"] = json.loads(lead["financials"])
+            except json.JSONDecodeError:
+                lead["financials"] = {"value": lead["financials"]}
+        elif isinstance(lead["financials"], (int, float)):
+            lead["financials"] = {"value": str(lead["financials"])}
+        elif not isinstance(lead["financials"], dict):
+            lead["financials"] = {"value": str(lead["financials"])}
+    
+    if lead.get("industries"):
+        if isinstance(lead["industries"], str):
+            lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
+        elif not isinstance(lead["industries"], list):
+            lead["industries"] = [str(lead["industries"])]
+    
+    if lead.get("technologies"):
+        if isinstance(lead["technologies"], str):
+            lead["technologies"] = [tech.strip() for tech in lead["technologies"].split(",")]
+        elif not isinstance(lead["technologies"], list):
+            lead["technologies"] = [str(lead["technologies"])]
+    
+    if lead.get("hiring_positions"):
+        if isinstance(lead["hiring_positions"], str):
+            try:
+                lead["hiring_positions"] = json.loads(lead["hiring_positions"])
+            except json.JSONDecodeError:
+                lead["hiring_positions"] = []
+        elif not isinstance(lead["hiring_positions"], list):
+            lead["hiring_positions"] = []
+    
+    if lead.get("location_move"):
+        if isinstance(lead["location_move"], str):
+            try:
+                lead["location_move"] = json.loads(lead["location_move"])
+            except json.JSONDecodeError:
+                lead["location_move"] = None
+        elif not isinstance(lead["location_move"], dict):
+            lead["location_move"] = None
+    
+    if lead.get("job_change"):
+        if isinstance(lead["job_change"], str):
+            try:
+                lead["job_change"] = json.loads(lead["job_change"])
+            except json.JSONDecodeError:
+                lead["job_change"] = None
+        elif not isinstance(lead["job_change"], dict):
+            lead["job_change"] = None
+    
+    return {
+        "status": "success",
+        "data": lead
+    }
+
 
 # Calling functionality endpoints
 @app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB)
@@ -1013,3 +1089,291 @@ async def disconnect_calendar(
     await clear_company_cronofy_data(company_id)
     
     return CronofyAuthResponse(message="Successfully disconnected calendar") 
+
+# Background task for processing leads
+async def process_leads_upload(
+    company_id: UUID,
+    file_url: str,
+    user_id: UUID,
+    task_id: UUID
+):
+    try:
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY  # Use service role key
+        )
+        
+        # Update task status to processing
+        await update_task_status(task_id, "processing")
+        
+        # Download file from Supabase
+        try:
+            storage = supabase.storage.from_("leads-uploads")
+            response = storage.download(file_url)
+            if not response:
+                raise Exception("No data received from storage")
+                
+            csv_text = response.decode('utf-8')
+            csv_data = csv.DictReader(io.StringIO(csv_text))
+            
+            # Validate CSV structure
+            if not csv_data.fieldnames:
+                raise Exception("CSV file has no headers")
+                
+        except Exception as download_error:
+            logger.error(f"Error downloading file: {str(download_error)}")
+            await update_task_status(task_id, "failed", f"Failed to download file: {str(download_error)}")
+            return
+        
+        lead_count = 0
+        skipped_count = 0
+        unmapped_headers = set()
+        
+        # Get CSV headers
+        headers = csv_data.fieldnames
+        if not headers:
+            await update_task_status(task_id, "failed", "CSV file has no headers")
+            return
+        
+        # Initialize OpenAI client
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Create a prompt to map headers
+        prompt = f"""Map the following CSV headers to our database fields. Return a JSON object where keys are the CSV headers and values are the corresponding database field names.
+
+CSV Headers: {', '.join(headers)}
+
+Database fields and their types:
+- name (text, required) - Should be constructed from First Name and Last Name if available
+- first_name (text, required) - should be first name if available. 
+- last_name (text, required) - should be last name if available
+- email (text, required)
+- company (text) - Map from Company Name
+- phone_number (text, required) - Should use Mobile if available, else Direct, else Office
+- company_size (text)
+- job_title (text)
+- lead_source (text)
+- education (text)
+- personal_linkedin_url (text)
+- country (text)
+- city (text)
+- state (text)
+- mobile (text)
+- direct_phone (text)
+- office_phone (text)
+- hq_location (text)
+- website (text)
+- headcount (integer)
+- industries (text array)
+- department (text)
+- sic_code (text)
+- isic_code (text)
+- naics_code (text)
+- company_address (text)
+- company_city (text)
+- company_zip (text)
+- company_state (text)
+- company_country (text)
+- company_hq_address (text)
+- company_hq_city (text)
+- company_hq_zip (text)
+- company_hq_state (text)
+- company_hq_country (text)
+- company_linkedin_url (text)
+- company_type (text)
+- company_description (text)
+- technologies (text array)
+- financials (jsonb)
+- company_founded_year (integer)
+- seniority (text)
+- first_name (text)
+- last_name (text)
+
+Special handling instructions:
+1. Map "First Name" and "Last Name" to first_name and last_name respectively
+2. Map "Company Name" to company
+3. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
+4. Map "Industries" to industries (will be converted to array)
+5. Map "Technologies" to technologies (will be converted to array)
+6. Map "Company Founded Year" to company_founded_year (will be converted to integer)
+7. Map "Headcount" to headcount (will be converted to integer)
+
+Return ONLY a valid JSON object mapping CSV headers to database field names. If a header doesn't map to any field, map it to null.
+Example format: {{"First Name": "first_name", "Last Name": "last_name", "Unmatched Header": null}}"""
+
+        # Get header mapping from OpenAI
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that maps CSV headers to database field names. Respond only with valid JSON."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        try:
+            header_mapping = json.loads(response.choices[0].message.content.strip())
+        except json.JSONDecodeError:
+            await update_task_status(task_id, "failed", "Failed to parse header mapping")
+            return
+        
+        # Process each row
+        for row in csv_data:
+            lead_data = {}
+            
+            # Map CSV data to database fields using the header mapping
+            for csv_header, db_field in header_mapping.items():
+                if db_field and csv_header in row:
+                    value = row[csv_header].strip() if row[csv_header] else None
+                    if value:
+                        # Handle special cases
+                        if db_field == "industries":
+                            lead_data[db_field] = [ind.strip() for ind in value.split(",")]
+                        elif db_field == "technologies":
+                            lead_data[db_field] = [tech.strip() for tech in value.split(",")]
+                        elif db_field == "headcount":
+                            try:
+                                lead_data[db_field] = int(value.replace(",", ""))
+                            except ValueError:
+                                lead_data[db_field] = None
+                        elif db_field == "company_founded_year":
+                            try:
+                                lead_data[db_field] = int(value)
+                            except ValueError:
+                                lead_data[db_field] = None
+                        else:
+                            lead_data[db_field] = value
+            
+            # Handle name fields
+            first_name = lead_data.get('first_name', '').strip()
+            last_name = lead_data.get('last_name', '').strip()
+            
+            # If name is already set but first_name/last_name are not, try to split it
+            if lead_data.get('name') and not (first_name or last_name):
+                name_parts = lead_data['name'].split(' ', 1)
+                if len(name_parts) >= 2:
+                    first_name = name_parts[0].strip()
+                    last_name = name_parts[1].strip()
+                else:
+                    first_name = name_parts[0].strip()
+                    last_name = ""
+            
+                lead_data['first_name'] = first_name
+                lead_data['last_name'] = last_name
+            # If first_name/last_name are set but name is not, combine them
+            elif (first_name or last_name) and not lead_data.get('name'):
+                lead_data['name'] = f"{first_name} {last_name}".strip()
+                lead_data['first_name'] = first_name
+                lead_data['last_name'] = last_name
+            
+            # Skip record if name is empty
+            if not lead_data.get('name'):
+                logger.info(f"Skipping record due to missing name: {row}")
+                skipped_count += 1
+                continue
+            
+            # Ensure first_name and last_name are always set
+            if not lead_data.get('first_name') and not lead_data.get('last_name'):
+                name_parts = lead_data['name'].split(' ', 1)
+                if len(name_parts) >= 2:
+                    lead_data['first_name'] = name_parts[0].strip()
+                    lead_data['last_name'] = name_parts[1].strip()
+                else:
+                    lead_data['first_name'] = name_parts[0].strip()
+                    lead_data['last_name'] = ""
+            
+            # Handle phone number priority (Mobile > Direct > Office)
+            phone_number = lead_data.get('mobile', '').strip()
+            if not phone_number:
+                phone_number = lead_data.get('direct_phone', '').strip()
+            if not phone_number:
+                phone_number = lead_data.get('office_phone', '').strip()
+            lead_data['phone_number'] = phone_number
+            
+            # Handle hiring positions
+            hiring_positions = []
+            for i in range(1, 6):  # Process all 5 hiring positions
+                title = row.get(f"Hiring Title {i}")
+                if title:  # Only add if there's a title
+                    hiring_positions.append({
+                        "title": title,
+                        "url": row.get(f"Hiring URL {i}"),
+                        "location": row.get(f"Hiring Location {i}"),
+                        "date": row.get(f"Hiring Date {i}")
+                    })
+            if hiring_positions:
+                lead_data["hiring_positions"] = hiring_positions
+            
+            # Handle location move
+            if any(row.get(key) for key in ["Location Move - From Country", "Location Move - To Country"]):
+                lead_data["location_move"] = {
+                    "from": {
+                        "country": row.get("Location Move - From Country"),
+                        "state": row.get("Location Move - From State")
+                    },
+                    "to": {
+                        "country": row.get("Location Move - To Country"),
+                        "state": row.get("Location Move - To State")
+                    },
+                    "date": row.get("Location Move Date")
+                }
+            
+            # Handle job change
+            if any(row.get(key) for key in ["Job Change - Previous Company", "Job Change - New Company"]):
+                lead_data["job_change"] = {
+                    "previous": {
+                        "company": row.get("Job Change - Previous Company"),
+                        "title": row.get("Job Change - Previous Title")
+                    },
+                    "new": {
+                        "company": row.get("Job Change - New Company"),
+                        "title": row.get("Job Change - New Title")
+                    },
+                    "date": row.get("Job Change Date")
+                }
+            
+            # Create the lead
+            try:
+                print(lead_data)
+                await create_lead(company_id, lead_data)
+                lead_count += 1
+            except Exception as e:
+                logger.error(f"Error creating lead: {str(e)}")
+                logger.error(f"Lead data: {lead_data}")
+                skipped_count += 1
+                continue
+        
+        # Update task status with results
+        await update_task_status(
+            task_id,
+            "completed",
+            json.dumps({
+                "leads_saved": lead_count,
+                "leads_skipped": skipped_count,
+                "unmapped_headers": list(unmapped_headers)
+            })
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing leads upload: {str(e)}")
+        await update_task_status(task_id, "failed", str(e))
+
+# Task status endpoint
+@app.get("/api/tasks/{task_id}")
+async def get_task_status(
+    task_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get the status of a background task"""
+    task = await get_task_status(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(task["company_id"]) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this task")
+        
+    return task 
