@@ -3,6 +3,7 @@ from src.config import get_settings
 from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
+from fastapi import HTTPException
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
@@ -80,7 +81,9 @@ async def get_lead_by_id(lead_id: UUID):
 
 async def get_product_by_id(product_id: UUID):
     response = supabase.table('products').select('*').eq('id', str(product_id)).execute()
-    return response.data[0] if response.data else None
+    if not response.data:
+        return None
+    return response.data[0]
 
 async def update_call_details(call_id: UUID, bland_call_id: str):
     call_data = {
@@ -284,3 +287,13 @@ async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
     if response.data and response.data[0].get('email_campaigns'):
         return UUID(response.data[0]['email_campaigns']['company_id'])
     return None 
+
+async def update_product_details(product_id: UUID, product_name: str, description: Optional[str]):
+    product_data = {
+        'product_name': product_name,
+        'description': description
+    }
+    response = supabase.table('products').update(product_data).eq('id', str(product_id)).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return response.data[0] 
