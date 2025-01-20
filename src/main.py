@@ -808,6 +808,8 @@ The function will automatically schedule a 30-minute meeting starting from the n
                     if response_message.function_call.name == "book_appointment":
                         # Parse the function arguments
                         function_args = json.loads(response_message.function_call.arguments)
+
+                        logger.info("Calling book_appointment function")
                         
                         # Call the booking function
                         booking_info = await book_appointment(
