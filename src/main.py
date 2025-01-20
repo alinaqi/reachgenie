@@ -574,7 +574,8 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
     cronofy = pycronofy.Client(
         client_id=settings.cronofy_client_id,
         client_secret=settings.cronofy_client_secret,
-        access_token=company['cronofy_access_token']
+        access_token=company['cronofy_access_token'],
+        refresh_token=company['cronofy_refresh_token']
     )
     
     # Create event 30 minutes from now
@@ -604,6 +605,41 @@ async def book_appointment(company_id: UUID, email: str) -> Dict[str, str]:
         return {
             "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
         }
+    except pycronofy.exceptions.PyCronofyRequestError as e:
+        if getattr(e.response, 'status_code', None) == 401:
+            try:
+                # Refresh the token
+                logger.info("Refreshing Cronofy token")
+                auth = cronofy.refresh_authorization()
+                
+                # Update company with new tokens
+                await update_company_cronofy_tokens(
+                    company_id=company_id,
+                    access_token=auth['access_token'],
+                    refresh_token=auth['refresh_token']
+                )
+                
+                # Retry the event creation with new token
+                cronofy = pycronofy.Client(
+                    client_id=settings.cronofy_client_id,
+                    client_secret=settings.cronofy_client_secret,
+                    access_token=auth['access_token']
+                )
+                
+                cronofy.upsert_event(
+                    calendar_id=company['cronofy_default_calendar_id'],
+                    event=event
+                )
+                
+                return {
+                    "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
+                }
+            except Exception as refresh_error:
+                logger.error(f"Error refreshing token: {str(refresh_error)}")
+                raise HTTPException(status_code=500, detail="Failed to refresh calendar authorization")
+        else:
+            logger.error(f"Error creating Cronofy event: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to schedule meeting")
     except Exception as e:
         logger.error(f"Error creating Cronofy event: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to schedule meeting")
