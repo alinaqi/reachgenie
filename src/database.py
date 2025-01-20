@@ -297,3 +297,35 @@ async def update_product_details(product_id: UUID, product_name: str, descriptio
     if not response.data:
         raise HTTPException(status_code=404, detail="Product not found")
     return response.data[0] 
+
+# Task management functions
+async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str):
+    """Create a new upload task record"""
+    data = {
+        'id': str(task_id),
+        'company_id': str(company_id),
+        'user_id': str(user_id),
+        'file_url': file_url,
+        'status': 'pending',
+        'created_at': datetime.now().isoformat()
+    }
+    response = supabase.table('upload_tasks').insert(data).execute()
+    return response.data[0] if response.data else None
+
+async def update_task_status(task_id: UUID, status: str, result: str = None):
+    """Update task status and result"""
+    data = {
+        'status': status,
+        'result': result,
+        'updated_at': datetime.now().isoformat()
+    }
+    response = supabase.table('upload_tasks').update(data).eq('id', str(task_id)).execute()
+    return response.data[0] if response.data else None
+
+async def get_task_status(task_id: UUID):
+    """Get task status and details"""
+    response = supabase.table('upload_tasks')\
+        .select('*')\
+        .eq('id', str(task_id))\
+        .execute()
+    return response.data[0] if response.data else None 
