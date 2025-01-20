@@ -722,20 +722,28 @@ async def handle_mailjet_webhook(
                 functions = [
                     {
                         "name": "book_appointment",
-                        "description": "Book a meeting or appointment with the lead",
+                        "description": """Schedule a sales meeting with the customer. Use this function when:
+1. The customer explicitly asks to schedule a meeting/call
+2. The customer asks about availability for a discussion
+3. The customer shows strong interest in learning more and suggests a live conversation
+4. The customer mentions wanting to talk to someone directly
+5. The customer asks about demo or product demonstration
+6. The customer expresses interest in discussing pricing or specific features in detail
+
+The function will automatically schedule a 30-minute meeting starting from the next available time slot.""",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "company_id": {
                                     "type": "string",
-                                    "description": "UUID of the company"
+                                    "description": "UUID of the company - use the exact company_id provided in the system prompt"
                                 },
-                                "attendee_email": {
+                                "email": {
                                     "type": "string",
-                                    "description": "Email address of the attendee to invite to the meeting"
+                                    "description": "Email address of the attendee - use the exact from_email provided in the system prompt"
                                 }
                             },
-                            "required": ["company_id", "attendee_email"]
+                            "required": ["company_id", "email"]
                         }
                     }
                 ]
@@ -752,7 +760,7 @@ async def handle_mailjet_webhook(
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
                         4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function with:
                            - company_id: {company_id}
-                           - attendee_email: {from_email}
+                           - email: {from_email}
                         5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
@@ -804,7 +812,7 @@ async def handle_mailjet_webhook(
                         # Call the booking function
                         booking_info = await book_appointment(
                             company_id=UUID(function_args["company_id"]),
-                            email=function_args["attendee_email"]
+                            email=function_args["email"]
                         )
                         
                         # Add the function response to the messages
