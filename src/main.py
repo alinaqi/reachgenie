@@ -57,7 +57,8 @@ from src.database import (
     update_company_cronofy_tokens,
     update_company_cronofy_profile,
     clear_company_cronofy_data,
-    get_company_id_from_email_log
+    get_company_id_from_email_log,
+    update_product_details
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -173,6 +174,27 @@ async def get_products(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     return await get_products_by_company(company_id)
+
+@app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
+async def update_product(
+    company_id: UUID,
+    product_id: UUID,
+    product: ProductCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    # Verify company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Verify product exists and belongs to company
+    existing_product = await get_product_by_id(product_id)
+    if not existing_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if str(existing_product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    
+    return await update_product_details(product_id, product.product_name, product.description)
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
 async def get_companies(current_user: dict = Depends(get_current_user)):
