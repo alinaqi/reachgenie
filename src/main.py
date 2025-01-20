@@ -714,7 +714,9 @@ async def handle_mailjet_webhook(
                         1. Keep responses concise and focused on addressing the customer's needs and concerns
                         2. If a customer expresses disinterest, acknowledge it politely and end the conversation
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
-                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function with company_id: {company_id}
+                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function with:
+                           - company_id: {company_id}
+                           - attendee_email: {from_email}
                         5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
