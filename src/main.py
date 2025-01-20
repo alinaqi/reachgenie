@@ -743,6 +743,8 @@ async def handle_mailjet_webhook(
                         "role": msg['sender_type'],  # Use the stored sender_type
                         "content": msg['email_body']
                     })
+
+                logger.info(f"OpenAI RequestMessages: {messages}")
                 
                 # Get AI response with function calling
                 response = await client.chat.completions.create(
