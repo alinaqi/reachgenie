@@ -718,9 +718,15 @@ async def handle_mailjet_webhook(
                 if not company_id:
                     raise HTTPException(status_code=400, detail="Could not find company for this conversation")
                 
-                # Define the function for OpenAI
-                functions = [
-                    {
+                # Get company to check Cronofy credentials
+                company = await get_company_by_id(company_id)
+                
+                # Initialize functions list
+                functions = []
+                
+                # Only add book_appointment function if company has Cronofy integration
+                if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token'):
+                    functions.append({
                         "name": "book_appointment",
                         "description": """Schedule a sales meeting with the customer. Use this function when:
 1. The customer explicitly asks to schedule a meeting/call
@@ -750,8 +756,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                             },
                             "required": ["company_id", "email", "start_time"]
                         }
-                    }
-                ]
+                    })
                 
                 # Format conversation for OpenAI
                 messages = [
@@ -764,13 +769,16 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         2. If a customer expresses disinterest, acknowledge it politely and end the conversation
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
                         4. When handling meeting requests:
-                           - If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
+                           {
+                           '''- If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
                            - If they only mention a date (e.g., "tomorrow" or "next week"), ask them for their preferred time
                            - Only use the book_appointment function when you have both a specific date AND time
                            - Use the book_appointment function with:
                              * company_id: {company_id}
                              * email: {from_email}
-                             * start_time: the ISO 8601 formatted date-time specified by the customer
+                             * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
+                           '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
+                           }
                         5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
