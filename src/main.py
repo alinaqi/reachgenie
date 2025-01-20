@@ -763,9 +763,14 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         1. Keep responses concise and focused on addressing the customer's needs and concerns
                         2. If a customer expresses disinterest, acknowledge it politely and end the conversation
                         3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
-                        4. If the customer asks to schedule a meeting or shows strong interest in discussing further, use the book_appointment function with:
-                           - company_id: {company_id}
-                           - email: {from_email}
+                        4. When handling meeting requests:
+                           - If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
+                           - If they only mention a date (e.g., "tomorrow" or "next week"), ask them for their preferred time
+                           - Only use the book_appointment function when you have both a specific date AND time
+                           - Use the book_appointment function with:
+                             * company_id: {company_id}
+                             * email: {from_email}
+                             * start_time: the ISO 8601 formatted date-time specified by the customer
                         5. Always maintain a professional and courteous tone
                         
                         Format your responses with proper structure:
