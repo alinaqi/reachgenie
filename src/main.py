@@ -830,15 +830,21 @@ The function will schedule a 30-minute meeting at the specified time.""",
 
                 logger.info(f"OpenAI RequestMessages: {messages}")
                 
-                # Get AI response with function calling
-                response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    functions=functions,
-                    function_call="auto",
-                    temperature=0.7,
-                    max_tokens=500
-                )
+                # Prepare OpenAI API call parameters
+                openai_params = {
+                    "model": "gpt-4o-mini",
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 500
+                }
+                
+                # Only include functions if we have any
+                if functions:
+                    openai_params["functions"] = functions
+                    openai_params["function_call"] = "auto"
+                
+                # Get AI response
+                response = await client.chat.completions.create(**openai_params)
                 
                 response_message = response.choices[0].message
                 
