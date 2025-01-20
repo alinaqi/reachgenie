@@ -586,10 +586,15 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime, e
     """
     settings = get_settings()
     
+    # Clean up the subject line by removing 'Re:' prefix
+    cleaned_subject = email_subject.strip()
+    if cleaned_subject.lower().startswith('re:'):
+        cleaned_subject = cleaned_subject[3:].strip()
+    
     logger.info(f"Company ID: {company_id}")
     logger.info(f"Attendee/Lead Email: {email}")
     logger.info(f"Meeting start time: {start_time}")
-    logger.info(f"Event summary: {email_subject}")
+    logger.info(f"Event summary: {cleaned_subject}")
 
     # Get company to get Cronofy credentials
     company = await get_company_by_id(company_id)
@@ -612,7 +617,7 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime, e
     
     event = {
         'event_id': str(uuid.uuid4()),
-        'summary': email_subject,
+        'summary': cleaned_subject,
         'start': start_time_str,
         'end': end_time_str,
         'attendees': {
