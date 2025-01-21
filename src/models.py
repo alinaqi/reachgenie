@@ -295,7 +295,16 @@ class LeadResponse(BaseModel):
         }
 
 class AccountCredentialsUpdate(BaseModel):
-    account_email: str
-    account_password: str
+    account_email: str = Field(..., description="Email address for the account", min_length=1)
+    account_password: str = Field(..., description="Password for the account", min_length=1)
     type: str = Field(..., description="Type of account (e.g., 'gmail')")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "account_email": "example@gmail.com",
+                "account_password": "your_secure_password",
+                "type": "gmail"
+            }
+        }
  
