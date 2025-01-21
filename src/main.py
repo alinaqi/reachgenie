@@ -633,18 +633,6 @@ async def send_campaign_emails(campaign_id: UUID):
                     if lead.get('email'):  # Only send if lead has email
                         logger.info(f"Processing email for lead: {lead['email']}")
                         
-                        # Create email log first and wait for it to complete
-                        try:
-                            email_log = await create_email_log(
-                                campaign_id=campaign_id,
-                                lead_id=lead['id'],
-                                sent_at=datetime.utcnow().isoformat()
-                            )
-                            logger.info(f"Created email_log with id: {email_log['id']}")
-                        except Exception as e:
-                            logger.error(f"Error creating email log: {str(e)}")
-                            continue
-                        
                         # Send email using SMTP client
                         try:
                             await smtp_client.send_email(
@@ -654,6 +642,31 @@ async def send_campaign_emails(campaign_id: UUID):
                                 from_name=company["name"]
                             )
                             logger.info(f"Successfully sent email to {lead['email']}")
+                            
+                            # Only create logs if email was sent successfully
+                            email_log = None
+                            try:
+                                email_log = await create_email_log(
+                                    campaign_id=campaign_id,
+                                    lead_id=lead['id'],
+                                    sent_at=datetime.utcnow().isoformat()
+                                )
+                                logger.info(f"Created email_log with id: {email_log['id']}")
+                                
+                                # Only create email log detail if email log was created
+                                if email_log:
+                                    await create_email_log_detail(
+                                        email_logs_id=email_log['id'],
+                                        message_id=None,
+                                        email_subject=campaign['email_subject'],
+                                        email_body=campaign['email_body'],
+                                        sender_type='assistant'  # This is a system-sent email
+                                    )
+                                    logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                            except Exception as e:
+                                logger.error(f"Error creating email logs: {str(e)}")
+                                continue
+                            
                         except Exception as e:
                             logger.error(f"Error sending email: {str(e)}")
                             continue
