@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     address TEXT,
     industry TEXT,
+    account_email TEXT,
+    account_password TEXT,
     cronofy_access_token TEXT,
     cronofy_refresh_token TEXT,
     cronofy_provider TEXT,
