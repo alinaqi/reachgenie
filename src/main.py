@@ -16,6 +16,8 @@ import uuid
 import asyncio
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from src.utils.smtp_client import SMTPClient
+from src.utils.encryption import decrypt_password
 
 # Configure logger
 logging.basicConfig(
@@ -571,62 +573,97 @@ async def send_campaign_emails(campaign_id: UUID):
     logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
     settings = get_settings()
     
-    # Initialize Mailjet client
-    mailjet = MailjetClient(
-        api_key=settings.mailjet_api_key,
-        api_secret=settings.mailjet_api_secret,
-        sender_email=settings.mailjet_sender_email,
-        sender_name=settings.mailjet_sender_name
-    )
-    
     # Get campaign details
     campaign = await get_email_campaign_by_id(campaign_id)
     if not campaign:
         logger.error(f"Campaign not found: {campaign_id}")
-        return
+        raise HTTPException(status_code=404, detail="Email campaign not found")
     
-    # Get all leads for the campaign
-    leads = await get_leads_for_campaign(campaign_id)
-    logger.info(f"Found {len(leads)} leads for campaign")
+    # Get company details for SMTP configuration
+    company = await get_company_by_id(campaign["company_id"])
+    if not company:
+        logger.error(f"Company not found for campaign: {campaign_id}")
+        raise HTTPException(status_code=404, detail="Company not found")
     
-    # Send emails to each lead
-    for lead in leads:
-        try:
-            if lead.get('email'):  # Only send if lead has email
-                logger.info(f"Processing email for lead: {lead['email']}")
-                
-                # Create email log first and wait for it to complete
+    if not company.get("account_email") or not company.get("account_password"):
+        logger.error(f"Company {campaign['company_id']} missing email credentials")
+        raise HTTPException(
+            status_code=400,
+            detail="Company email credentials not configured. Please set up email account credentials first."
+        )
+        
+    if not company.get("account_type"):
+        logger.error(f"Company {campaign['company_id']} missing email provider type")
+        raise HTTPException(
+            status_code=400,
+            detail="Email provider type not configured. Please set up email provider type first."
+        )
+        
+    if not company.get("name"):
+        logger.error(f"Company {campaign['company_id']} missing company name")
+        raise HTTPException(
+            status_code=400,
+            detail="Company name not configured. Please set up company name first."
+        )
+    
+    # Decrypt the password
+    try:
+        decrypted_password = decrypt_password(company["account_password"])
+    except Exception as e:
+        logger.error(f"Failed to decrypt email password: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to decrypt email credentials"
+        )
+    
+    # Initialize SMTP client
+    try:
+        async with SMTPClient(
+            account_email=company["account_email"],
+            account_password=decrypted_password,  # Use decrypted password
+            provider=company["account_type"]
+        ) as smtp_client:
+            # Get all leads for the campaign
+            leads = await get_leads_for_campaign(campaign_id)
+            logger.info(f"Found {len(leads)} leads for campaign")
+            
+            # Send emails to each lead
+            for lead in leads:
                 try:
-                    email_log = await create_email_log(
-                        campaign_id=campaign_id,
-                        lead_id=lead['id'],
-                        sent_at=datetime.utcnow().isoformat()
-                    )
-                    logger.info(f"Created email_log with id: {email_log['id']}")
+                    if lead.get('email'):  # Only send if lead has email
+                        logger.info(f"Processing email for lead: {lead['email']}")
+                        
+                        # Create email log first and wait for it to complete
+                        try:
+                            email_log = await create_email_log(
+                                campaign_id=campaign_id,
+                                lead_id=lead['id'],
+                                sent_at=datetime.utcnow().isoformat()
+                            )
+                            logger.info(f"Created email_log with id: {email_log['id']}")
+                        except Exception as e:
+                            logger.error(f"Error creating email log: {str(e)}")
+                            continue
+                        
+                        # Send email using SMTP client
+                        try:
+                            await smtp_client.send_email(
+                                to_email=lead['email'],
+                                subject=campaign['email_subject'],
+                                html_content=campaign['email_body'],
+                                from_name=company["name"]
+                            )
+                            logger.info(f"Successfully sent email to {lead['email']}")
+                        except Exception as e:
+                            logger.error(f"Error sending email: {str(e)}")
+                            continue
+                        
                 except Exception as e:
-                    logger.error(f"Error creating email log: {str(e)}")
+                    logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                     continue
-                # Log the data we're about to send
-                logger.info(f"Preparing to send email with custom_id: {str(email_log['id'])}")
-                
-                # Only proceed with sending email after email_log is created
-                try:
-                    await mailjet.send_email(
-                        to_email=lead['email'],
-                        to_name=lead['name'],
-                        subject=campaign['email_subject'],
-                        html_content=campaign['email_body'],
-                        email_log_id=email_log['id'],
-                        sender_type='assistant'
-                    )
-                    logger.info(f"Successfully sent email to {lead['email']} with custom_id: {str(email_log['id'])}")
-                except Exception as e:
-                    logger.error(f"Error sending email: {str(e)}")
-                    continue
-                
-        except Exception as e:
-            logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
-            continue
+    except Exception as e:
+        logger.error(f"Failed to initialize SMTP client: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to initialize SMTP client")
 
 @app.post("/api/email-campaigns/{campaign_id}/run")
 async def run_email_campaign(
