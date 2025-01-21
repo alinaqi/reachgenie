@@ -18,6 +18,7 @@ class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None
     industry: Optional[str] = None
+    account_email: Optional[str] = None
     cronofy_provider: Optional[str] = None
     cronofy_linked_email: Optional[str] = None
     cronofy_default_calendar_name: Optional[str] = None
