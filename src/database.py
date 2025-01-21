@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
 from fastapi import HTTPException
+from src.utils.encryption import encrypt_password, decrypt_password
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
@@ -328,4 +329,28 @@ async def get_task_status(task_id: UUID):
         .select('*')\
         .eq('id', str(task_id))\
         .execute()
+    return response.data[0] if response.data else None 
+
+async def update_company_account_credentials(company_id: UUID, account_email: str, account_password: str, account_type: str):
+    """
+    Update the account credentials for a company
+    
+    Args:
+        company_id: UUID of the company
+        account_email: Email address for the account
+        account_password: Password for the account (will be encrypted)
+        account_type: Type of the account (e.g., 'gmail')
+        
+    Returns:
+        Dict containing the updated record
+    """
+    # Encrypt the password before storing
+    encrypted_password = encrypt_password(account_password)
+    
+    response = supabase.table('companies').update({
+        'account_email': account_email,
+        'account_password': encrypted_password,
+        'account_type': account_type
+    }).eq('id', str(company_id)).execute()
+    
     return response.data[0] if response.data else None 

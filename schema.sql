@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS companies (
     industry TEXT,
     account_email TEXT,
     account_password TEXT,
+    account_type TEXT,
     cronofy_access_token TEXT,
     cronofy_refresh_token TEXT,
     cronofy_provider TEXT,

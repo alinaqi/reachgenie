@@ -293,4 +293,9 @@ class LeadResponse(BaseModel):
                 }
             }
         }
+
+class AccountCredentialsUpdate(BaseModel):
+    account_email: str
+    account_password: str
+    type: str = Field(..., description="Type of account (e.g., 'gmail')")
  

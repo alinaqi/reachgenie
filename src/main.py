@@ -33,7 +33,8 @@ from src.models import (
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
-    LeadsUploadResponse, CronofyAuthResponse, LeadResponse
+    LeadsUploadResponse, CronofyAuthResponse, LeadResponse,
+    AccountCredentialsUpdate
 )
 from src.database import (
     create_user,
@@ -67,7 +68,8 @@ from src.database import (
     update_product_details,
     create_upload_task,
     update_task_status,
-    get_task_status
+    get_task_status,
+    update_company_account_credentials
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -1465,3 +1467,34 @@ async def get_task_status(
         raise HTTPException(status_code=403, detail="Not authorized to access this task")
         
     return task 
+
+@app.post("/api/companies/{company_id}/account-credentials", response_model=CompanyInDB)
+async def update_account_credentials(
+    company_id: UUID,
+    credentials: AccountCredentialsUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update account credentials for a company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Currently only supporting 'gmail' type
+    if credentials.type != 'gmail':
+        raise HTTPException(status_code=400, detail="Currently only 'gmail' account type is supported")
+    
+    # Update the credentials
+    updated_company = await update_company_account_credentials(
+        company_id,
+        credentials.account_email,
+        credentials.account_password,
+        credentials.type  # Save the account type
+    )
+    
+    if not updated_company:
+        raise HTTPException(status_code=404, detail="Failed to update account credentials")
+    
+    return updated_company 

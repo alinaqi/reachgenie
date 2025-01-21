@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     cronofy_client_id: str = ""  # Made optional with default empty string
     cronofy_client_secret: str = ""  # Made optional with default empty string
     cronofy_redirect_uri: str = ""  # Made optional with default empty string
+    
+    # Encryption settings
+    encryption_key: str
+    encryption_salt: str
 
     class Config:
         env_file = ".env"
