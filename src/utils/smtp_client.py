@@ -3,7 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fastapi import HTTPException, status
 import logging
-from typing import Optional
+from typing import Optional, UUID
 import aiosmtplib
 
 # Configure logger
@@ -130,7 +130,8 @@ class SMTPClient:
         to_email: str,
         subject: str,
         html_content: str,
-        from_name: Optional[str] = None
+        from_name: Optional[str] = None,
+        email_log_id: Optional[UUID] = None
     ) -> None:
         """
         Send an email using the configured SMTP connection
@@ -140,6 +141,7 @@ class SMTPClient:
             subject: Email subject
             html_content: HTML content of the email
             from_name: Optional sender name to display
+            email_log_id: Optional UUID to be used in reply-to address
         """
         if not self.smtp or not self.smtp.is_connected:
             await self.connect()
@@ -150,6 +152,13 @@ class SMTPClient:
             message["Subject"] = subject
             message["From"] = f"{from_name} <{self.email}>" if from_name else self.email
             message["To"] = to_email
+            
+            # Add Reply-To header if email_log_id is provided
+            if email_log_id:
+                # Split email into local part and domain
+                local_part, domain = self.email.split('@')
+                reply_to = f"{local_part}+{str(email_log_id)}@{domain}"
+                message["Reply-To"] = reply_to
             
             # Attach HTML content
             html_part = MIMEText(html_content, "html")
