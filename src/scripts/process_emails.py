@@ -50,10 +50,10 @@ async def fetch_emails(company: Dict):
     logger.info(f"Processing emails for company '{company['name']}' ({company_id})")
 
     try:
-        # Get the last processed email date or default to 7 days ago
-        last_processed_date = company.get('last_processed_email_at')
+        # Get the last processed email date
+        last_processed_date = company.get('last_email_processed_at')
         if not last_processed_date:
-            last_processed_date = datetime.now() - timedelta(days=1)
+            raise ValueError(f"No last processed email date found for company '{company['name']}'. Please set an initial processing date.")
         
         last_processed_date = last_processed_date.strftime("%d-%b-%Y")
         #print(last_processed_date)
@@ -196,7 +196,7 @@ async def main():
             try:
                 await fetch_emails(company)
             except Exception as e:
-                logger.error(f"Error processing company {company['id']}: {str(e)}")
+                logger.error(f"Error processing company '{company['name']}' {company['id']}: {str(e)}")
                 continue
             
             # Add small delay between companies to avoid rate limits
