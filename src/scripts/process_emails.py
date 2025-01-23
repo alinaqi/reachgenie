@@ -6,14 +6,20 @@ import asyncio
 from typing import List, Dict
 from datetime import datetime
 from uuid import UUID
+from openai import AsyncOpenAI
+from src.config import get_settings
 
 from src.database import (
     get_companies_with_email_credentials,
     update_last_processed_email_date,
     create_email_log,
     create_email_log_detail,
-    decrypt_password
+    decrypt_password,
+    get_email_conversation_history,
+    get_company_id_from_email_log,
+    get_company_by_id
 )
+from src.utils.llm import generate_ai_reply
 
 # IMAP server configurations
 IMAP_SERVERS = {
@@ -37,6 +43,16 @@ def decode_header_value(header_value):
         for part in decoded
     )
 
+def parse_from_field(from_field: str) -> tuple[str, str]:
+    """Extract name and email from From field (e.g., "John Doe <john@example.com>")"""
+    if '<' in from_field and '>' in from_field:
+        name = from_field.split('<')[0].strip()
+        email = from_field.split('<')[1].split('>')[0].strip()
+    else:
+        name = ''
+        email = from_field.strip()
+    return name, email
+
 # Function to fetch the oldest Unseen N emails from IMAP Server based on the since date
 async def fetch_emails(company: Dict):
     """
@@ -45,7 +61,7 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 5 # Number of emails to fetch per run
+    max_emails = 2 # Number of emails to fetch per run
     company_id = UUID(company['id'])
     logger.info(f"Processing emails for company '{company['name']}' ({company_id})")
 
@@ -119,7 +135,7 @@ async def fetch_emails(company: Dict):
 
                     # Decode email fields
                     subject = decode_header_value(msg_obj.get("Subject"))
-                    from_ = decode_header_value(msg_obj.get("From"))
+                    from_field = decode_header_value(msg_obj.get("From"))
                     to = decode_header_value(msg_obj.get("To"))
                     date = msg_obj.get("Date")
                     message_id = msg_obj.get("Message-ID")
@@ -142,10 +158,15 @@ async def fetch_emails(company: Dict):
                         if content_type == "text/plain" or content_type == "text/html":
                             body = msg_obj.get_payload(decode=True).decode(errors="ignore")
 
+                    # Extract sender name and email
+                    sender_name, sender_email = parse_from_field(from_field)
+
                     email_data.append({
                         "subject": subject,
                         "message_id": message_id,
-                        "from": from_,
+                        "from": sender_email,
+                        "from_name": sender_name,
+                        "from_full": from_field,
                         "to": to,
                         "body": body,
                         "date": date
@@ -182,44 +203,45 @@ async def process_emails(
     emails: List[Dict]
 ) -> None:
     
+   settings = get_settings()
+    
+   # Initialize OpenAI client at the start
+   client = AsyncOpenAI(api_key=settings.openai_api_key)
+
    for email_data in emails:
        print(email_data,'\n')
 
-       # Do all the processing here
-       # 2. Add a message against this email_log_id in email_log_detail table
-       # 3. Generate an AI message for this email reply, save the reply in email_log_detail table, and send the reply via SMTP Client Library 
-
-        # Extract email_log_id from Recipient field
        try:
-          # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
-          email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
-          email_log_id = UUID(email_log_id_str)
-          logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
-
-          # Parse the email date string into a datetime object
-          try:
-              from email.utils import parsedate_to_datetime
-              sent_at = parsedate_to_datetime(email_data['date'])
-              # sent_at will already have the correct timezone from the email header
-              #logger.info(f"Parsed email date with timezone: {sent_at.isoformat()}")
-          except Exception as date_error:
-              logger.error(f"Failed to parse date {email_data['date']}: {str(date_error)}")
-
-          logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
-          await create_email_log_detail(
-            email_logs_id=email_log_id,
-            message_id=email_data['message_id'],
-            email_subject=email_data['subject'],
-            email_body=email_data['body'],
-            sent_at=sent_at,  # This will now have the original timezone from the email
-            sender_type='user'  # This is a user reply
-          )
-          logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
-
+           # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
+           # We do this inorder to find out only those emails which are send by leads to our conversations, otherwise we have no track to identify such thing
+           email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
+           email_log_id = UUID(email_log_id_str)
+           logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
        except (IndexError, ValueError) as e:
-          logger.info(f"Failed to extract valid email_log_id from 'To' field: {email_data['To']}")
-          continue
+           logger.info(f"Unable to extract email_log_id from {email_data['to']}")
+           continue
 
+       # Parse the email date string into a datetime object
+       from email.utils import parsedate_to_datetime
+       sent_at = parsedate_to_datetime(email_data['date'])
+       # sent_at will already have the correct timezone from the email header
+
+       logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
+       await create_email_log_detail(
+           email_logs_id=email_log_id,
+           message_id=email_data['message_id'],
+           email_subject=email_data['subject'],
+           email_body=email_data['body'],
+           sent_at=sent_at,  # This will now have the original timezone from the email
+           sender_type='user'  # This is a user reply
+       )
+       logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
+
+       ai_reply = await generate_ai_reply(email_log_id, email_data)
+       print("AI Reply:", ai_reply)
+
+       # TODO: Send reply back as email via SMTP
+       # TODO: Add entry in email_log_details
 
 async def main():
 
