@@ -53,7 +53,8 @@ async def fetch_emails(company: Dict):
         # Get the last processed email date
         last_processed_date = company.get('last_email_processed_at')
         if not last_processed_date:
-            raise ValueError(f"No last processed email date found for company '{company['name']}'. Please set an initial processing date.")
+            logger.error(f"No last processed email date found for company '{company['name']}' ({company_id}). Please set an initial processing date.")
+            return
         
         last_processed_date = last_processed_date.strftime("%d-%b-%Y")
         #print(last_processed_date)
