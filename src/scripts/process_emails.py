@@ -15,6 +15,13 @@ from src.database import (
     decrypt_password
 )
 
+# IMAP server configurations
+IMAP_SERVERS = {
+    'gmail': 'imap.gmail.com',
+    'outlook': 'outlook.office365.com',
+    'yahoo': 'imap.mail.yahoo.com'
+}
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -59,9 +66,11 @@ async def fetch_emails(company: Dict):
             return
         #print(decrypted_password)
         
-        # Connect to IMAP server
-        if company['account_type'] == 'gmail':
-            host = "imap.gmail.com"
+        # Get IMAP host from mapping
+        host = IMAP_SERVERS.get(company['account_type'])
+        if not host:
+            logger.error(f"Unsupported email account type: {company['account_type']}")
+            return
 
         imap = imaplib.IMAP4_SSL(host)
 
