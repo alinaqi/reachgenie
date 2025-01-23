@@ -196,18 +196,24 @@ async def process_emails(
           email_log_id = UUID(email_log_id_str)
           logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
 
+          # Parse the email date string into a datetime object
+          try:
+              from email.utils import parsedate_to_datetime
+              sent_at = parsedate_to_datetime(email_data['date'])
+          except Exception as date_error:
+              logger.error(f"Failed to parse date {email_data['date']}: {str(date_error)}")
+              sent_at = datetime.utcnow()  # Use current time as fallback
+
           logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
           await create_email_log_detail(
             email_logs_id=email_log_id,
             message_id=email_data['message_id'],
             email_subject=email_data['subject'],
             email_body=email_data['body'],
-            sent_at=email_data['date'],
+            sent_at=sent_at,
             sender_type='user'  # This is a user reply
           )
           logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
-
-
 
        except (IndexError, ValueError) as e:
           logger.info(f"Failed to extract valid email_log_id from 'To' field: {email_data['To']}")

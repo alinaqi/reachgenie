@@ -158,7 +158,9 @@ class SMTPClient:
             if email_log_id:
                 # Split email into local part and domain
                 local_part, domain = self.email.split('@')
-                reply_to = f"{local_part}+{str(email_log_id)}@{domain}"
+                # Convert UUID to string for the email address
+                email_log_id_str = str(email_log_id) if isinstance(email_log_id, UUID) else email_log_id
+                reply_to = f"{local_part}+{email_log_id_str}@{domain}"
                 message["Reply-To"] = reply_to
             
             # Attach HTML content
