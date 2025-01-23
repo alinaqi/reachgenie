@@ -97,6 +97,9 @@ async def fetch_emails(company: Dict):
             logger.info(f"No unseen emails found for company '{company['name']}' since: {last_processed_date_str}")
             return []
 
+        total_emails = len(email_ids)
+        logger.info(f"Found {total_emails} unseen emails for company '{company['name']}', processing up to {max_emails} in this run")
+
         # Fetch the oldest X number of email IDs (reverse slicing)
         oldest_email_ids = email_ids[:max_emails]
 
@@ -180,7 +183,7 @@ async def process_emails(
 ) -> None:
     
    for email_data in emails:
-       print(email_data)
+       print(email_data,'\n')
        # Do all the processing here
        # 1. Fetch the To: email address and identifier after the +, it will be our email_log_id
        # 2. Add a message against this email_log_id in email_log_detail table
