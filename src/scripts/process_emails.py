@@ -202,6 +202,7 @@ async def process_emails(
             message_id=email_data['message_id'],
             email_subject=email_data['subject'],
             email_body=email_data['body'],
+            sent_at=email_data['date'],
             sender_type='user'  # This is a user reply
           )
           logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
