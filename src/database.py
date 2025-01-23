@@ -5,6 +5,14 @@ from uuid import UUID
 from datetime import datetime
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password, decrypt_password
+import logging
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
@@ -178,11 +186,11 @@ async def get_email_campaign_by_id(campaign_id: UUID):
     response = supabase.table('email_campaigns').select('*').eq('id', str(campaign_id)).execute()
     return response.data[0] if response.data else None
 
-async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: str):
+async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
     log_data = {
         'campaign_id': str(campaign_id),
         'lead_id': str(lead_id),
-        'sent_at': sent_at
+        'sent_at': sent_at.isoformat()
     }
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
@@ -221,16 +229,22 @@ async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -
     return response.data[0] if response.data else None 
 
 async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str, sender_type: str, sent_at: Optional[datetime] = None):
+    # Create base log detail data without sent_at
     log_detail_data = {
         'email_logs_id': str(email_logs_id),
         'message_id': message_id,
         'email_subject': email_subject,
         'email_body': email_body,
-        'sender_type': sender_type,
-        'sent_at': (sent_at or datetime.now()).isoformat()
+        'sender_type': sender_type
     }
+    
+    # Only add sent_at if provided
+    if sent_at:
+        log_detail_data['sent_at'] = sent_at.isoformat()
+    
+    #logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
-    return response.data[0] 
+    return response.data[0]
 
 async def get_email_conversation_history(email_logs_id: UUID):
     """

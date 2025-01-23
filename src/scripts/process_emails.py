@@ -4,7 +4,7 @@ from email.header import decode_header
 import logging
 import asyncio
 from typing import List, Dict
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import UUID
 
 from src.database import (
@@ -200,9 +200,10 @@ async def process_emails(
           try:
               from email.utils import parsedate_to_datetime
               sent_at = parsedate_to_datetime(email_data['date'])
+              # sent_at will already have the correct timezone from the email header
+              #logger.info(f"Parsed email date with timezone: {sent_at.isoformat()}")
           except Exception as date_error:
               logger.error(f"Failed to parse date {email_data['date']}: {str(date_error)}")
-              sent_at = datetime.utcnow()  # Use current time as fallback
 
           logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
           await create_email_log_detail(
@@ -210,7 +211,7 @@ async def process_emails(
             message_id=email_data['message_id'],
             email_subject=email_data['subject'],
             email_body=email_data['body'],
-            sent_at=sent_at,
+            sent_at=sent_at,  # This will now have the original timezone from the email
             sender_type='user'  # This is a user reply
           )
           logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")

@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import RedirectResponse
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import csv
 import io
 import logging
@@ -639,7 +639,7 @@ async def send_campaign_emails(campaign_id: UUID):
                             email_log = await create_email_log(
                                 campaign_id=campaign_id,
                                 lead_id=lead['id'],
-                                sent_at=datetime.utcnow().isoformat()
+                                sent_at=datetime.now(timezone.utc)
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
@@ -660,7 +660,8 @@ async def send_campaign_emails(campaign_id: UUID):
                                     message_id=None,
                                     email_subject=campaign['email_subject'],
                                     email_body=campaign['email_body'],
-                                    sender_type='assistant'  # This is a system-sent email
+                                    sender_type='assistant',
+                                    sent_at=datetime.now(timezone.utc)
                                 )
                                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
                         except Exception as e:
