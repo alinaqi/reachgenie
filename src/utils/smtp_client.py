@@ -3,7 +3,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fastapi import HTTPException, status
 import logging
-from typing import Optional, UUID
+from typing import Optional
+from uuid import UUID
 import aiosmtplib
 
 # Configure logger
