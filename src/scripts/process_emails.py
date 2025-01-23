@@ -91,7 +91,7 @@ async def fetch_emails(company: Dict):
         email_ids = messages[0].split()
         
         if not email_ids:
-            print(f"No unseen emails found since: {last_processed_date}")
+            logger.info(f"No unseen emails found for company '{company['name']}' since: {last_processed_date}")
             return []
 
         # Fetch the oldest X number of email IDs (reverse slicing)
