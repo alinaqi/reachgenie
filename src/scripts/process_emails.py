@@ -56,8 +56,10 @@ async def fetch_emails(company: Dict):
             logger.error(f"No last processed email date found for company '{company['name']}' ({company_id}). Please set an initial processing date.")
             return
         
-        last_processed_date = last_processed_date.strftime("%d-%b-%Y")
-        #print(last_processed_date)
+        # Convert ISO format string to datetime object
+        last_processed_date = datetime.fromisoformat(last_processed_date.replace('Z', '+00:00'))
+        last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
+        #print(last_processed_date_str)
 
         # Decrypt email password
         try:
@@ -83,7 +85,7 @@ async def fetch_emails(company: Dict):
 
         # Fetch the emails since a specified date, ordered oldest first, and filter unseen emails
         # 'Since' ensure that only emails received on or after the since date are retrieved and processed.
-        status, messages = imap.search(None, f'UNSEEN SINCE "{last_processed_date}"')
+        status, messages = imap.search(None, f'UNSEEN SINCE "{last_processed_date_str}"')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
@@ -92,7 +94,7 @@ async def fetch_emails(company: Dict):
         email_ids = messages[0].split()
         
         if not email_ids:
-            logger.info(f"No unseen emails found for company '{company['name']}' since: {last_processed_date}")
+            logger.info(f"No unseen emails found for company '{company['name']}' since: {last_processed_date_str}")
             return []
 
         # Fetch the oldest X number of email IDs (reverse slicing)
