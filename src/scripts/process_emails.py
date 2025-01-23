@@ -143,12 +143,12 @@ async def fetch_emails(company: Dict):
                             body = msg_obj.get_payload(decode=True).decode(errors="ignore")
 
                     email_data.append({
-                        "Subject": subject,
-                        "MessageID": message_id,
-                        "From": from_,
-                        "To": to,
-                        "Body": body,
-                        "Date": date
+                        "subject": subject,
+                        "message_id": message_id,
+                        "from": from_,
+                        "to": to,
+                        "body": body,
+                        "date": date
                     })
 
         # Logout and close the connection
@@ -184,10 +184,34 @@ async def process_emails(
     
    for email_data in emails:
        print(email_data,'\n')
+
        # Do all the processing here
-       # 1. Fetch the To: email address and identifier after the +, it will be our email_log_id
        # 2. Add a message against this email_log_id in email_log_detail table
        # 3. Generate an AI message for this email reply, save the reply in email_log_detail table, and send the reply via SMTP Client Library 
+
+        # Extract email_log_id from Recipient field
+       try:
+          # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
+          email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
+          email_log_id = UUID(email_log_id_str)
+          logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
+
+          logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
+          await create_email_log_detail(
+            email_logs_id=email_log_id,
+            message_id=email_data['message_id'],
+            email_subject=email_data['subject'],
+            email_body=email_data['body'],
+            sender_type='user'  # This is a user reply
+          )
+          logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
+
+
+
+       except (IndexError, ValueError) as e:
+          logger.info(f"Failed to extract valid email_log_id from 'To' field: {email_data['To']}")
+          continue
+
 
 async def main():
 

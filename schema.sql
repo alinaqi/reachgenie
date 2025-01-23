@@ -95,5 +95,6 @@ CREATE TABLE IF NOT EXISTS email_log_details (
     email_subject TEXT,
     email_body TEXT,
     sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'assistant')),
+    sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
