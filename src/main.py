@@ -662,7 +662,10 @@ async def send_campaign_emails(campaign_id: UUID):
                                     email_subject=campaign['email_subject'],
                                     email_body=campaign['email_body'],
                                     sender_type='assistant',
-                                    sent_at=datetime.now(timezone.utc)
+                                    sent_at=datetime.now(timezone.utc),
+                                    from_name=company['name'],
+                                    from_email=company['account_email'],
+                                    to_email=lead['email']
                                 )
                                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
                         except Exception as e:
