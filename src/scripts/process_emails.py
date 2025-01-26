@@ -233,7 +233,10 @@ async def process_emails(
            email_subject=email_data['subject'],
            email_body=email_data['body'],
            sent_at=sent_at,  # This will now have the original timezone from the email
-           sender_type='user'  # This is a user reply
+           sender_type='user',  # This is a user reply
+           from_name=email_data['from_name'],
+           from_email=email_data['from'],
+           to_email=email_data['to']
        )
        logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
 
@@ -249,7 +252,10 @@ async def process_emails(
                 email_subject=response_subject,
                 email_body=ai_reply,
                 sender_type='assistant',
-                sent_at=datetime.now(timezone.utc)
+                sent_at=datetime.now(timezone.utc),
+                from_name=company['name'],
+                from_email=company['account_email'],
+                to_email=email_data['from']
             )
            logger.info("Successfully created email_log_detail for the AI reply")
 

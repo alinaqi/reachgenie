@@ -228,21 +228,34 @@ async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -
     
     return response.data[0] if response.data else None 
 
-async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str, sender_type: str, sent_at: Optional[datetime] = None):
+async def create_email_log_detail(
+    email_logs_id: UUID, 
+    message_id: str, 
+    email_subject: str, 
+    email_body: str, 
+    sender_type: str, 
+    sent_at: Optional[datetime] = None,
+    from_name: Optional[str] = None,
+    from_email: Optional[str] = None,
+    to_email: Optional[str] = None
+):
     # Create base log detail data without sent_at
     log_detail_data = {
         'email_logs_id': str(email_logs_id),
         'message_id': message_id,
         'email_subject': email_subject,
         'email_body': email_body,
-        'sender_type': sender_type
+        'sender_type': sender_type,
+        'from_name': from_name,
+        'from_email': from_email,
+        'to_email': to_email
     }
     
     # Only add sent_at if provided
     if sent_at:
         log_detail_data['sent_at'] = sent_at.isoformat()
     
-    #logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
+    logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
     return response.data[0]
 
