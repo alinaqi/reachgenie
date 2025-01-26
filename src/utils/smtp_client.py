@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 import aiosmtplib
+import imaplib
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +31,13 @@ class SMTPClient:
             "use_tls": True
         }
         # Add more providers as needed
+    }
+
+    # IMAP server configurations
+    IMAP_CONFIGS = {
+        'gmail': 'imap.gmail.com',
+        'outlook': 'outlook.office365.com',
+        'yahoo': 'imap.mail.yahoo.com'
     }
 
     def __init__(self, account_email: str, account_password: str, provider: str):
@@ -59,6 +67,47 @@ class SMTPClient:
         
         # Initialize SMTP client
         self.smtp = None
+
+    @staticmethod
+    async def test_connections(account_email: str, account_password: str, provider: str) -> None:
+        """
+        Test both SMTP and IMAP connections
+        
+        Args:
+            account_email: Email address to test
+            account_password: Password for the email account
+            provider: Email provider (e.g., 'gmail', 'outlook', 'yahoo')
+            
+        Raises:
+            HTTPException: If either connection fails
+        """
+        # Test SMTP connection
+        async with SMTPClient(account_email, account_password, provider) as smtp_client:
+            pass  # Context manager will test SMTP connection
+        
+        # Test IMAP connection
+        provider = provider.lower()
+        if provider not in SMTPClient.IMAP_CONFIGS:
+            raise ValueError(
+                f"Email provider '{provider}' not supported for IMAP. "
+                f"Supported providers: {', '.join(SMTPClient.IMAP_CONFIGS.keys())}"
+            )
+        
+        try:
+            imap = imaplib.IMAP4_SSL(SMTPClient.IMAP_CONFIGS[provider])
+            imap.login(account_email, account_password)
+            imap.select("INBOX")  # Test inbox access
+            imap.logout()
+        except imaplib.IMAP4.error as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"IMAP authentication failed: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to connect to IMAP server: {str(e)}"
+            )
 
     async def connect(self) -> None:
         """

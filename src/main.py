@@ -1168,7 +1168,20 @@ async def update_account_credentials(
     if credentials.type != 'gmail':
         raise HTTPException(status_code=400, detail="Currently only 'gmail' account type is supported")
     
-    # Update the credentials
+    # Test both SMTP and IMAP connections before saving
+    try:
+        await SMTPClient.test_connections(
+            account_email=credentials.account_email,
+            account_password=credentials.account_password,
+            provider=credentials.type
+        )
+    except HTTPException as e:
+        # Pass through any HTTP exceptions (like auth errors) directly
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to email servers: {str(e)}")
+    
+    # If we get here, both connections were successful - update the credentials
     updated_company = await update_company_account_credentials(
         company_id,
         credentials.account_email,
