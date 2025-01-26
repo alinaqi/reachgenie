@@ -240,17 +240,18 @@ async def process_emails(
        ai_reply = await generate_ai_reply(email_log_id, email_data)
        #print("AI Reply:", ai_reply)
 
-       logger.info(f"Creating email_log_detail for the ai reply")
-       response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
-       await create_email_log_detail(
-            email_logs_id=email_log_id,
-            message_id=None,
-            email_subject=response_subject,
-            email_body=ai_reply,
-            sender_type='assistant',
-            sent_at=datetime.now(timezone.utc)
-        )
-       logger.info("Successfully created email_log_detail")
+       if ai_reply:
+           logger.info(f"Creating email_log_detail for the ai reply")
+           response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
+           await create_email_log_detail(
+                email_logs_id=email_log_id,
+                message_id=None,
+                email_subject=response_subject,
+                email_body=ai_reply,
+                sender_type='assistant',
+                sent_at=datetime.now(timezone.utc)
+            )
+           logger.info("Successfully created email_log_detail")
 
        # TODO: Send reply back as email via SMTP
 
