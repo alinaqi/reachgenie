@@ -255,7 +255,7 @@ async def create_email_log_detail(
     if sent_at:
         log_detail_data['sent_at'] = sent_at.isoformat()
     
-    logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
+    #logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
     return response.data[0]
 
