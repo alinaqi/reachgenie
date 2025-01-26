@@ -2,7 +2,7 @@ from supabase import create_client, Client
 from src.config import get_settings
 from typing import Optional, List, Dict
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password, decrypt_password
 import logging
@@ -385,7 +385,7 @@ async def update_company_account_credentials(company_id: UUID, account_email: st
     
     # Only set last_email_processed_at if it's currently NULL
     if company.data and company.data[0].get('last_email_processed_at') is None:
-        update_data['last_email_processed_at'] = datetime.now().isoformat()
+        update_data['last_email_processed_at'] = datetime.now(timezone.utc).isoformat()
     
     response = supabase.table('companies').update(update_data).eq('id', str(company_id)).execute()
     
