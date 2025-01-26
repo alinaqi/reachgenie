@@ -6,19 +6,13 @@ import asyncio
 from typing import List, Dict
 from datetime import datetime, timezone
 from uuid import UUID
-from openai import AsyncOpenAI
-from src.config import get_settings
 from src.utils.smtp_client import SMTPClient
 
 from src.database import (
     get_companies_with_email_credentials,
     update_last_processed_email_date,
-    create_email_log,
     create_email_log_detail,
-    decrypt_password,
-    get_email_conversation_history,
-    get_company_id_from_email_log,
-    get_company_by_id
+    decrypt_password
 )
 from src.utils.llm import generate_ai_reply
 
@@ -64,7 +58,6 @@ async def fetch_emails(company: Dict):
     """
     max_emails = 10 # Number of emails to fetch per run
     company_id = UUID(company['id'])
-    logger.info(f"Processing emails for company '{company['name']}' ({company_id})")
 
     try:
         # Get the last processed email date
@@ -76,7 +69,7 @@ async def fetch_emails(company: Dict):
         # Convert ISO format string to datetime object
         last_processed_date = datetime.fromisoformat(last_processed_date.replace('Z', '+00:00'))
         last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
-        #print(last_processed_date_str)
+        logger.info(f"Processing unseen emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
 
         # Decrypt email password
         try:
@@ -111,7 +104,7 @@ async def fetch_emails(company: Dict):
         email_ids = messages[0].split()
         
         if not email_ids:
-            logger.info(f"No unseen emails found for company '{company['name']}' since: {last_processed_date_str}")
+            logger.info(f"No unseen emails found since {last_processed_date_str} for company '{company['name']}'")
             return []
 
         total_emails = len(email_ids)
@@ -207,8 +200,6 @@ async def process_emails(
 ) -> None:
     # Process each email one by one
     for email_data in emails:
-        #print(email_data,'\n')
-
         try:
             # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
             # We do this inorder to find out only those emails which are sent by leads/customers back to our system, otherwise we have no track to identify such thing
@@ -240,7 +231,6 @@ async def process_emails(
         logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
 
         ai_reply = await generate_ai_reply(email_log_id, email_data)
-        #print("AI Reply:", ai_reply)
 
         if ai_reply:
             logger.info(f"Creating email_log_detail for the AI reply")
@@ -274,13 +264,23 @@ async def process_emails(
                 )
                 logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
+    # After processing all emails, find the maximum date and update the company's last_email_processed_at
+    if emails:
+        from email.utils import parsedate_to_datetime
+        max_date = max(
+            parsedate_to_datetime(email['date'])
+            for email in emails
+        )
+        logger.info(f"Updating last_email_processed_at for company '{company['name']}' ({company['id']}) to {max_date}")
+        await update_last_processed_email_date(UUID(company['id']), max_date)
+
 async def main():
 
     """Main function to process emails for all companies"""
     try:
         # Get all companies with email credentials
         companies = await get_companies_with_email_credentials()
-        logger.info(f"Found {len(companies)} companies with email credentials")
+        logger.info(f"Found {len(companies)} companies with email credentials added")
         
         # Process emails for each company
         for company in companies:
