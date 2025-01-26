@@ -1175,9 +1175,6 @@ async def update_account_credentials(
             account_password=credentials.account_password,
             provider=credentials.type
         )
-    except HTTPException as e:
-        # Pass through any HTTP exceptions (like auth errors) directly
-        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect to email servers: {str(e)}")
     
