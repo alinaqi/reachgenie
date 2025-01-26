@@ -81,7 +81,6 @@ from src.auth import (
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
-from src.mailjet_client import MailjetClient
 
 app = FastAPI(
     title="Outbound AI SDR API",
