@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 from openai import AsyncOpenAI
 from src.config import get_settings
+from src.utils.smtp_client import SMTPClient
 
 from src.database import (
     get_companies_with_email_credentials,
@@ -61,7 +62,7 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 2 # Number of emails to fetch per run
+    max_emails = 10 # Number of emails to fetch per run
     company_id = UUID(company['id'])
     logger.info(f"Processing emails for company '{company['name']}' ({company_id})")
 
@@ -175,7 +176,7 @@ async def fetch_emails(company: Dict):
         # Logout and close the connection
         imap.logout()
 
-        await process_emails(email_data)
+        await process_emails(email_data, company, decrypted_password)
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -200,25 +201,24 @@ async def fetch_emails(company: Dict):
             #print("\n" + "="*50 + "\n")
 
 async def process_emails(
-    emails: List[Dict]
+    emails: List[Dict],
+    company: Dict,
+    decrypted_password: str
 ) -> None:
-    
-   settings = get_settings()
-    
-   # Initialize OpenAI client at the start
-   client = AsyncOpenAI(api_key=settings.openai_api_key)
 
+   # Process each email one by one
    for email_data in emails:
-       print(email_data,'\n')
+       #print(email_data,'\n')
 
        try:
            # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
-           # We do this inorder to find out only those emails which are send by leads to our conversations, otherwise we have no track to identify such thing
+           # We do this inorder to find out only those emails which are sent by leads/customers back to our system, otherwise we have no track to identify such thing
+           # and ignoring all emails which are not related to our system.
            email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
            email_log_id = UUID(email_log_id_str)
            logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
        except (IndexError, ValueError) as e:
-           logger.info(f"Unable to extract email_log_id from {email_data['to']}")
+           logger.info(f"Unable to extract email_log_id from {email_data['to']}. Ignoring this email.")
            continue
 
        # Parse the email date string into a datetime object
@@ -241,7 +241,7 @@ async def process_emails(
        #print("AI Reply:", ai_reply)
 
        if ai_reply:
-           logger.info(f"Creating email_log_detail for the ai reply")
+           logger.info(f"Creating email_log_detail for the AI reply")
            response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
            await create_email_log_detail(
                 email_logs_id=email_log_id,
@@ -251,9 +251,23 @@ async def process_emails(
                 sender_type='assistant',
                 sent_at=datetime.now(timezone.utc)
             )
-           logger.info("Successfully created email_log_detail")
+           logger.info("Successfully created email_log_detail for the AI reply")
 
-       # TODO: Send reply back as email via SMTP
+           async with SMTPClient(
+                account_email=company['account_email'],
+                account_password=decrypted_password,  # Use decrypted password
+                provider=company['account_type']
+            ) as smtp_client:
+
+            # Send email with reply-to header
+            await smtp_client.send_email(
+                to_email=email_data['from'],
+                subject=response_subject,
+                html_content=ai_reply,
+                from_name=company["name"],
+                email_log_id=email_log_id
+            )
+            logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
 async def main():
 
