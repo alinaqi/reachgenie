@@ -4,7 +4,7 @@ from email.header import decode_header
 import logging
 import asyncio
 from typing import List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from openai import AsyncOpenAI
 from src.config import get_settings
@@ -238,10 +238,21 @@ async def process_emails(
        logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
 
        ai_reply = await generate_ai_reply(email_log_id, email_data)
-       print("AI Reply:", ai_reply)
+       #print("AI Reply:", ai_reply)
+
+       logger.info(f"Creating email_log_detail for the ai reply")
+       response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
+       await create_email_log_detail(
+            email_logs_id=email_log_id,
+            message_id=None,
+            email_subject=response_subject,
+            email_body=ai_reply,
+            sender_type='assistant',
+            sent_at=datetime.now(timezone.utc)
+        )
+       logger.info("Successfully created email_log_detail")
 
        # TODO: Send reply back as email via SMTP
-       # TODO: Add entry in email_log_details
 
 async def main():
 
