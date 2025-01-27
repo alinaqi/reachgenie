@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY src/ src/
 COPY crons/ crons/
-RUN chmod -R +x /crons/
+RUN chmod -R +x /app/crons/
 
 # Set environment variables
 ENV PYTHONPATH=/app
