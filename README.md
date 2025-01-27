@@ -16,6 +16,13 @@ A comprehensive sales enablement platform designed to help companies manage thei
 - Supabase (Database)
 - JWT Authentication
 - Pydantic for data validation
+- Docker & Docker Compose for containerization
+
+## Prerequisites
+
+- Docker and Docker Compose installed on your system
+  - [Install Docker](https://docs.docker.com/get-docker/)
+  - [Install Docker Compose](https://docs.docker.com/compose/install/)
 
 ## Setup
 
@@ -25,37 +32,35 @@ git clone <repository-url>
 cd api_sdr_ai
 ```
 
-2. Create a virtual environment and activate it:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-For bcrypt system level dependency errors, you need to install/update by running the following command inside your virtual environment:
-
-```bash
-pip install --upgrade pip setuptools wheel
-```
-
-4. Copy the `.env.example` file to create your own `.env` file:
+2. Copy the `.env.example` file to create your own `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-5. Update the `.env` file with your actual credentials
+3. Update the `.env` file with your actual credentials
 
-
-6. To run the development server with auto-reload:
+4. Build and start the containers:
 ```bash
-uvicorn src.main:app --reload
+# Build and start in detached mode
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop the containers
+docker compose down
 ```
 
 The API will be available at `http://localhost:8000`
+
+## Development
+
+- Any changes made to the `src` directory will be automatically reflected in the running container due to volume mounting
+- To rebuild the container after changing dependencies (requirements.txt):
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
 
 ## API Documentation
 

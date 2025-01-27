@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+    #depends_on:
+    #  - db
+    restart: unless-stopped
+
+  #db:
+  #  image: supabase/postgres:15.1.0.117
+  #  ports:
+  #    - "5432:5432"
+  #  environment:
+  #    - POSTGRES_USER=${DB_USER:-postgres}
+  #    - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+  #    - POSTGRES_DB=${DB_NAME:-outbound_ai_sdr}
+  #  volumes:
+  #    - postgres_data:/var/lib/postgresql/data
+  #    - ./migrations:/docker-entrypoint-initdb.d
+  #  restart: unless-stopped
+
+  # Uncomment if you want to add pgAdmin for database management
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   environment:
+  #     - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@admin.com}
+  #     - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - db
+  #   restart: unless-stopped
+
+#volumes:
+#  postgres_data: 

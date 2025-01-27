@@ -18,6 +18,7 @@ class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None
     industry: Optional[str] = None
+    account_email: Optional[str] = None
     cronofy_provider: Optional[str] = None
     cronofy_linked_email: Optional[str] = None
     cronofy_default_calendar_name: Optional[str] = None
@@ -291,6 +292,20 @@ class LeadResponse(BaseModel):
                         "date": "2024-01-01"
                     }
                 }
+            }
+        }
+
+class AccountCredentialsUpdate(BaseModel):
+    account_email: str = Field(..., description="Email address for the account", min_length=1)
+    account_password: str = Field(..., description="Password for the account", min_length=1)
+    type: str = Field(..., description="Type of account (e.g., 'gmail')")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "account_email": "example@gmail.com",
+                "account_password": "your_secure_password",
+                "type": "gmail"
             }
         }
  

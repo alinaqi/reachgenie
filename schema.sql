@@ -16,12 +16,16 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     address TEXT,
     industry TEXT,
+    account_email TEXT,
+    account_password TEXT,
+    account_type TEXT,
     cronofy_access_token TEXT,
     cronofy_refresh_token TEXT,
     cronofy_provider TEXT,
     cronofy_linked_email TEXT,
     cronofy_default_calendar_id TEXT,
     cronofy_default_calendar_name TEXT,
+    last_email_processed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -91,5 +95,9 @@ CREATE TABLE IF NOT EXISTS email_log_details (
     email_subject TEXT,
     email_body TEXT,
     sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'assistant')),
+    sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    from_name TEXT,
+    from_email TEXT,
+    to_email TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

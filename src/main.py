@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import RedirectResponse
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import csv
 import io
 import logging
@@ -16,6 +16,9 @@ import uuid
 import asyncio
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from src.utils.smtp_client import SMTPClient
+from src.utils.encryption import decrypt_password
+from src.utils.calendar_utils import book_appointment
 
 # Configure logger
 logging.basicConfig(
@@ -33,7 +36,8 @@ from src.models import (
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
-    LeadsUploadResponse, CronofyAuthResponse, LeadResponse
+    LeadsUploadResponse, CronofyAuthResponse, LeadResponse,
+    AccountCredentialsUpdate
 )
 from src.database import (
     create_user,
@@ -67,7 +71,8 @@ from src.database import (
     update_product_details,
     create_upload_task,
     update_task_status,
-    get_task_status
+    get_task_status,
+    update_company_account_credentials
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -76,7 +81,6 @@ from src.auth import (
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
-from src.mailjet_client import MailjetClient
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -569,62 +573,110 @@ async def send_campaign_emails(campaign_id: UUID):
     logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
     settings = get_settings()
     
-    # Initialize Mailjet client
-    mailjet = MailjetClient(
-        api_key=settings.mailjet_api_key,
-        api_secret=settings.mailjet_api_secret,
-        sender_email=settings.mailjet_sender_email,
-        sender_name=settings.mailjet_sender_name
-    )
-    
     # Get campaign details
     campaign = await get_email_campaign_by_id(campaign_id)
     if not campaign:
         logger.error(f"Campaign not found: {campaign_id}")
-        return
+        raise HTTPException(status_code=404, detail="Email campaign not found")
     
-    # Get all leads for the campaign
-    leads = await get_leads_for_campaign(campaign_id)
-    logger.info(f"Found {len(leads)} leads for campaign")
+    # Get company details for SMTP configuration
+    company = await get_company_by_id(campaign["company_id"])
+    if not company:
+        logger.error(f"Company not found for campaign: {campaign_id}")
+        raise HTTPException(status_code=404, detail="Company not found")
     
-    # Send emails to each lead
-    for lead in leads:
-        try:
-            if lead.get('email'):  # Only send if lead has email
-                logger.info(f"Processing email for lead: {lead['email']}")
-                
-                # Create email log first and wait for it to complete
+    if not company.get("account_email") or not company.get("account_password"):
+        logger.error(f"Company {campaign['company_id']} missing email credentials")
+        raise HTTPException(
+            status_code=400,
+            detail="Company email credentials not configured. Please set up email account credentials first."
+        )
+        
+    if not company.get("account_type"):
+        logger.error(f"Company {campaign['company_id']} missing email provider type")
+        raise HTTPException(
+            status_code=400,
+            detail="Email provider type not configured. Please set up email provider type first."
+        )
+        
+    if not company.get("name"):
+        logger.error(f"Company {campaign['company_id']} missing company name")
+        raise HTTPException(
+            status_code=400,
+            detail="Company name not configured. Please set up company name first."
+        )
+    
+    # Decrypt the password
+    try:
+        decrypted_password = decrypt_password(company["account_password"])
+    except Exception as e:
+        logger.error(f"Failed to decrypt email password: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to decrypt email credentials"
+        )
+    
+    # Initialize SMTP client
+    try:
+        async with SMTPClient(
+            account_email=company["account_email"],
+            account_password=decrypted_password,  # Use decrypted password
+            provider=company["account_type"]
+        ) as smtp_client:
+            # Get all leads for the campaign
+            leads = await get_leads_for_campaign(campaign_id)
+            logger.info(f"Found {len(leads)} leads for campaign")
+            
+            # Send emails to each lead
+            for lead in leads:
                 try:
-                    email_log = await create_email_log(
-                        campaign_id=campaign_id,
-                        lead_id=lead['id'],
-                        sent_at=datetime.utcnow().isoformat()
-                    )
-                    logger.info(f"Created email_log with id: {email_log['id']}")
+                    if lead.get('email'):  # Only send if lead has email
+                        logger.info(f"Processing email for lead: {lead['email']}")
+                        
+                        # Send email using SMTP client
+                        try:
+                            # Create email log first to get the ID for reply-to
+                            email_log = await create_email_log(
+                                campaign_id=campaign_id,
+                                lead_id=lead['id'],
+                                sent_at=datetime.now(timezone.utc)
+                            )
+                            logger.info(f"Created email_log with id: {email_log['id']}")
+
+                            # Send email with reply-to header
+                            await smtp_client.send_email(
+                                to_email=lead['email'],
+                                subject=campaign['email_subject'],
+                                html_content=campaign['email_body'],
+                                from_name=company["name"],
+                                email_log_id=email_log['id']
+                            )
+                            logger.info(f"Successfully sent email to {lead['email']}")
+                            
+                            # Create email log detail
+                            if email_log:
+                                await create_email_log_detail(
+                                    email_logs_id=email_log['id'],
+                                    message_id=None,
+                                    email_subject=campaign['email_subject'],
+                                    email_body=campaign['email_body'],
+                                    sender_type='assistant',
+                                    sent_at=datetime.now(timezone.utc),
+                                    from_name=company['name'],
+                                    from_email=company['account_email'],
+                                    to_email=lead['email']
+                                )
+                                logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                        except Exception as e:
+                            logger.error(f"Error creating email logs: {str(e)}")
+                            continue
+                        
                 except Exception as e:
-                    logger.error(f"Error creating email log: {str(e)}")
+                    logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                     continue
-                # Log the data we're about to send
-                logger.info(f"Preparing to send email with custom_id: {str(email_log['id'])}")
-                
-                # Only proceed with sending email after email_log is created
-                try:
-                    await mailjet.send_email(
-                        to_email=lead['email'],
-                        to_name=lead['name'],
-                        subject=campaign['email_subject'],
-                        html_content=campaign['email_body'],
-                        email_log_id=email_log['id'],
-                        sender_type='assistant'
-                    )
-                    logger.info(f"Successfully sent email to {lead['email']} with custom_id: {str(email_log['id'])}")
-                except Exception as e:
-                    logger.error(f"Error sending email: {str(e)}")
-                    continue
-                
-        except Exception as e:
-            logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
-            continue
+    except Exception as e:
+        logger.error(f"Failed to initialize SMTP client: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to initialize SMTP client")
 
 @app.post("/api/email-campaigns/{campaign_id}/run")
 async def run_email_campaign(
@@ -646,374 +698,6 @@ async def run_email_campaign(
     background_tasks.add_task(send_campaign_emails, campaign_id)
     
     return {"message": "Email campaign started successfully"} 
-
-async def book_appointment(company_id: UUID, email: str, start_time: datetime, email_subject: str = "Sales Discussion") -> Dict[str, str]:
-    """
-    Create a calendar event using Cronofy
-    
-    Args:
-        company_id: UUID of the company
-        email: Lead's email address
-        start_time: datetime for when the meeting should start
-        email_subject: Subject line to use for the event summary
-        
-    Returns:
-        Dict containing the event details
-    """
-    settings = get_settings()
-    
-    # Clean up the subject line by removing 'Re:' prefix
-    cleaned_subject = email_subject.strip()
-    if cleaned_subject.lower().startswith('re:'):
-        cleaned_subject = cleaned_subject[3:].strip()
-    
-    logger.info(f"Company ID: {company_id}")
-    logger.info(f"Attendee/Lead Email: {email}")
-    logger.info(f"Meeting start time: {start_time}")
-    logger.info(f"Event summary: {cleaned_subject}")
-
-    # Get company to get Cronofy credentials
-    company = await get_company_by_id(company_id)
-    if not company or not company.get('cronofy_access_token'):
-        raise HTTPException(status_code=400, detail="No Cronofy connection found")
-    
-    # Initialize Cronofy client
-    cronofy = pycronofy.Client(
-        client_id=settings.cronofy_client_id,
-        client_secret=settings.cronofy_client_secret,
-        access_token=company['cronofy_access_token'],
-        refresh_token=company['cronofy_refresh_token']
-    )
-    
-    end_time = start_time + timedelta(minutes=30)
-    
-    # Format times in ISO 8601 format with Z suffix for UTC
-    start_time_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-    end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-    
-    event = {
-        'event_id': str(uuid.uuid4()),
-        'summary': cleaned_subject,
-        'start': start_time_str,
-        'end': end_time_str,
-        'attendees': {
-            'invite': [{'email': email}]
-        }
-    }
-    
-    try:
-        cronofy.upsert_event(
-            calendar_id=company['cronofy_default_calendar_id'],
-            event=event
-        )
-        
-        return {
-            "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
-        }
-    except pycronofy.exceptions.PyCronofyRequestError as e:
-        if getattr(e.response, 'status_code', None) == 401:
-            try:
-                # Refresh the token
-                logger.info("Refreshing Cronofy token")
-                auth = cronofy.refresh_authorization()
-                
-                # Update company with new tokens
-                await update_company_cronofy_tokens(
-                    company_id=company_id,
-                    access_token=auth['access_token'],
-                    refresh_token=auth['refresh_token']
-                )
-                
-                # Retry the event creation with new token
-                cronofy = pycronofy.Client(
-                    client_id=settings.cronofy_client_id,
-                    client_secret=settings.cronofy_client_secret,
-                    access_token=auth['access_token']
-                )
-                
-                cronofy.upsert_event(
-                    calendar_id=company['cronofy_default_calendar_id'],
-                    event=event
-                )
-                
-                return {
-                    "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
-                }
-            except Exception as refresh_error:
-                logger.error(f"Error refreshing token: {str(refresh_error)}")
-                raise HTTPException(status_code=500, detail="Failed to refresh calendar authorization")
-        else:
-            logger.error(f"Error creating Cronofy event: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to schedule meeting")
-    except Exception as e:
-        logger.error(f"Error creating Cronofy event: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to schedule meeting")
-
-@app.post("/api/incoming-email")
-async def handle_mailjet_webhook(
-    request: Request,
-    secret: str = Query(..., description="Webhook secret key for authentication")
-):
-    """
-    Handle incoming email webhook from Mailjet
-    """
-    settings = get_settings()
-    
-    # Initialize OpenAI client at the start
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    
-    # Validate webhook secret
-    if secret != settings.mailjet_webhook_secret:
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
-    
-    # Get webhook payload
-    payload = await request.json()
-    logger.info(f"Received webhook payload: {json.dumps(payload, indent=2)}")
-        
-    email_text = payload.get('Text-part', '')
-    headers = payload.get('Headers', {})
-    from_email = payload.get('Sender', '')  # Get sender's email
-    from_field = payload.get('From', '')    # Get the full From field
-    recipient_email = payload.get('Recipient', '')  # Get the Recipient field
-    
-    # Extract email_log_id from Recipient field
-    try:
-        # Format: prefix+email_log_id@domain
-        email_log_id_str = recipient_email.split('+')[1].split('@')[0]
-        email_log_id = UUID(email_log_id_str)
-        logger.info(f"Extracted email_log_id from Recipient field: {email_log_id}")
-    except (IndexError, ValueError) as e:
-        logger.error(f"Failed to extract valid email_log_id from Recipient field: {recipient_email}")
-        raise HTTPException(status_code=400, detail="Invalid or missing email_log_id in Recipient field")
-    
-    # Extract name from From field (format: "Name <email@domain.com>")
-    recipient_name = from_email.split('@')[0]  # Default to email username
-    if from_field:
-        try:
-            # Try to extract name from "Name <email>" format
-            if '<' in from_field and '>' in from_field:
-                recipient_name = from_field.split('<')[0].strip()
-        except Exception as e:
-            logger.error(f"Error extracting name from From field: {str(e)}")
-    
-    # Get Message-ID from headers (could be 'Message-Id' or 'Message-ID')
-    message_id = headers.get('Message-Id') or headers.get('Message-ID', '')
-    subject = payload.get('Subject', '')
-        
-    try:
-        # Create email_log_details record for the incoming email
-        if message_id:
-            try:
-                logger.info(f"Attempting to create email_log_detail with message_id: {message_id}")
-                await create_email_log_detail(
-                    email_logs_id=email_log_id,
-                    message_id=message_id,
-                    email_subject=subject,
-                    email_body=email_text,
-                    sender_type='user'  # This is a user reply
-                )
-                logger.info(f"Successfully created email_log_detail for message_id: {message_id}")
-                
-                # Get the conversation history
-                conversation_history = await get_email_conversation_history(email_log_id)
-                logger.info(f"Found {len(conversation_history)} messages in conversation history")
-                
-                # Get company_id from email_log
-                company_id = await get_company_id_from_email_log(email_log_id)
-                if not company_id:
-                    raise HTTPException(status_code=400, detail="Could not find company for this conversation")
-                
-                # Get company to check Cronofy credentials
-                company = await get_company_by_id(company_id)
-                
-                # Initialize functions list
-                functions = []
-                
-                # Only add book_appointment function if company has Cronofy integration
-                if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token'):
-                    functions.append({
-                        "name": "book_appointment",
-                        "description": """Schedule a sales meeting with the customer. Use this function when:
-1. The customer explicitly asks to schedule a meeting/call
-2. The customer asks about availability for a discussion
-3. The customer shows strong interest in learning more and suggests a live conversation
-4. The customer mentions wanting to talk to someone directly
-5. The customer asks about demo or product demonstration
-6. The customer expresses interest in discussing pricing or specific features in detail
-
-The function will schedule a 30-minute meeting at the specified time.""",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "company_id": {
-                                    "type": "string",
-                                    "description": "UUID of the company - use the exact company_id provided in the system prompt"
-                                },
-                                "email": {
-                                    "type": "string",
-                                    "description": "Email address of the attendee - use the exact from_email provided in the system prompt"
-                                },
-                                "start_time": {
-                                    "type": "string",
-                                    "description": "ISO 8601 formatted date-time string for when the meeting should start (e.g. '2024-03-20T14:30:00Z')",
-                                    "format": "date-time"
-                                },
-                                "email_subject": {
-                                    "type": "string",
-                                    "description": "Use the exact email_subject provided in the system prompt"
-                                }
-                            },
-                            "required": ["company_id", "email", "start_time", "email_subject"]
-                        }
-                    })
-                
-                # Format conversation for OpenAI
-                messages = [
-                    {
-                        "role": "system",
-                        "content": f"""You are an AI sales assistant. Your goal is to engage with potential customers professionally and helpfully.
-                        
-                        Guidelines for responses:
-                        1. Keep responses concise and focused on addressing the customer's needs and concerns
-                        2. If a customer expresses disinterest, acknowledge it politely and end the conversation
-                        3. If a customer shows interest or asks questions, provide relevant information and guide them towards the next steps
-                        4. When handling meeting requests:
-                           {
-                           f'''- If a customer asks for a meeting without specifying a time, ask them for their preferred date and time
-                           - If they only mention a date (e.g., "tomorrow" or "next week"), ask them for their preferred time
-                           - Only use the book_appointment function when you have both a specific date AND time
-                           - Use the book_appointment function with:
-                             * company_id: "{str(company_id)}"
-                             * email: "{from_email}"
-                             * email_subject: "{subject}"
-                             * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
-                           '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
-                           }
-                        5. Always maintain a professional and courteous tone
-                        
-                        Format your responses with proper structure:
-                        - Start with a greeting on a new line
-                        - Use paragraphs to separate different points
-                        - Add a line break between paragraphs
-                        - End with a professional signature on a new line
-                        
-                        Example format:
-                        Hello [Name],
-                        
-                        [First point or response to their question]
-                        
-                        [Additional information or next steps if needed]
-                        
-                        Best regards,
-                        Sales Team"""
-                    }
-                ]
-                
-                # Add conversation history
-                for msg in conversation_history:
-                    messages.append({
-                        "role": msg['sender_type'],  # Use the stored sender_type
-                        "content": msg['email_body']
-                    })
-
-                logger.info(f"OpenAI RequestMessages: {messages}")
-                
-                # Prepare OpenAI API call parameters
-                openai_params = {
-                    "model": "gpt-4o-mini",
-                    "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": 500
-                }
-                
-                # Only include functions if we have any
-                if functions:
-                    openai_params["functions"] = functions
-                    openai_params["function_call"] = "auto"
-                
-                # Get AI response
-                response = await client.chat.completions.create(**openai_params)
-                
-                response_message = response.choices[0].message
-                
-                # Handle function calling if present
-                booking_info = None
-                if response_message.function_call:
-                    if response_message.function_call.name == "book_appointment":
-                        # Parse the function arguments
-                        function_args = json.loads(response_message.function_call.arguments)
-
-                        logger.info("Calling book_appointment function")
-                        
-                        # Call the booking function
-                        booking_info = await book_appointment(
-                            company_id=UUID(function_args["company_id"]),
-                            email=function_args["email"],
-                            start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00')),
-                            email_subject=function_args["email_subject"]
-                        )
-                        
-                        # Add the function response to the messages
-                        messages.append({
-                            "role": "function",
-                            "name": "book_appointment",
-                            "content": json.dumps(booking_info)
-                        })
-                        
-                        # Get the final response with the booking information
-                        final_response = await client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=messages,
-                            temperature=0.7,
-                            max_tokens=500
-                        )
-                        
-                        ai_reply = final_response.choices[0].message.content.strip()
-                else:
-                    ai_reply = response_message.content.strip()
-                
-                # Format AI reply with HTML
-                html_template = """
-                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                    {}
-                </div>
-                """
-                formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
-                
-                # Initialize Mailjet client for sending the response
-                mailjet = MailjetClient(
-                    api_key=settings.mailjet_api_key,
-                    api_secret=settings.mailjet_api_secret,
-                    sender_email=settings.mailjet_sender_email,
-                    sender_name=settings.mailjet_sender_name
-                )
-                
-                # Send AI's response using the same email_log_id
-                response_subject = f"Re: {subject}" if not subject.startswith('Re:') else subject
-                await mailjet.send_email(
-                    to_email=from_email,
-                    to_name=recipient_name,
-                    subject=response_subject,
-                    html_content=formatted_reply,
-                    email_log_id=email_log_id,    # Use the same email_log_id
-                    sender_type='assistant',      # This is an assistant response
-                    in_reply_to=message_id        # Pass the Message-ID from the incoming email
-                )
-                logger.info(f"Sent AI response to {from_email} ({recipient_name})")
-                
-            except Exception as e:
-                logger.error(f"Failed to create email_log_detail or send response: {str(e)}")
-                logger.error(f"email_log_id: {email_log_id}, message_id: {message_id}")
-                raise  # Re-raise to be caught by outer try-except
-        else:
-            logger.error("No Message-ID found in headers")
-            return {"status": "error", "message": "No Message-ID found in headers"}        
-    except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}")
-        logger.exception("Full traceback:")
-        return {"status": "error", "message": str(e)}
-    
-    return {"status": "success"}
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
 async def generate_campaign(
@@ -1465,3 +1149,44 @@ async def get_task_status(
         raise HTTPException(status_code=403, detail="Not authorized to access this task")
         
     return task 
+
+@app.post("/api/companies/{company_id}/account-credentials", response_model=CompanyInDB)
+async def update_account_credentials(
+    company_id: UUID,
+    credentials: AccountCredentialsUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update account credentials for a company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Currently only supporting 'gmail' type
+    if credentials.type != 'gmail':
+        raise HTTPException(status_code=400, detail="Currently only 'gmail' account type is supported")
+    
+    # Test both SMTP and IMAP connections before saving
+    try:
+        await SMTPClient.test_connections(
+            account_email=credentials.account_email,
+            account_password=credentials.account_password,
+            provider=credentials.type
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to email servers: {str(e)}")
+    
+    # If we get here, both connections were successful - update the credentials
+    updated_company = await update_company_account_credentials(
+        company_id,
+        credentials.account_email,
+        credentials.account_password,
+        credentials.type  # Save the account type
+    )
+    
+    if not updated_company:
+        raise HTTPException(status_code=404, detail="Failed to update account credentials")
+    
+    return updated_company 

@@ -2,8 +2,17 @@ from supabase import create_client, Client
 from src.config import get_settings
 from typing import Optional, List, Dict
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException
+from src.utils.encryption import encrypt_password, decrypt_password
+import logging
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
@@ -177,11 +186,11 @@ async def get_email_campaign_by_id(campaign_id: UUID):
     response = supabase.table('email_campaigns').select('*').eq('id', str(campaign_id)).execute()
     return response.data[0] if response.data else None
 
-async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: str):
+async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
     log_data = {
         'campaign_id': str(campaign_id),
         'lead_id': str(lead_id),
-        'sent_at': sent_at
+        'sent_at': sent_at.isoformat()
     }
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
@@ -219,16 +228,36 @@ async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -
     
     return response.data[0] if response.data else None 
 
-async def create_email_log_detail(email_logs_id: UUID, message_id: str, email_subject: str, email_body: str, sender_type: str):
+async def create_email_log_detail(
+    email_logs_id: UUID, 
+    message_id: str, 
+    email_subject: str, 
+    email_body: str, 
+    sender_type: str, 
+    sent_at: Optional[datetime] = None,
+    from_name: Optional[str] = None,
+    from_email: Optional[str] = None,
+    to_email: Optional[str] = None
+):
+    # Create base log detail data without sent_at
     log_detail_data = {
         'email_logs_id': str(email_logs_id),
         'message_id': message_id,
         'email_subject': email_subject,
         'email_body': email_body,
-        'sender_type': sender_type
+        'sender_type': sender_type,
+        'from_name': from_name,
+        'from_email': from_email,
+        'to_email': to_email
     }
+    
+    # Only add sent_at if provided
+    if sent_at:
+        log_detail_data['sent_at'] = sent_at.isoformat()
+    
+    #logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
-    return response.data[0] 
+    return response.data[0]
 
 async def get_email_conversation_history(email_logs_id: UUID):
     """
@@ -328,4 +357,48 @@ async def get_task_status(task_id: UUID):
         .select('*')\
         .eq('id', str(task_id))\
         .execute()
+    return response.data[0] if response.data else None 
+
+async def update_company_account_credentials(company_id: UUID, account_email: str, account_password: str, account_type: str):
+    """
+    Update the account credentials for a company
+    
+    Args:
+        company_id: UUID of the company
+        account_email: Email address for the account
+        account_password: Password for the account (will be encrypted)
+        account_type: Type of the account (e.g., 'gmail')
+        
+    Returns:
+        Dict containing the updated record
+    """
+    # Encrypt the password before storing
+    encrypted_password = encrypt_password(account_password)
+    
+    # Get current company data to check last_email_processed_at
+    company = supabase.table('companies').select('last_email_processed_at').eq('id', str(company_id)).execute()
+    update_data = {
+        'account_email': account_email,
+        'account_password': encrypted_password,
+        'account_type': account_type
+    }
+    
+    # Only set last_email_processed_at if it's currently NULL
+    if company.data and company.data[0].get('last_email_processed_at') is None:
+        update_data['last_email_processed_at'] = datetime.now(timezone.utc).isoformat()
+    
+    response = supabase.table('companies').update(update_data).eq('id', str(company_id)).execute()
+    
+    return response.data[0] if response.data else None
+
+async def get_companies_with_email_credentials():
+    """Get all companies that have email credentials configured"""
+    response = supabase.table('companies').select('*').not_.is_('account_email', 'null').not_.is_('account_password', 'null').execute()
+    return response.data
+
+async def update_last_processed_email_date(company_id: UUID, email_date: datetime):
+    """Update the last processed email date for a company"""
+    response = supabase.table('companies').update({
+        'last_email_processed_at': email_date.isoformat()
+    }).eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None 
