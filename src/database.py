@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from src.utils.encryption import encrypt_password, decrypt_password
+from src.utils.encryption import encrypt_password
 import logging
 # Configure logging
 logging.basicConfig(
@@ -25,6 +25,20 @@ async def create_user(email: str, password_hash: str):
     user_data = {'email': email, 'password_hash': password_hash}
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0]
+
+async def update_user(user_id: UUID, update_data: dict):
+    """
+    Update user details in the database
+    
+    Args:
+        user_id: UUID of the user to update
+        update_data: Dictionary containing the fields to update
+        
+    Returns:
+        Dict containing the updated user record
+    """
+    response = supabase.table('users').update(update_data).eq('id', str(user_id)).execute()
+    return response.data[0] if response.data else None
 
 async def get_companies_by_user_id(user_id: UUID):
     response = supabase.table('companies').select('*').eq('user_id', str(user_id)).execute()

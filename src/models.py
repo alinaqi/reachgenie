@@ -1,8 +1,11 @@
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, validator, field_validator
 from typing import Optional, List, Union, Dict, Any
 from datetime import datetime
 from uuid import UUID
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -10,8 +13,22 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    old_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+    @field_validator('new_password')
+    def validate_passwords(cls, value: Optional[str], info):
+        if value is not None:
+            old_password = info.data.get('old_password')
+            if not old_password:
+                raise ValueError('old_password is required when setting new_password')
+        return value
+
 class UserInDB(UserBase):
     id: UUID
+    name: Optional[str] = None
     created_at: datetime
 
 class CompanyBase(BaseModel):
