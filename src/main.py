@@ -149,6 +149,16 @@ async def update_user_details(
     """
     Update the authenticated user's details (name and/or password)
     """
+    # Get current user from database to verify password
+    user = await get_user_by_email(current_user["email"])
+    
+    if not user:
+        logger.error(f"User not found for email: {current_user['email']}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
     # Prepare update data
     db_update = {}
     
@@ -157,8 +167,15 @@ async def update_user_details(
         db_update["name"] = update_data.name
         
     # Handle password update
-    if update_data.password is not None:
-        db_update["password_hash"] = get_password_hash(update_data.password)
+    if update_data.new_password is not None:
+        # Verify old password
+        if not verify_password(update_data.old_password, user["password_hash"]):
+            logger.warning("Password verification failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Existing password is incorrect"
+            )
+        db_update["password_hash"] = get_password_hash(update_data.new_password)
     
     # If no fields to update, return early
     if not db_update:
