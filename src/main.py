@@ -35,7 +35,7 @@ from src.models import (
     BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
     CampaignGenerationRequest, CampaignGenerationResponse,
     CronofyAuthResponse, LeadResponse,
-    AccountCredentialsUpdate
+    AccountCredentialsUpdate, UserUpdate, UserInDB
 )
 from src.database import (
     create_user,
@@ -66,7 +66,8 @@ from src.database import (
     create_upload_task,
     update_task_status,
     get_task_status,
-    update_company_account_credentials
+    update_company_account_credentials,
+    update_user
 )
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -139,6 +140,42 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         data={"sub": user["email"]}
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.patch("/api/users/me", response_model=UserInDB)
+async def update_user_details(
+    update_data: UserUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update the authenticated user's details (name and/or password)
+    """
+    # Prepare update data
+    db_update = {}
+    
+    # Handle name update
+    if update_data.name is not None:
+        db_update["name"] = update_data.name
+        
+    # Handle password update
+    if update_data.password is not None:
+        db_update["password_hash"] = get_password_hash(update_data.password)
+    
+    # If no fields to update, return early
+    if not db_update:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid fields to update"
+        )
+    
+    # Update user in database
+    updated_user = await update_user(UUID(current_user["id"]), db_update)
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return updated_user
 
 @app.post("/api/auth/reset-password")
 async def reset_password(email: str):
