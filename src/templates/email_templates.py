@@ -22,6 +22,7 @@ def get_base_template(content: str) -> str:
                 font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
                 line-height: 1.6;
                 color: #333333;
+                font-size: 16px;
             }}
             .container {{
                 max-width: 600px;
@@ -35,27 +36,52 @@ def get_base_template(content: str) -> str:
                 text-align: center;
                 border-radius: 5px 5px 0 0;
             }}
+            .header h1 {{
+                font-size: 24px;
+                margin: 0;
+                font-weight: 600;
+            }}
             .content {{
                 background-color: #ffffff;
                 padding: 30px;
                 border-radius: 0 0 5px 5px;
                 border: 1px solid #e0e0e0;
             }}
+            .content p {{
+                font-size: 16px;
+                margin: 16px 0;
+            }}
             .button {{
                 display: inline-block;
                 padding: 12px 24px;
                 background-color: #4F46E5;
-                color: white;
+                color: white !important;
                 text-decoration: none;
                 border-radius: 5px;
                 margin: 20px 0;
                 font-family: inherit;
+                font-size: 16px;
+                font-weight: 500;
+            }}
+            .button:visited {{
+                color: white !important;
+            }}
+            .button:hover {{
+                background-color: #4338CA;
             }}
             .footer {{
                 text-align: center;
                 margin-top: 20px;
                 color: #666666;
-                font-size: 12px;
+                font-size: 14px;
+            }}
+            .footer p {{
+                margin: 8px 0;
+            }}
+            .link-text {{
+                color: #6B7280;
+                font-size: 14px;
+                word-break: break-all;
             }}
         </style>
     </head>
@@ -90,7 +116,7 @@ def get_password_reset_template(reset_link: str) -> str:
             </p>
             <p>This link will expire in 1 hour for security reasons.</p>
             <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
-            <p style="word-break: break-all;">{reset_link}</p>
+            <p class="link-text">{reset_link}</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
         <div class="footer">
@@ -111,11 +137,11 @@ def get_welcome_template(user_name: str) -> str:
     """
     content = f"""
         <div class="header">
-            <h1>Welcome to Our Platform!</h1>
+            <h1>Welcome to ReachGenie!</h1>
         </div>
         <div class="content">
             <p>Hello {user_name},</p>
-            <p>Welcome to our platform! We're excited to have you on board.</p>
+            <p>Welcome to ReachGenie! We're excited to have you on board.</p>
             <p>If you have any questions or need assistance, don't hesitate to reach out to our support team.</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
@@ -146,7 +172,7 @@ def get_account_verification_template(verification_link: str) -> str:
                 <a href="{verification_link}" class="button">Verify Email</a>
             </p>
             <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
-            <p style="word-break: break-all;">{verification_link}</p>
+            <p class="link-text">{verification_link}</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
         <div class="footer">
