@@ -177,6 +177,19 @@ async def update_user_details(
     
     return updated_user
 
+@app.get("/api/users/me", response_model=UserInDB)
+async def get_current_user_details(current_user: dict = Depends(get_current_user)):
+    """
+    Get details of the currently authenticated user
+    """
+    user = await get_user_by_email(current_user["email"])
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return user
+
 @app.post("/api/auth/reset-password")
 async def reset_password(email: str):
     # Implementation for password reset (would typically send an email)

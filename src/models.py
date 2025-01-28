@@ -16,6 +16,7 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     id: UUID
+    name: Optional[str] = None
     created_at: datetime
 
 class CompanyBase(BaseModel):
