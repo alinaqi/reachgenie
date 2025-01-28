@@ -29,7 +29,7 @@ def get_base_template(content: str) -> str:
                 padding: 20px;
             }}
             .header {{
-                background-color: #4A90E2;
+                background-color: #4F46E5;
                 color: white;
                 padding: 20px;
                 text-align: center;
@@ -44,7 +44,7 @@ def get_base_template(content: str) -> str:
             .button {{
                 display: inline-block;
                 padding: 12px 24px;
-                background-color: #4A90E2;
+                background-color: #4F46E5;
                 color: white;
                 text-decoration: none;
                 border-radius: 5px;
