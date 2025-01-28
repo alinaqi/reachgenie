@@ -76,10 +76,22 @@ async def request_password_reset(email: str):
     
     return {"message": "If your email is registered, you will receive a password reset link"}
 
-async def reset_password(token: str, new_password: str):
-    """Reset user's password using the reset token"""
+async def reset_password(reset_token: str, new_password: str):
+    """
+    Reset user's password using the reset token
+    
+    Args:
+        reset_token: The password reset token
+        new_password: The new password to set
+        
+    Returns:
+        dict: A message indicating success
+        
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
     # Verify token
-    token_data = await get_valid_reset_token(token)
+    token_data = await get_valid_reset_token(reset_token)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -93,6 +105,6 @@ async def reset_password(token: str, new_password: str):
     await update_user(token_data["user_id"], {"password_hash": password_hash})
     
     # Invalidate the token
-    await invalidate_reset_token(token)
+    await invalidate_reset_token(reset_token)
     
     return {"message": "Password has been reset successfully"}

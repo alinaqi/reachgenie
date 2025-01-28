@@ -208,11 +208,6 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
         )
     return user
 
-@app.post("/api/auth/reset-password")
-async def reset_password(email: str):
-    # Implementation for password reset (would typically send an email)
-    return {"message": "Password reset link sent"}
-
 # Company Management endpoints
 @app.post(
     "/api/companies", 
@@ -1281,4 +1276,4 @@ async def forgot_password(request: ForgotPasswordRequest):
 @app.post("/auth/reset-password")
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
-    return await reset_password(request.token, request.new_password) 
+    return await reset_password(reset_token=request.token, new_password=request.new_password) 
