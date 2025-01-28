@@ -19,7 +19,7 @@ def get_base_template(content: str) -> str:
     <head>
         <style>
             body {{
-                font-family: Arial, sans-serif;
+                font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
                 line-height: 1.6;
                 color: #333333;
             }}
@@ -49,6 +49,7 @@ def get_base_template(content: str) -> str:
                 text-decoration: none;
                 border-radius: 5px;
                 margin: 20px 0;
+                font-family: inherit;
             }}
             .footer {{
                 text-align: center;
