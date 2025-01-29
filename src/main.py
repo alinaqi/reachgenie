@@ -18,6 +18,7 @@ from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from src.auth import request_password_reset, reset_password
+from src.services.email_service import email_service
 
 # Configure logger
 logging.basicConfig(
@@ -125,7 +126,18 @@ async def signup(user: UserCreate):
             detail="Email already registered"
         )
     hashed_password = get_password_hash(user.password)
-    await create_user(user.email, hashed_password)
+    created_user = await create_user(user.email, hashed_password)
+    
+    # Send welcome email
+    try:
+        # Use email as username if name is not available
+        user_name = created_user.get('name') or user.email.split('@')[0]
+        await email_service.send_welcome_email(user.email, user_name)
+        logger.info(f"Welcome email sent to {user.email}")
+    except Exception as e:
+        # Log the error but don't fail the signup
+        logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
+    
     return {"message": "Account created successfully"}
 
 @app.post("/api/auth/login", response_model=Token)
