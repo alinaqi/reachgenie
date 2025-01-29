@@ -119,7 +119,7 @@ class EmailService:
         
         return await self.send_email(
             to_email=email,
-            subject="Welcome to Our Platform!",
+            subject="Welcome to ReachGenie!",
             html_content=html_content
         )
 
