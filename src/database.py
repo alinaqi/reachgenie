@@ -416,3 +416,33 @@ async def update_last_processed_email_date(company_id: UUID, email_date: datetim
         'last_email_processed_at': email_date.isoformat()
     }).eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None 
+
+async def create_password_reset_token(user_id: UUID, token: str, expires_at: datetime):
+    """Create a new password reset token for a user"""
+    token_data = {
+        'user_id': str(user_id),
+        'token': token,
+        'expires_at': expires_at.isoformat(),
+        'used': False
+    }
+    response = supabase.table('password_reset_tokens').insert(token_data).execute()
+    return response.data[0]
+
+async def get_valid_reset_token(token: str):
+    """Get a valid (not expired and not used) password reset token"""
+    now = datetime.now(timezone.utc)
+    response = supabase.table('password_reset_tokens')\
+        .select('*')\
+        .eq('token', token)\
+        .eq('used', False)\
+        .gte('expires_at', now.isoformat())\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def invalidate_reset_token(token: str):
+    """Mark a password reset token as used"""
+    response = supabase.table('password_reset_tokens')\
+        .update({'used': True})\
+        .eq('token', token)\
+        .execute()
+    return response.data[0] if response.data else None 

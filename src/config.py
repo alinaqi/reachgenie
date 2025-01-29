@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     encryption_salt: str
     cronofy_client_id: str
     cronofy_client_secret: str
+    
+    # Mailjet settings
+    mailjet_api_key: str
+    mailjet_api_secret: str
+    mailjet_sender_email: str
+    mailjet_sender_name: str = "Outbound AI"  # Default sender name
+    frontend_url: str = "http://localhost:3000"  # Default frontend URL
 
     class Config:
         env_file = ".env"

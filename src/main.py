@@ -13,10 +13,11 @@ from openai import AsyncOpenAI
 import json
 import pycronofy
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
+from src.auth import request_password_reset, reset_password
 
 # Configure logger
 logging.basicConfig(
@@ -206,11 +207,6 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
             detail="User not found"
         )
     return user
-
-@app.post("/api/auth/reset-password")
-async def reset_password(email: str):
-    # Implementation for password reset (would typically send an email)
-    return {"message": "Password reset link sent"}
 
 # Company Management endpoints
 @app.post(
@@ -1264,3 +1260,20 @@ async def update_account_credentials(
         raise HTTPException(status_code=404, detail="Failed to update account credentials")
     
     return updated_company 
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    """Request a password reset link"""
+    return await request_password_reset(request.email)
+
+@app.post("/api/auth/reset-password")
+async def reset_password_endpoint(request: ResetPasswordRequest):
+    """Reset password using the reset token"""
+    return await reset_password(reset_token=request.token, new_password=request.new_password) 
