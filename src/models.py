@@ -29,6 +29,7 @@ class UserUpdate(BaseModel):
 class UserInDB(UserBase):
     id: UUID
     name: Optional[str] = None
+    verified: bool = False
     created_at: datetime
 
 class CompanyBase(BaseModel):
@@ -325,4 +326,13 @@ class AccountCredentialsUpdate(BaseModel):
                 "type": "gmail"
             }
         }
+
+class EmailVerificationRequest(BaseModel):
+    token: str
+
+class EmailVerificationResponse(BaseModel):
+    message: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
  

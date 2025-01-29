@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import RedirectResponse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import csv
 import io
 import logging
@@ -17,31 +17,18 @@ from pydantic import BaseModel, EmailStr
 from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
-from src.auth import request_password_reset, reset_password
-from src.services.email_service import email_service
-
-# Configure logger
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-class TaskResponse(BaseModel):
-    task_id: UUID
-    message: str
-
-from src.models import (
-    UserCreate, CompanyCreate, ProductCreate,
-    CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
-    BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
-    CampaignGenerationRequest, CampaignGenerationResponse,
-    CronofyAuthResponse, LeadResponse,
-    AccountCredentialsUpdate, UserUpdate, UserInDB
+from src.auth import (
+    get_password_hash, verify_password, create_access_token,
+    get_current_user, settings, request_password_reset, reset_password
 )
 from src.database import (
     create_user,
     get_user_by_email,
+    get_user_by_id,
+    create_verification_token,
+    get_valid_verification_token,
+    mark_verification_token_used,
+    mark_user_as_verified,
     db_create_company,
     get_companies_by_user_id,
     db_create_product,
@@ -71,13 +58,33 @@ from src.database import (
     update_company_account_credentials,
     update_user
 )
-from src.auth import (
-    get_password_hash, verify_password, create_access_token,
-    get_current_user, settings
+from src.services.email_service import email_service
+from src.models import (
+    UserCreate, CompanyCreate, ProductCreate,
+    CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
+    BlandWebhookPayload, EmailCampaignCreate, EmailCampaignInDB,
+    CampaignGenerationRequest, CampaignGenerationResponse,
+    CronofyAuthResponse, LeadResponse,
+    AccountCredentialsUpdate, UserUpdate, UserInDB,
+    EmailVerificationRequest,
+    EmailVerificationResponse,
+    ResendVerificationRequest
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
+import secrets
+
+# Configure logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class TaskResponse(BaseModel):
+    task_id: UUID
+    message: str
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -128,17 +135,87 @@ async def signup(user: UserCreate):
     hashed_password = get_password_hash(user.password)
     created_user = await create_user(user.email, hashed_password)
     
-    # Send welcome email
-    try:
-        # Use email as username if name is not available
-        user_name = created_user.get('name') or user.email.split('@')[0]
-        await email_service.send_welcome_email(user.email, user_name)
-        logger.info(f"Welcome email sent to {user.email}")
-    except Exception as e:
-        # Log the error but don't fail the signup
-        logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
+    # Generate verification token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    await create_verification_token(created_user["id"], token, expires_at)
     
-    return {"message": "Account created successfully"}
+    # Send verification email
+    try:
+        user_name = created_user.get('name') or user.email.split('@')[0]
+        await email_service.send_verification_email(user.email, token)
+        logger.info(f"Verification email sent to {user.email}")
+    except Exception as e:
+        logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
+        # Don't fail signup, but let user know they need to request a new verification email
+        return {
+            "message": "Account created successfully, but verification email could not be sent. Please use the resend verification endpoint."
+        }
+    
+    return {"message": "Account created successfully. Please check your email to verify your account."}
+
+@app.post("/api/auth/verify", response_model=EmailVerificationResponse)
+async def verify_email(request: EmailVerificationRequest):
+    token_data = await get_valid_verification_token(request.token)
+    if not token_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired verification token"
+        )
+    
+    # Get user details before marking as verified
+    user = await get_user_by_id(UUID(token_data["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    
+    # Mark user as verified
+    await mark_user_as_verified(UUID(token_data["user_id"]))
+    
+    # Mark token as used
+    await mark_verification_token_used(request.token)
+    
+    # Send welcome email after successful verification
+    try:
+        user_name = user.get('name') or user['email'].split('@')[0]
+        await email_service.send_welcome_email(user['email'], user_name)
+        logger.info(f"Welcome email sent to {user['email']}")
+    except Exception as e:
+        # Log the error but don't fail the verification
+        logger.error(f"Failed to send welcome email to {user['email']}: {str(e)}")
+    
+    return {"message": "Email verified successfully"}
+
+@app.post("/api/auth/resend-verification", response_model=dict)
+async def resend_verification(request: ResendVerificationRequest):
+    user = await get_user_by_email(request.email)
+    if not user:
+        # Return success even if email doesn't exist to prevent email enumeration
+        return {"message": "If your email is registered, you will receive a verification email"}
+    
+    if user["verified"]:
+        return {"message": "Email is already verified"}
+    
+    # Generate new verification token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    await create_verification_token(user["id"], token, expires_at)
+    
+    # Send verification email
+    try:
+        user_name = user.get('name') or request.email.split('@')[0]
+        await email_service.send_verification_email(request.email, token)
+        logger.info(f"Verification email resent to {request.email}")
+    except Exception as e:
+        logger.error(f"Failed to resend verification email to {request.email}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send verification email"
+        )
+    
+    return {"message": "Verification email sent"}
 
 @app.post("/api/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -149,6 +226,15 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Check if user is verified
+    if not user["verified"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please verify your email before logging in",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     access_token = create_access_token(
         data={"sub": user["email"]}
     )

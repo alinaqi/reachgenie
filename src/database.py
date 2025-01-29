@@ -446,3 +446,46 @@ async def invalidate_reset_token(token: str):
         .eq('token', token)\
         .execute()
     return response.data[0] if response.data else None 
+
+async def create_verification_token(user_id: UUID, token: str, expires_at: datetime):
+    """Create a new email verification token for a user"""
+    token_data = {
+        'user_id': str(user_id),
+        'token': token,
+        'expires_at': expires_at.isoformat(),
+        'used': False
+    }
+    response = supabase.table('verification_tokens').insert(token_data).execute()
+    return response.data[0]
+
+async def get_valid_verification_token(token: str):
+    """Get a valid (not expired and not used) verification token"""
+    now = datetime.now(timezone.utc)
+    response = supabase.table('verification_tokens')\
+        .select('*')\
+        .eq('token', token)\
+        .eq('used', False)\
+        .gte('expires_at', now.isoformat())\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def mark_verification_token_used(token: str):
+    """Mark a verification token as used"""
+    response = supabase.table('verification_tokens')\
+        .update({'used': True})\
+        .eq('token', token)\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def mark_user_as_verified(user_id: UUID):
+    """Mark a user as verified"""
+    response = supabase.table('users')\
+        .update({'verified': True})\
+        .eq('id', str(user_id))\
+        .execute()
+    return response.data[0] if response.data else None 
+
+async def get_user_by_id(user_id: UUID):
+    """Get user by ID from the database"""
+    response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
+    return response.data[0] if response.data else None 
