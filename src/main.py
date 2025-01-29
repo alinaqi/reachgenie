@@ -1268,12 +1268,12 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
-@app.post("/auth/forgot-password")
+@app.post("/api/auth/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest):
     """Request a password reset link"""
     return await request_password_reset(request.email)
 
-@app.post("/auth/reset-password")
+@app.post("/api/auth/reset-password")
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
