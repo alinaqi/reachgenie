@@ -66,9 +66,9 @@ from src.models import (
     CampaignGenerationRequest, CampaignGenerationResponse,
     CronofyAuthResponse, LeadResponse,
     AccountCredentialsUpdate, UserUpdate, UserInDB,
-    EmailVerificationRequest,
-    EmailVerificationResponse,
-    ResendVerificationRequest
+    EmailVerificationRequest, EmailVerificationResponse,
+    ResendVerificationRequest, ForgotPasswordRequest,
+    ResetPasswordRequest, ResetPasswordResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -1359,19 +1359,12 @@ async def update_account_credentials(
     
     return updated_company 
 
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-@app.post("/api/auth/forgot-password")
+@app.post("/api/auth/forgot-password", response_model=ResetPasswordResponse)
 async def forgot_password(request: ForgotPasswordRequest):
     """Request a password reset link"""
     return await request_password_reset(request.email)
 
-@app.post("/api/auth/reset-password")
+@app.post("/api/auth/reset-password", response_model=ResetPasswordResponse)
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
