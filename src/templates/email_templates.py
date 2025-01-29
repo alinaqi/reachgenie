@@ -88,6 +88,13 @@ def get_base_template(content: str) -> str:
     <body>
         <div class="container">
             {content}
+            
+            <div class="footer">
+                <p>This is an automated message, please do not reply to this email.</p>
+                <p style="margin-top: 10px; font-size: 12px;">
+                    ReachGenie - AI-Powered Sales Outreach
+                </p>
+            </div>
         </div>
     </body>
     </html>
@@ -119,9 +126,6 @@ def get_password_reset_template(reset_link: str) -> str:
             <p class="link-text">{reset_link}</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply to this email.</p>
-        </div>
     """
     return get_base_template(content)
 
@@ -141,12 +145,18 @@ def get_welcome_template(user_name: str) -> str:
         </div>
         <div class="content">
             <p>Hello {user_name},</p>
-            <p>Welcome to ReachGenie! We're excited to have you on board.</p>
-            <p>If you have any questions or need assistance, don't hesitate to reach out to our support team.</p>
+            <p>Welcome to ReachGenie! We're excited to have you on board. Our AI-powered platform is designed to streamline your outbound sales process and help you connect with potential customers more effectively.</p>
+            
+            <p>Here's what you can do to get started:</p>
+            <ol style="margin-left: 20px; line-height: 1.8;">
+                <li><strong>Create Your Company Profile:</strong> Set up your company details to personalize your outreach.</li>
+                <li><strong>Configure Email Settings:</strong> Connect your email account to enable automated email campaigns.</li>
+                <li><strong>Import Your Leads:</strong> Upload your lead list or add leads individually to start engaging with prospects.</li>
+                <li><strong>Set Up Email Campaigns:</strong> Create personalized email campaigns with our AI-powered templates.</li>
+                <li><strong>Connect Your Calendar:</strong> Integrate your calendar to streamline meeting scheduling with leads.</li>
+            </ol>
+            
             <p>Best regards,<br>ReachGenie Support Team</p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply to this email.</p>
         </div>
     """
     return get_base_template(content)
@@ -174,9 +184,6 @@ def get_account_verification_template(verification_link: str) -> str:
             <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
             <p class="link-text">{verification_link}</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply to this email.</p>
         </div>
     """
     return get_base_template(content) 
