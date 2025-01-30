@@ -76,6 +76,7 @@ from src.bland_client import BlandClient
 import secrets
 from src.services.perplexity_service import perplexity_service
 import os
+from src.utils.file_parser import FileParser
 
 # Configure logger
 logging.basicConfig(
@@ -364,7 +365,7 @@ async def create_product(
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Validate file extension
-    allowed_extensions = {'.doc', '.docx', '.pdf', '.txt'}
+    allowed_extensions = {'.docx', '.pdf', '.txt'}
     file_ext = os.path.splitext(file.filename)[1].lower()
     
     if file_ext not in allowed_extensions:
@@ -378,15 +379,20 @@ async def create_product(
         file_name = f"{uuid.uuid4()}{file_ext}"
         original_filename = file.filename
         
+        # Read and parse file content
+        file_content = await file.read()
+        try:
+            parsed_content = FileParser.parse_file(file_content, file_ext)
+        except ValueError as e:
+            logger.error(f"Error parsing file: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+        
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
             settings.supabase_url,
             settings.SUPABASE_SERVICE_KEY
         )
-        
-        # Read file content
-        file_content = await file.read()
         
         # Upload file to Supabase storage
         storage = supabase.storage.from_("product-files")
@@ -396,16 +402,18 @@ async def create_product(
             file_options={"content-type": file.content_type}
         )
         
+        # Create product with parsed content as description
+        return await db_create_product(
+            company_id=company_id,
+            product_name=product_name,
+            file_name=file_name,
+            original_filename=original_filename,
+            description=parsed_content
+        )
+        
     except Exception as e:
-        logger.error(f"Error uploading file: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to upload file")
-
-    return await db_create_product(
-        company_id=company_id,
-        product_name=product_name,
-        file_name=file_name,
-        original_filename=original_filename
-    )
+        logger.error(f"Error processing file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process file")
 
 @app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
 async def get_products(
