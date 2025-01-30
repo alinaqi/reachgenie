@@ -55,7 +55,6 @@ class CompanyInDB(CompanyBase):
 
 class ProductBase(BaseModel):
     product_name: str
-    description: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass

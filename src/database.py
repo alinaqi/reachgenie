@@ -67,11 +67,10 @@ async def db_create_company(
     response = supabase.table('companies').insert(company_data).execute()
     return response.data[0]
 
-async def db_create_product(company_id: UUID, product_name: str, description: Optional[str]):
+async def db_create_product(company_id: UUID, product_name: str):
     product_data = {
         'company_id': str(company_id),
-        'product_name': product_name,
-        'description': description
+        'product_name': product_name
     }
     response = supabase.table('products').insert(product_data).execute()
     return response.data[0]
@@ -344,10 +343,9 @@ async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
         return UUID(response.data[0]['email_campaigns']['company_id'])
     return None 
 
-async def update_product_details(product_id: UUID, product_name: str, description: Optional[str]):
+async def update_product_details(product_id: UUID, product_name: str):
     product_data = {
-        'product_name': product_name,
-        'description': description
+        'product_name': product_name
     }
     response = supabase.table('products').update(product_data).eq('id', str(product_id)).execute()
     if not response.data:

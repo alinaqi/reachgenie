@@ -359,7 +359,7 @@ async def create_product(
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await db_create_product(company_id, product.product_name, product.description)
+    return await db_create_product(company_id, product.product_name)
 
 @app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
 async def get_products(
@@ -390,7 +390,7 @@ async def update_product(
     if str(existing_product["company_id"]) != str(company_id):
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
-    return await update_product_details(product_id, product.product_name, product.description)
+    return await update_product_details(product_id, product.product_name)
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
 async def get_companies(current_user: dict = Depends(get_current_user)):
