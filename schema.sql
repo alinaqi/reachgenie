@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     address TEXT,
     industry TEXT,
+    website TEXT,
     account_email TEXT,
     account_password TEXT,
     account_type TEXT,
