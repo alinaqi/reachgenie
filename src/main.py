@@ -74,6 +74,7 @@ from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
 import secrets
+from src.services.perplexity_service import perplexity_service
 
 # Configure logger
 logging.basicConfig(
@@ -315,11 +316,38 @@ async def create_company(
     company: CompanyCreate,
     current_user: dict = Depends(get_current_user)
 ):
+    # If website is provided, fetch additional information using Perplexity
+    overview = None
+    background = None
+    products_services = None
+    address = company.address
+    industry = company.industry
+
+    if company.website:
+        try:
+            company_info = await perplexity_service.fetch_company_info(company.website)
+            if company_info:
+                overview = company_info.get('overview')
+                background = company_info.get('background')
+                products_services = company_info.get('products_services')
+                # Only update address and industry if not provided in the request
+                if not address and company_info.get('address') != "Not available":
+                    address = company_info.get('address')
+                if not industry and company_info.get('industry') != "Not available":
+                    industry = company_info.get('industry')
+        except Exception as e:
+            logger.error(f"Error fetching company info: {str(e)}")
+            # Continue with company creation even if Perplexity fails
+
     return await db_create_company(
         current_user["id"],
         company.name,
-        company.address,
-        company.industry
+        address,
+        industry,
+        company.website,
+        overview,
+        background,
+        products_services
     )
 
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
