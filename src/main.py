@@ -319,7 +319,8 @@ async def create_company(
         current_user["id"],
         company.name,
         company.address,
-        company.industry
+        company.industry,
+        company.website
     )
 
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)

@@ -44,12 +44,13 @@ async def get_companies_by_user_id(user_id: UUID):
     response = supabase.table('companies').select('*').eq('user_id', str(user_id)).execute()
     return response.data
 
-async def db_create_company(user_id: UUID, name: str, address: Optional[str], industry: Optional[str]):
+async def db_create_company(user_id: UUID, name: str, address: Optional[str], industry: Optional[str], website: Optional[str] = None):
     company_data = {
         'user_id': str(user_id),
         'name': name,
         'address': address,
-        'industry': industry
+        'industry': industry,
+        'website': website
     }
     response = supabase.table('companies').insert(company_data).execute()
     return response.data[0]
