@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 
 class Settings(BaseSettings):
     jwt_secret_key: str
@@ -6,7 +7,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
     SUPABASE_SERVICE_KEY: str
-    perplexity_api_key: str
+    perplexity_api_key: str = Field(..., env='PERPLEXITY_API_KEY')
     openai_api_key: str
     bland_api_key: str
     bland_api_url: str = "https://api.bland.ai"
