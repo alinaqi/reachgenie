@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import csv
 import io
 import logging
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
@@ -75,6 +75,8 @@ from src.config import get_settings
 from src.bland_client import BlandClient
 import secrets
 from src.services.perplexity_service import perplexity_service
+import os
+from src.utils.file_parser import FileParser
 
 # Configure logger
 logging.basicConfig(
@@ -353,13 +355,65 @@ async def create_company(
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
     company_id: UUID,
-    product: ProductCreate,
+    product_name: str = Form(...),
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
+    # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await db_create_product(company_id, product.product_name, product.description)
+    
+    # Validate file extension
+    allowed_extensions = {'.docx', '.pdf', '.txt'}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
+        )
+    
+    try:
+        # Generate unique filename
+        file_name = f"{uuid.uuid4()}{file_ext}"
+        original_filename = file.filename
+        
+        # Read and parse file content
+        file_content = await file.read()
+        try:
+            parsed_content = FileParser.parse_file(file_content, file_ext)
+        except ValueError as e:
+            logger.error(f"Error parsing file: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+        
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Upload file to Supabase storage
+        storage = supabase.storage.from_("product-files")
+        storage.upload(
+            path=file_name,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Create product with parsed content as description
+        return await db_create_product(
+            company_id=company_id,
+            product_name=product_name,
+            file_name=file_name,
+            original_filename=original_filename,
+            description=parsed_content
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process file")
 
 @app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
 async def get_products(
@@ -390,7 +444,7 @@ async def update_product(
     if str(existing_product["company_id"]) != str(company_id):
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
-    return await update_product_details(product_id, product.product_name, product.description)
+    return await update_product_details(product_id, product.product_name)
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
 async def get_companies(current_user: dict = Depends(get_current_user)):
