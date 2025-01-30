@@ -67,10 +67,12 @@ async def db_create_company(
     response = supabase.table('companies').insert(company_data).execute()
     return response.data[0]
 
-async def db_create_product(company_id: UUID, product_name: str):
+async def db_create_product(company_id: UUID, product_name: str, file_name: Optional[str] = None, original_filename: Optional[str] = None):
     product_data = {
         'company_id': str(company_id),
-        'product_name': product_name
+        'product_name': product_name,
+        'file_name': file_name,
+        'original_filename': original_filename
     }
     response = supabase.table('products').insert(product_data).execute()
     return response.data[0]

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import csv
 import io
 import logging
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
@@ -75,6 +75,7 @@ from src.config import get_settings
 from src.bland_client import BlandClient
 import secrets
 from src.services.perplexity_service import perplexity_service
+import os
 
 # Configure logger
 logging.basicConfig(
@@ -353,13 +354,58 @@ async def create_company(
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
     company_id: UUID,
-    product: ProductCreate,
+    product_name: str = Form(...),
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
+    # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await db_create_product(company_id, product.product_name)
+    
+    # Validate file extension
+    allowed_extensions = {'.doc', '.docx', '.pdf', '.txt'}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
+        )
+    
+    try:
+        # Generate unique filename
+        file_name = f"{uuid.uuid4()}{file_ext}"
+        original_filename = file.filename
+        
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Upload file to Supabase storage
+        storage = supabase.storage.from_("product-files")
+        storage.upload(
+            path=file_name,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error uploading file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload file")
+
+    return await db_create_product(
+        company_id=company_id,
+        product_name=product_name,
+        file_name=file_name,
+        original_filename=original_filename
+    )
 
 @app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
 async def get_products(
