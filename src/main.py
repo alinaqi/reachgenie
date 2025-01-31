@@ -1382,6 +1382,98 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
         logger.error(f"Failed to generate company insights for lead {lead.get('id')}: {str(e)}")
         return None
 
+async def generate_email_content(lead: dict, campaign: dict, company: dict, insights: str) -> Optional[tuple[str, str]]:
+    """
+    Generate personalized email content based on campaign and company insights using OpenAI.
+    
+    Args:
+        lead: The lead information
+        campaign: The campaign details
+        company: The company information
+        insights: Generated company insights
+        
+    Returns:
+        Optional tuple of (subject, body) containing the generated email content, or None if generation fails
+    """
+    try:
+        settings = get_settings()
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Get product details from database
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            logger.error(f"Product not found for campaign: {campaign['id']}")
+            return None
+        
+        # Construct the prompt with lead and campaign information
+        prompt = f"""
+        You are an expert sales representative who have capabilities to pitch the leads about the product.
+
+        Lead's history and Information:
+        - Company Name: {lead.get('company', '')}
+        - Contact Name: {lead.get('first_name', '')} {lead.get('last_name', '')}
+        - Company Description: {lead.get('company_description', 'Not available')}
+        - Analysis: {insights}
+
+        Product Information:
+        {product.get('description', 'Not available')}
+
+        Company Information (for signature):
+        - Company Name: {company.get('name', '')}
+        - Email: {company.get('account_email', '')}
+
+        Create two pieces of content:
+        1. Email Subject: Compelling subject line mentioning our product and key benefits
+        2. Email Content: Professional HTML email highlighting specific benefits for their business
+
+        Important Instructions for Email Content:
+        - Use a professional tone
+        - Focus on value proposition
+        - Include a clear call to action
+        - End with a professional signature using the company information provided above
+        - DO NOT use placeholders like 'Your Name' or 'Your Position'
+        - Use the company name in the signature
+        - Format the signature as:
+          Best regards,
+          [Company Name]
+
+        Return the response in the following JSON format:
+        {{
+            "subject": "The email subject line",
+            "body": "The HTML email content with proper signature"
+        }}
+        """
+
+        logger.info(f"Generated Prompt: {prompt}")
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert sales representative crafting personalized email content. Always respond with valid JSON containing 'subject' and 'body' fields. Never use placeholder text in signatures."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1000,
+            response_format={ "type": "json_object" }
+        )
+        
+        # Parse the response
+        content = response.choices[0].message.content.strip()
+        email_content = json.loads(content)
+        
+        logger.info(f"Generated email content for lead: {lead.get('email')}")
+        return email_content["subject"], email_content["body"]
+        
+    except Exception as e:
+        logger.error(f"Failed to generate email content: {str(e)}")
+        return None
+
 async def run_email_campaign(campaign: dict, company: dict):
     """Handle email campaign processing"""
     if not company.get("account_email") or not company.get("account_password"):
@@ -1422,47 +1514,51 @@ async def run_email_campaign(campaign: dict, company: dict):
                     insights = await generate_company_insights(lead, perplexity_service)
                     if insights:
                         logger.info(f"Generated insights for lead: {lead['email']}")
-                        logger.info(f"{insights}")
-                        # Store insights in lead data or use it as needed
-                        lead['company_insights'] = insights
-
-                    # Send email using SMTP client
-                    #try:
-                        # Create email log first to get the ID for reply-to
-                        #email_log = await create_email_log(
-                            #campaign_id=campaign['id'],
-                            #lead_id=lead['id'],
-                            #sent_at=datetime.now(timezone.utc)
-                        #)
-                        #logger.info(f"Created email_log with id: {email_log['id']}")
-
-                        # Send email with reply-to header
-                        #await smtp_client.send_email(
-                            #to_email=lead['email'],
-                            #subject=campaign['email_subject'],
-                            #html_content=campaign['email_body'],
-                            #from_name=company["name"],
-                            #email_log_id=email_log['id']
-                        #)
-                        #logger.info(f"Successfully sent email to {lead['email']}")
+                        #logger.info(f"{insights}")
                         
-                        # Create email log detail
-                        #if email_log:
-                            #await create_email_log_detail(
-                                #email_logs_id=email_log['id'],
-                                #message_id=None,
-                                #email_subject=campaign['email_subject'],
-                                #email_body=campaign['email_body'],
-                                #sender_type='assistant',
-                                #sent_at=datetime.now(timezone.utc),
-                                #from_name=company['name'],
-                                #from_email=company['account_email'],
-                                #to_email=lead['email']
-                            #)
-                            #logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-                    #except Exception as e:
-                        #logger.error(f"Error creating email logs: {str(e)}")
-                        #continue 
+                        # Generate personalized email content
+                        subject, body = await generate_email_content(lead, campaign, company, insights)
+                        logger.info(f"Generated email content for lead: {lead['email']}")
+                        logger.info(f"Email Subject: {subject}")
+                        logger.info(f"Email Body: {body}")
+                    
+                    # Send email using SMTP client
+                        try:
+                            # Create email log first to get the ID for reply-to
+                            email_log = await create_email_log(
+                                campaign_id=campaign['id'],
+                                lead_id=lead['id'],
+                                sent_at=datetime.now(timezone.utc)
+                            )
+                            logger.info(f"Created email_log with id: {email_log['id']}")
+
+                            # Send email with reply-to header
+                            await smtp_client.send_email(
+                                to_email=lead['email'],
+                                subject=subject,  # Use generated subject
+                                html_content=body,  # Use generated body
+                                from_name=company["name"],
+                                email_log_id=email_log['id']
+                            )
+                            logger.info(f"Successfully sent email to {lead['email']}")
+                            
+                            # Create email log detail
+                            if email_log:
+                                await create_email_log_detail(
+                                    email_logs_id=email_log['id'],
+                                    message_id=None,
+                                    email_subject=subject,  # Use generated subject
+                                    email_body=body,  # Use generated body
+                                    sender_type='assistant',
+                                    sent_at=datetime.now(timezone.utc),
+                                    from_name=company['name'],
+                                    from_email=company['account_email'],
+                                    to_email=lead['email']
+                                )
+                                logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                        except Exception as e:
+                            logger.error(f"Error creating email logs: {str(e)}")
+                            continue
             except Exception as e:
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
