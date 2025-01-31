@@ -115,7 +115,7 @@ class PerplexityService:
             logger.exception("Full traceback:")
             return None
 
-    async def get_company_insights(self, company_name: str, company_website: str, company_description: str) -> Optional[Dict]:
+    async def get_company_insights(self, company_name: str, company_website: str, company_description: str) -> Optional[str]:
         """
         Get company insights using Perplexity API.
         
@@ -125,7 +125,7 @@ class PerplexityService:
             company_description: Description of the company
             
         Returns:
-            Dict containing company insights or None if the request fails
+            String containing formatted company insights or None if the request fails
         """
         try:
             headers = {
@@ -145,7 +145,7 @@ class PerplexityService:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that analyzes companies and provides insights about their functionality and needs. Always respond with valid JSON."
+                        "content": "You are a helpful assistant that analyzes companies and provides detailed insights about their functionality and needs. Provide analysis in a clear, structured format with headings."
                     },
                     {
                         "role": "user",
@@ -165,21 +165,9 @@ class PerplexityService:
                 if response.status_code == 200:
                     result = response.json()
                     if result and "choices" in result and result["choices"]:
-                        try:
-                            content = result["choices"][0]["message"]["content"]
-                            logger.debug(f"Raw content from Perplexity: {content}")
-                            
-                            # Clean the content before parsing
-                            cleaned_content = self._clean_json_string(content)
-                            logger.debug(f"Cleaned content: {cleaned_content}")
-                            
-                            insights = json.loads(cleaned_content)
-                            return insights
-                            
-                        except (json.JSONDecodeError, KeyError) as e:
-                            logger.error(f"Failed to parse Perplexity response: {str(e)}")
-                            logger.error(f"Problematic content: {content}")
-                            return None
+                        content = result["choices"][0]["message"]["content"]
+                        logger.debug(f"Raw content from Perplexity: {content}")
+                        return content.strip()
                 else:
                     logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
                     return None
