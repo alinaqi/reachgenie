@@ -768,10 +768,18 @@ async def create_company_campaign(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Validate that the product exists and belongs to the company
+    product = await get_product_by_id(campaign.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    
     return await create_campaign(
         company_id=company_id,
         name=campaign.name,
         description=campaign.description,
+        product_id=campaign.product_id,
         type=campaign.type.value  # Convert enum to string value
     )
 

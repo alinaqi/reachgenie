@@ -122,6 +122,7 @@ class EmailCampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
     type: CampaignType = CampaignType.EMAIL
+    product_id: UUID
 
 class EmailCampaignCreate(EmailCampaignBase):
     pass
