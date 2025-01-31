@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS calls (
 );
 
 -- Email Campaigns table
-CREATE TABLE IF NOT EXISTS email_campaigns (
+CREATE TABLE IF NOT EXISTS campaigns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     description TEXT,
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    campaign_id UUID REFERENCES email_campaigns(id),
+    campaign_id UUID REFERENCES campaigns(id),
     lead_id UUID REFERENCES leads(id),
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
