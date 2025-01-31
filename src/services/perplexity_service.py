@@ -4,6 +4,7 @@ import logging
 import httpx
 from src.config import get_settings
 from src.prompts.company_info_prompt import COMPANY_INFO_PROMPT
+from src.prompts.company_insights_prompt import COMPANY_INSIGHTS_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,80 @@ class PerplexityService:
             
         except Exception as e:
             logger.error(f"Error fetching company info from Perplexity: {str(e)}")
+            logger.exception("Full traceback:")
+            return None
+
+    async def get_company_insights(self, company_name: str, company_website: str, company_description: str) -> Optional[Dict]:
+        """
+        Get company insights using Perplexity API.
+        
+        Args:
+            company_name: Name of the company
+            company_website: Company's website URL
+            company_description: Description of the company
+            
+        Returns:
+            Dict containing company insights or None if the request fails
+        """
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Format the prompt with company details
+            prompt = COMPANY_INSIGHTS_PROMPT.format(
+                company_name=company_name,
+                company_website=company_website,
+                company_description=company_description
+            )
+            
+            payload = {
+                "model": "sonar-pro",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that analyzes companies and provides insights about their functionality and needs. Always respond with valid JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result and "choices" in result and result["choices"]:
+                        try:
+                            content = result["choices"][0]["message"]["content"]
+                            logger.debug(f"Raw content from Perplexity: {content}")
+                            
+                            # Clean the content before parsing
+                            cleaned_content = self._clean_json_string(content)
+                            logger.debug(f"Cleaned content: {cleaned_content}")
+                            
+                            insights = json.loads(cleaned_content)
+                            return insights
+                            
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.error(f"Failed to parse Perplexity response: {str(e)}")
+                            logger.error(f"Problematic content: {content}")
+                            return None
+                else:
+                    logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
+                    return None
+            
+        except Exception as e:
+            logger.error(f"Error getting company insights from Perplexity: {str(e)}")
             logger.exception("Full traceback:")
             return None
 
