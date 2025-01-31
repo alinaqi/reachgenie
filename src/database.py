@@ -224,7 +224,7 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
 
-async def get_leads_for_campaign(campaign_id: UUID):
+async def get_leads_with_email(campaign_id: UUID):
     # First get the campaign to get company_id
     campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
