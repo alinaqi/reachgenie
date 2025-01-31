@@ -773,7 +773,8 @@ async def create_company_campaign(
         name=campaign.name,
         description=campaign.description,
         email_subject=campaign.email_subject,
-        email_body=campaign.email_body
+        email_body=campaign.email_body,
+        type=campaign.type.value  # Convert enum to string value
     )
 
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB])
@@ -1367,7 +1368,7 @@ async def send_campaign_emails(campaign_id: UUID):
             return
         
         if not company.get("account_email") or not company.get("account_password"):
-            logger.error(f"Company {campaign['company_id']} missing email credentials")
+            logger.error(f"Company {campaign['company_id']} missing credentials")
             return
             
         if not company.get("account_type"):

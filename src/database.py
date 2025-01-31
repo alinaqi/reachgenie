@@ -196,13 +196,14 @@ async def get_calls_by_company_id(company_id: UUID):
     
     return calls 
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], email_subject: str, email_body: str):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], email_subject: str, email_body: str, type: str = 'email'):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
         'description': description,
         'email_subject': email_subject,
-        'email_body': email_body
+        'email_body': email_body,
+        'type': type
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]

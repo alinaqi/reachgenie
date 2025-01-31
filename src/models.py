@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 import json
 import logging
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +114,16 @@ class BlandWebhookPayload(BaseModel):
     corrected_duration: str
     analysis: dict
 
+class CampaignType(str, Enum):
+    EMAIL = 'email'
+    CALL = 'call'
+
 class EmailCampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
     email_subject: str
     email_body: str
+    type: CampaignType = CampaignType.EMAIL
 
 class EmailCampaignCreate(EmailCampaignBase):
     pass
