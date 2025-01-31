@@ -1357,6 +1357,31 @@ async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
 
+async def generate_company_insights(lead: dict, perplexity_service) -> dict:
+    """Generate company insights using Perplexity API for a given lead"""
+    try:
+        company_name = lead.get('company', '')
+        company_website = lead.get('website', '')
+        company_description = lead.get('company_description', '')
+        
+        if not company_name and not company_website:
+            logger.warning(f"Insufficient company data for lead {lead.get('id')}")
+            return None
+            
+        insights = await perplexity_service.get_company_insights(
+            company_name=company_name,
+            company_website=company_website,
+            company_description=company_description
+        )
+        
+        if insights:
+            logger.info(f"Generated insights for company: {company_name}")
+        return insights
+        
+    except Exception as e:
+        logger.error(f"Failed to generate company insights for lead {lead.get('id')}: {str(e)}")
+        return None
+
 async def run_email_campaign(campaign: dict, company: dict):
     """Handle email campaign processing"""
     if not company.get("account_email") or not company.get("account_password"):
@@ -1369,7 +1394,7 @@ async def run_email_campaign(campaign: dict, company: dict):
             
     if not company.get("name"):
         logger.error(f"Company {campaign['company_id']} missing company name")
-        return
+        return    
     
     # Decrypt the password
     try:
@@ -1393,43 +1418,51 @@ async def run_email_campaign(campaign: dict, company: dict):
                 if lead.get('email'):  # Only send if lead has email
                     logger.info(f"Processing email for lead: {lead['email']}")
                     
+                    # Generate company insights
+                    insights = await generate_company_insights(lead, perplexity_service)
+                    if insights:
+                        logger.info(f"Generated insights for lead: {lead['email']}")
+                        logger.info(f"{insights}")
+                        # Store insights in lead data or use it as needed
+                        lead['company_insights'] = insights
+
                     # Send email using SMTP client
-                    try:
+                    #try:
                         # Create email log first to get the ID for reply-to
-                        email_log = await create_email_log(
-                            campaign_id=campaign['id'],
-                            lead_id=lead['id'],
-                            sent_at=datetime.now(timezone.utc)
-                        )
-                        logger.info(f"Created email_log with id: {email_log['id']}")
+                        #email_log = await create_email_log(
+                            #campaign_id=campaign['id'],
+                            #lead_id=lead['id'],
+                            #sent_at=datetime.now(timezone.utc)
+                        #)
+                        #logger.info(f"Created email_log with id: {email_log['id']}")
 
                         # Send email with reply-to header
-                        await smtp_client.send_email(
-                            to_email=lead['email'],
-                            subject=campaign['email_subject'],
-                            html_content=campaign['email_body'],
-                            from_name=company["name"],
-                            email_log_id=email_log['id']
-                        )
-                        logger.info(f"Successfully sent email to {lead['email']}")
+                        #await smtp_client.send_email(
+                            #to_email=lead['email'],
+                            #subject=campaign['email_subject'],
+                            #html_content=campaign['email_body'],
+                            #from_name=company["name"],
+                            #email_log_id=email_log['id']
+                        #)
+                        #logger.info(f"Successfully sent email to {lead['email']}")
                         
                         # Create email log detail
-                        if email_log:
-                            await create_email_log_detail(
-                                email_logs_id=email_log['id'],
-                                message_id=None,
-                                email_subject=campaign['email_subject'],
-                                email_body=campaign['email_body'],
-                                sender_type='assistant',
-                                sent_at=datetime.now(timezone.utc),
-                                from_name=company['name'],
-                                from_email=company['account_email'],
-                                to_email=lead['email']
-                            )
-                            logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-                    except Exception as e:
-                        logger.error(f"Error creating email logs: {str(e)}")
-                        continue 
+                        #if email_log:
+                            #await create_email_log_detail(
+                                #email_logs_id=email_log['id'],
+                                #message_id=None,
+                                #email_subject=campaign['email_subject'],
+                                #email_body=campaign['email_body'],
+                                #sender_type='assistant',
+                                #sent_at=datetime.now(timezone.utc),
+                                #from_name=company['name'],
+                                #from_email=company['account_email'],
+                                #to_email=lead['email']
+                            #)
+                            #logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                    #except Exception as e:
+                        #logger.error(f"Error creating email logs: {str(e)}")
+                        #continue 
             except Exception as e:
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
