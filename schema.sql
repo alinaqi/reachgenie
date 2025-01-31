@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS calls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     lead_id UUID REFERENCES leads(id),
     product_id UUID REFERENCES products(id),
+    campaign_id UUID REFERENCES campaigns(id),
     duration INTEGER,
     sentiment TEXT,
     summary TEXT,
