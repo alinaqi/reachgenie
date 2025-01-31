@@ -83,8 +83,12 @@ CREATE TABLE IF NOT EXISTS campaigns (
     company_id UUID REFERENCES companies(id),
     email_subject TEXT NOT NULL,
     email_body TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'email',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add comment to explain the column usage
+COMMENT ON COLUMN campaigns.type IS 'Type of campaign (e.g., email, call, etc.)';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (
