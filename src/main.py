@@ -43,9 +43,9 @@ from src.database import (
     get_company_by_id,
     update_call_webhook_data,
     get_calls_by_company_id,
-    create_email_campaign,
-    get_email_campaigns_by_company,
-    get_email_campaign_by_id,
+    create_campaign,
+    get_campaigns_by_company,
+    get_campaign_by_id,
     get_leads_for_campaign,
     create_email_log,
     create_email_log_detail,
@@ -757,8 +757,8 @@ async def get_company_calls(
     
     return await get_calls_by_company_id(company_id)
 
-@app.post("/api/companies/{company_id}/email-campaigns", response_model=EmailCampaignInDB)
-async def create_company_email_campaign(
+@app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB)
+async def create_company_campaign(
     company_id: UUID,
     campaign: EmailCampaignCreate,
     current_user: dict = Depends(get_current_user)
@@ -768,7 +768,7 @@ async def create_company_email_campaign(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await create_email_campaign(
+    return await create_campaign(
         company_id=company_id,
         name=campaign.name,
         description=campaign.description,
@@ -776,8 +776,8 @@ async def create_company_email_campaign(
         email_body=campaign.email_body
     )
 
-@app.get("/api/companies/{company_id}/email-campaigns", response_model=List[EmailCampaignInDB])
-async def get_company_email_campaigns(
+@app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB])
+async def get_company_campaigns(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
@@ -786,130 +786,27 @@ async def get_company_email_campaigns(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_email_campaigns_by_company(company_id)
+    return await get_campaigns_by_company(company_id)
 
-@app.get("/api/email-campaigns/{campaign_id}", response_model=EmailCampaignInDB)
-async def get_email_campaign(
+@app.get("/api/campaigns/{campaign_id}", response_model=EmailCampaignInDB)
+async def get_campaign(
     campaign_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
     # Get the campaign
-    campaign = await get_email_campaign_by_id(campaign_id)
+    campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        raise HTTPException(status_code=404, detail="Email campaign not found")
-    
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return campaign 
+    return campaign
 
-async def send_campaign_emails(campaign_id: UUID):
-    """Background task to send campaign emails"""
-    logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
-    settings = get_settings()
-    
-    try:
-        # Get campaign details
-        campaign = await get_email_campaign_by_id(campaign_id)
-        if not campaign:
-            logger.error(f"Campaign not found: {campaign_id}")
-            return
-        
-        # Get company details for SMTP configuration
-        company = await get_company_by_id(campaign["company_id"])
-        if not company:
-            logger.error(f"Company not found for campaign: {campaign_id}")
-            return
-        
-        if not company.get("account_email") or not company.get("account_password"):
-            logger.error(f"Company {campaign['company_id']} missing email credentials")
-            return
-            
-        if not company.get("account_type"):
-            logger.error(f"Company {campaign['company_id']} missing email provider type")
-            return
-            
-        if not company.get("name"):
-            logger.error(f"Company {campaign['company_id']} missing company name")
-            return
-        
-        # Decrypt the password
-        try:
-            decrypted_password = decrypt_password(company["account_password"])
-        except Exception as e:
-            logger.error(f"Failed to decrypt email password: {str(e)}")
-            return
-        
-        # Initialize SMTP client
-        try:
-            async with SMTPClient(
-                account_email=company["account_email"],
-                account_password=decrypted_password,  # Use decrypted password
-                provider=company["account_type"]
-            ) as smtp_client:
-                # Get all leads for the campaign
-                leads = await get_leads_for_campaign(campaign_id)
-                logger.info(f"Found {len(leads)} leads for campaign")
-                
-                # Send emails to each lead
-                for lead in leads:
-                    try:
-                        if lead.get('email'):  # Only send if lead has email
-                            logger.info(f"Processing email for lead: {lead['email']}")
-                            
-                            # Send email using SMTP client
-                            try:
-                                # Create email log first to get the ID for reply-to
-                                email_log = await create_email_log(
-                                    campaign_id=campaign_id,
-                                    lead_id=lead['id'],
-                                    sent_at=datetime.now(timezone.utc)
-                                )
-                                logger.info(f"Created email_log with id: {email_log['id']}")
-
-                                # Send email with reply-to header
-                                await smtp_client.send_email(
-                                    to_email=lead['email'],
-                                    subject=campaign['email_subject'],
-                                    html_content=campaign['email_body'],
-                                    from_name=company["name"],
-                                    email_log_id=email_log['id']
-                                )
-                                logger.info(f"Successfully sent email to {lead['email']}")
-                                
-                                # Create email log detail
-                                if email_log:
-                                    await create_email_log_detail(
-                                        email_logs_id=email_log['id'],
-                                        message_id=None,
-                                        email_subject=campaign['email_subject'],
-                                        email_body=campaign['email_body'],
-                                        sender_type='assistant',
-                                        sent_at=datetime.now(timezone.utc),
-                                        from_name=company['name'],
-                                        from_email=company['account_email'],
-                                        to_email=lead['email']
-                                    )
-                                    logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-                            except Exception as e:
-                                logger.error(f"Error creating email logs: {str(e)}")
-                                continue
-                            
-                    except Exception as e:
-                        logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
-                        continue
-        except Exception as e:
-            logger.error(f"Failed to initialize SMTP client: {str(e)}")
-            return
-            
-    except Exception as e:
-        logger.error(f"Unexpected error in send_campaign_emails: {str(e)}")
-        return
-
-@app.post("/api/email-campaigns/{campaign_id}/run")
-async def run_email_campaign(
+@app.post("/api/campaigns/{campaign_id}/run")
+async def run_campaign(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
@@ -917,14 +814,14 @@ async def run_email_campaign(
     logger.info(f"Running email campaign {campaign_id}")
     
     # Get the campaign
-    campaign = await get_email_campaign_by_id(campaign_id)
+    campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
     # Get company details and validate email credentials
     company = await get_company_by_id(campaign["company_id"])
@@ -1450,3 +1347,106 @@ async def forgot_password(request: ForgotPasswordRequest):
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
+
+async def send_campaign_emails(campaign_id: UUID):
+    """Background task to send campaign emails"""
+    logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
+    settings = get_settings()
+    
+    try:
+        # Get campaign details
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            logger.error(f"Campaign not found: {campaign_id}")
+            return
+        
+        # Get company details for SMTP configuration
+        company = await get_company_by_id(campaign["company_id"])
+        if not company:
+            logger.error(f"Company not found for campaign: {campaign_id}")
+            return
+        
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {campaign['company_id']} missing email credentials")
+            return
+            
+        if not company.get("account_type"):
+            logger.error(f"Company {campaign['company_id']} missing email provider type")
+            return
+            
+        if not company.get("name"):
+            logger.error(f"Company {campaign['company_id']} missing company name")
+            return
+        
+        # Decrypt the password
+        try:
+            decrypted_password = decrypt_password(company["account_password"])
+        except Exception as e:
+            logger.error(f"Failed to decrypt email password: {str(e)}")
+            return
+        
+        # Initialize SMTP client
+        try:
+            async with SMTPClient(
+                account_email=company["account_email"],
+                account_password=decrypted_password,  # Use decrypted password
+                provider=company["account_type"]
+            ) as smtp_client:
+                # Get all leads for the campaign
+                leads = await get_leads_for_campaign(campaign_id)
+                logger.info(f"Found {len(leads)} leads for campaign")
+                
+                # Send emails to each lead
+                for lead in leads:
+                    try:
+                        if lead.get('email'):  # Only send if lead has email
+                            logger.info(f"Processing email for lead: {lead['email']}")
+                            
+                            # Send email using SMTP client
+                            try:
+                                # Create email log first to get the ID for reply-to
+                                email_log = await create_email_log(
+                                    campaign_id=campaign_id,
+                                    lead_id=lead['id'],
+                                    sent_at=datetime.now(timezone.utc)
+                                )
+                                logger.info(f"Created email_log with id: {email_log['id']}")
+
+                                # Send email with reply-to header
+                                await smtp_client.send_email(
+                                    to_email=lead['email'],
+                                    subject=campaign['email_subject'],
+                                    html_content=campaign['email_body'],
+                                    from_name=company["name"],
+                                    email_log_id=email_log['id']
+                                )
+                                logger.info(f"Successfully sent email to {lead['email']}")
+                                
+                                # Create email log detail
+                                if email_log:
+                                    await create_email_log_detail(
+                                        email_logs_id=email_log['id'],
+                                        message_id=None,
+                                        email_subject=campaign['email_subject'],
+                                        email_body=campaign['email_body'],
+                                        sender_type='assistant',
+                                        sent_at=datetime.now(timezone.utc),
+                                        from_name=company['name'],
+                                        from_email=company['account_email'],
+                                        to_email=lead['email']
+                                    )
+                                    logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                            except Exception as e:
+                                logger.error(f"Error creating email logs: {str(e)}")
+                                continue
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
+                        continue
+        except Exception as e:
+            logger.error(f"Failed to initialize SMTP client: {str(e)}")
+            return
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in send_campaign_emails: {str(e)}")
+        return 

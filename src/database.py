@@ -196,7 +196,7 @@ async def get_calls_by_company_id(company_id: UUID):
     
     return calls 
 
-async def create_email_campaign(company_id: UUID, name: str, description: Optional[str], email_subject: str, email_body: str):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], email_subject: str, email_body: str):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
@@ -204,15 +204,15 @@ async def create_email_campaign(company_id: UUID, name: str, description: Option
         'email_subject': email_subject,
         'email_body': email_body
     }
-    response = supabase.table('email_campaigns').insert(campaign_data).execute()
+    response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
 
-async def get_email_campaigns_by_company(company_id: UUID):
-    response = supabase.table('email_campaigns').select('*').eq('company_id', str(company_id)).execute()
+async def get_campaigns_by_company(company_id: UUID):
+    response = supabase.table('campaigns').select('*').eq('company_id', str(company_id)).execute()
     return response.data
 
-async def get_email_campaign_by_id(campaign_id: UUID):
-    response = supabase.table('email_campaigns').select('*').eq('id', str(campaign_id)).execute()
+async def get_campaign_by_id(campaign_id: UUID):
+    response = supabase.table('campaigns').select('*').eq('id', str(campaign_id)).execute()
     return response.data[0] if response.data else None
 
 async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
@@ -226,7 +226,7 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
 
 async def get_leads_for_campaign(campaign_id: UUID):
     # First get the campaign to get company_id
-    campaign = await get_email_campaign_by_id(campaign_id)
+    campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
         return []
     
@@ -338,12 +338,12 @@ async def clear_company_cronofy_data(company_id: UUID):
 async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
     """Get company_id from email_log through campaign and company relationship"""
     response = supabase.table('email_logs')\
-        .select('campaign_id,email_campaigns(company_id)')\
+        .select('campaign_id,campaigns(company_id)')\
         .eq('id', str(email_log_id))\
         .execute()
     
-    if response.data and response.data[0].get('email_campaigns'):
-        return UUID(response.data[0]['email_campaigns']['company_id'])
+    if response.data and response.data[0].get('campaigns'):
+        return UUID(response.data[0]['campaigns']['company_id'])
     return None 
 
 async def update_product_details(product_id: UUID, product_name: str):
