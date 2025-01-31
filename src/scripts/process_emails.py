@@ -11,9 +11,9 @@ from src.utils.smtp_client import SMTPClient
 from src.database import (
     get_companies_with_email_credentials,
     update_last_processed_email_date,
-    create_email_log_detail,
-    decrypt_password
+    create_email_log_detail
 )
+from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
 
 # IMAP server configurations
