@@ -121,8 +121,6 @@ class CampaignType(str, Enum):
 class EmailCampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
-    email_subject: str
-    email_body: str
     type: CampaignType = CampaignType.EMAIL
 
 class EmailCampaignCreate(EmailCampaignBase):

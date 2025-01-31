@@ -772,8 +772,6 @@ async def create_company_campaign(
         company_id=company_id,
         name=campaign.name,
         description=campaign.description,
-        email_subject=campaign.email_subject,
-        email_body=campaign.email_body,
         type=campaign.type.value  # Convert enum to string value
     )
 
