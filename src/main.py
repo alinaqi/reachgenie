@@ -835,21 +835,23 @@ async def run_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    if not company.get("account_email") or not company.get("account_password"):
-        logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
-        raise HTTPException(
-            status_code=400,
-            detail="Company email credentials not configured. Please set up email account credentials first."
-        )
-        
-    if not company.get("account_type"):
-        raise HTTPException(
-            status_code=400,
-            detail="Email provider type not configured. Please set up email provider type first."
-        )
+    # Only validate email credentials if campaign type is email
+    if campaign['type'] == 'email':
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
+            raise HTTPException(
+                status_code=400,
+                detail="Company email credentials not configured. Please set up email account credentials first."
+            )
+            
+        if not company.get("account_type"):
+            raise HTTPException(
+                status_code=400,
+                detail="Email provider type not configured. Please set up email provider type first."
+            )
     
-    # Add email sending to background tasks
-    background_tasks.add_task(send_campaign_emails, campaign_id)
+    # Add campaign execution to background tasks
+    background_tasks.add_task(run_company_campaign, campaign_id)
     
     return {"message": "Email campaign started successfully"} 
 
@@ -1355,9 +1357,9 @@ async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
 
-async def send_campaign_emails(campaign_id: UUID):
-    """Background task to send campaign emails"""
-    logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
+async def run_company_campaign(campaign_id: UUID):
+    """Background task to run campaign of the company"""
+    logger.info(f"Starting to run campaign_id: {campaign_id}")
     settings = get_settings()
     
     try:
