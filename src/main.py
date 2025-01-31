@@ -1449,15 +1449,14 @@ async def run_company_campaign(campaign_id: UUID):
                                         logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
                                 except Exception as e:
                                     logger.error(f"Error creating email logs: {str(e)}")
-                                    continue
-                                
+                                    continue 
                         except Exception as e:
                             logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                             continue
             except Exception as e:
                 logger.error(f"Failed to initialize SMTP client: {str(e)}")
                 return
-        else:
+        elif campaign['type'] == 'call':
             # Handle non-email campaign types here
             logger.info(f"Processing non-email campaign of type: {campaign['type']}")
             # Add your non-email campaign logic here
