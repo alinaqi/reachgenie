@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS leads (
 -- Calls table
 CREATE TABLE IF NOT EXISTS calls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID REFERENCES companies(id),
     lead_id UUID REFERENCES leads(id),
     product_id UUID REFERENCES products(id),
     duration INTEGER,
