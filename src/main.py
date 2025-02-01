@@ -47,6 +47,7 @@ from src.database import (
     get_campaigns_by_company,
     get_campaign_by_id,
     get_leads_with_email,
+    get_leads_with_phone,
     create_email_log,
     create_email_log_detail,
     update_company_cronofy_profile,
@@ -853,7 +854,7 @@ async def run_campaign(
     # Add campaign execution to background tasks
     background_tasks.add_task(run_company_campaign, campaign_id)
     
-    return {"message": "Email campaign started successfully"} 
+    return {"message": "Campaign request initiated successfully"} 
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
 async def generate_campaign(
@@ -1501,7 +1502,7 @@ async def run_email_campaign(campaign: dict, company: dict):
         account_password=decrypted_password,
         provider=company["account_type"]
     ) as smtp_client:
-        # Get all leads for the campaign
+        # Get all leads having email add
         leads = await get_leads_with_email(campaign['id'])
         logger.info(f"Found {len(leads)} leads with emails")
 
@@ -1574,7 +1575,7 @@ async def run_company_campaign(campaign_id: UUID):
             logger.error(f"Campaign not found: {campaign_id}")
             return
         
-        # Get company details for SMTP configuration
+        # Get company details
         company = await get_company_by_id(campaign["company_id"])
         if not company:
             logger.error(f"Company not found for campaign: {campaign_id}")
@@ -1584,9 +1585,120 @@ async def run_company_campaign(campaign_id: UUID):
         if campaign['type'] == 'email':
             await run_email_campaign(campaign, company)
         elif campaign['type'] == 'call':
-            # Handle 'call' type campaign here
-            logger.info(f"Processing campaign of type: {campaign['type']}")
+            await run_call_campaign(campaign, company)
             
     except Exception as e:
         logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
-        return 
+        return
+
+async def run_call_campaign(campaign: dict, company: dict):
+    """Handle call campaign processing"""
+    
+    # Get all leads having phone number
+    leads = await get_leads_with_phone(company['id'])
+    logger.info(f"Found {len(leads)} leads with phone number")
+
+    for lead in leads:
+        try:
+            if lead.get('phone_number'):  # Only send if lead has phone number, just a safety check here as well
+                logger.info(f"Processing call for lead: {lead['phone_number']}")
+                
+                # Generate company insights
+                insights = await generate_company_insights(lead, perplexity_service)
+                if insights:
+                    #logger.info(f"Generated insights for lead: {lead['phone_number']}")
+                    #logger.info(f"{insights}")
+                    
+                    # Generate personalized call script
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    logger.info(f"Generated call script for lead: {lead['phone_number']}")
+                    logger.info(f"Call Script: {call_script}")
+
+        except Exception as e:
+            logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
+            continue
+
+async def generate_call_script(lead: dict, campaign: dict, company: dict, insights: str) -> str:
+    """
+    Generate personalized call script based on campaign and company insights using OpenAI.
+    
+    Args:
+        lead: The lead information
+        campaign: The campaign details
+        company: The company information
+        insights: Generated company insights
+        
+    Returns:
+        A string containing the generated call script
+    """
+    try:
+        settings = get_settings()
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Get product details from database
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            logger.error(f"Product not found for campaign: {campaign['id']}")
+            return None
+        
+        # Construct the prompt with lead and campaign information
+        prompt = f"""
+        You are an expert sales representative who have capabilities to pitch the leads about the product.
+
+        Lead's history and Information:
+        - Company Name: {lead.get('company', '')}
+        - Contact Name: {lead.get('first_name', '')} {lead.get('last_name', '')}
+        - Company Description: {lead.get('company_description', 'Not available')}
+        - Analysis: {insights}
+
+        Product Information:
+        {product.get('description', 'Not available')}
+
+        Generate a call script for the lead. For the call script, create an outbound sales conversation following this format:
+        
+        Your name is Alex, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
+
+        The script should:
+        - Start with: "Hello this Alex, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
+        - Focus on understanding their current solution and pain points
+        - Share relevant benefits based on their industry
+        - Include natural back-and-forth dialogue with example prospect responses
+        - Show how to handle common objections
+        - End with clear next steps
+        - Use the company insights and analysis to make the conversation specific to their business
+
+        Format the conversation as:
+        Alex: [what Alex says]
+        Prospect: [likely response]
+        Alex: [Alex's response]
+        [etc.]
+
+        Return the conversation in plain text format, with each line of dialogue on a new line.
+        Do not include any JSON formatting or other markup.
+        """
+
+        logger.info(f"Generated Prompt: {prompt}")
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an AI that creates personalized sales content. Format the conversation as a plain text script with each line of dialogue on a new line."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        # Get the plain text response
+        script = response.choices[0].message.content.strip()
+        return script
+        
+    except Exception as e:
+        logger.error(f"Failed to generate call script: {str(e)}")
+        return None

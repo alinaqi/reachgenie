@@ -240,6 +240,17 @@ async def get_leads_with_email(campaign_id: UUID):
     
     return response.data
 
+async def get_leads_with_phone(company_id: UUID):
+    # Get only those leads who have phone number (not null and not empty)
+    response = supabase.table('leads')\
+        .select('*')\
+        .eq('company_id', company_id)\
+        .neq('phone_number', None)\
+        .neq('phone_number', '')\
+        .execute()
+    
+    return response.data
+
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
     Update the reply_sentiment for an email log
