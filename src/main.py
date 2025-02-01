@@ -60,6 +60,7 @@ from src.database import (
     update_user
 )
 from src.services.email_service import email_service
+from src.services.bland_calls import initiate_call
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
@@ -1613,6 +1614,9 @@ async def run_call_campaign(campaign: dict, company: dict):
                     call_script = await generate_call_script(lead, campaign, company, insights)
                     logger.info(f"Generated call script for lead: {lead['phone_number']}")
                     logger.info(f"Call Script: {call_script}")
+
+                    # Initiate call
+                    await initiate_call(campaign, lead, call_script)
 
         except Exception as e:
             logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
