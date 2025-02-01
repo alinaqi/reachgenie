@@ -91,15 +91,18 @@ class CallBase(BaseModel):
 class CallCreate(CallBase):
     pass
 
-class CallInDB(CallBase):
+class CallInDB(BaseModel):
     id: UUID
+    lead_id: UUID
+    product_id: UUID
+    campaign_id: UUID
     duration: Optional[int] = None
     sentiment: Optional[str] = None
     summary: Optional[str] = None
     bland_call_id: Optional[str] = None
-    lead_name: Optional[str] = None
-    product_name: Optional[str] = None
     created_at: datetime
+    lead_name: Optional[str] = None
+    campaign_name: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str

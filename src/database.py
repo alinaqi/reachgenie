@@ -183,9 +183,9 @@ async def get_calls_by_companies(company_ids: List[str]):
     return unique_calls 
 
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
-    # Start with base query
+    # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,campaign_id,leads(*),products(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided
@@ -195,11 +195,11 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     # Execute query with ordering
     response = query.order('created_at', desc=True).execute()
     
-    # Add lead_name and product_name to each call record
+    # Add lead_name and campaign_name to each call record
     calls = []
     for call in response.data:
         call['lead_name'] = call['leads']['name'] if call.get('leads') else None
-        call['product_name'] = call['products']['product_name'] if call.get('products') else None
+        call['campaign_name'] = call['campaigns']['name'] if call.get('campaigns') else None
         calls.append(call)
     
     return calls
