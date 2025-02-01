@@ -43,10 +43,11 @@ from src.database import (
     get_company_by_id,
     update_call_webhook_data,
     get_calls_by_company_id,
-    create_email_campaign,
-    get_email_campaigns_by_company,
-    get_email_campaign_by_id,
-    get_leads_for_campaign,
+    create_campaign,
+    get_campaigns_by_company,
+    get_campaign_by_id,
+    get_leads_with_email,
+    get_leads_with_phone,
     create_email_log,
     create_email_log_detail,
     update_company_cronofy_profile,
@@ -59,6 +60,7 @@ from src.database import (
     update_user
 )
 from src.services.email_service import email_service
+from src.services.bland_calls import initiate_call
 from src.models import (
     UserCreate, CompanyCreate, ProductCreate,
     CompanyInDB, ProductInDB, LeadInDB, CallInDB, Token,
@@ -748,17 +750,27 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 @app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB])
 async def get_company_calls(
     company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Get all calls for a company, optionally filtered by campaign ID.
+    """
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_calls_by_company_id(company_id)
+    # If campaign_id is provided, validate it belongs to the company
+    if campaign_id:
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign or str(campaign["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    return await get_calls_by_company_id(company_id, campaign_id)
 
-@app.post("/api/companies/{company_id}/email-campaigns", response_model=EmailCampaignInDB)
-async def create_company_email_campaign(
+@app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB)
+async def create_company_campaign(
     company_id: UUID,
     campaign: EmailCampaignCreate,
     current_user: dict = Depends(get_current_user)
@@ -768,16 +780,23 @@ async def create_company_email_campaign(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await create_email_campaign(
+    # Validate that the product exists and belongs to the company
+    product = await get_product_by_id(campaign.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    
+    return await create_campaign(
         company_id=company_id,
         name=campaign.name,
         description=campaign.description,
-        email_subject=campaign.email_subject,
-        email_body=campaign.email_body
+        product_id=campaign.product_id,
+        type=campaign.type.value  # Convert enum to string value
     )
 
-@app.get("/api/companies/{company_id}/email-campaigns", response_model=List[EmailCampaignInDB])
-async def get_company_email_campaigns(
+@app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB])
+async def get_company_campaigns(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
@@ -786,130 +805,27 @@ async def get_company_email_campaigns(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_email_campaigns_by_company(company_id)
+    return await get_campaigns_by_company(company_id)
 
-@app.get("/api/email-campaigns/{campaign_id}", response_model=EmailCampaignInDB)
-async def get_email_campaign(
+@app.get("/api/campaigns/{campaign_id}", response_model=EmailCampaignInDB)
+async def get_campaign(
     campaign_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
     # Get the campaign
-    campaign = await get_email_campaign_by_id(campaign_id)
+    campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        raise HTTPException(status_code=404, detail="Email campaign not found")
-    
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return campaign 
+    return campaign
 
-async def send_campaign_emails(campaign_id: UUID):
-    """Background task to send campaign emails"""
-    logger.info(f"Starting to send campaign emails for campaign_id: {campaign_id}")
-    settings = get_settings()
-    
-    try:
-        # Get campaign details
-        campaign = await get_email_campaign_by_id(campaign_id)
-        if not campaign:
-            logger.error(f"Campaign not found: {campaign_id}")
-            return
-        
-        # Get company details for SMTP configuration
-        company = await get_company_by_id(campaign["company_id"])
-        if not company:
-            logger.error(f"Company not found for campaign: {campaign_id}")
-            return
-        
-        if not company.get("account_email") or not company.get("account_password"):
-            logger.error(f"Company {campaign['company_id']} missing email credentials")
-            return
-            
-        if not company.get("account_type"):
-            logger.error(f"Company {campaign['company_id']} missing email provider type")
-            return
-            
-        if not company.get("name"):
-            logger.error(f"Company {campaign['company_id']} missing company name")
-            return
-        
-        # Decrypt the password
-        try:
-            decrypted_password = decrypt_password(company["account_password"])
-        except Exception as e:
-            logger.error(f"Failed to decrypt email password: {str(e)}")
-            return
-        
-        # Initialize SMTP client
-        try:
-            async with SMTPClient(
-                account_email=company["account_email"],
-                account_password=decrypted_password,  # Use decrypted password
-                provider=company["account_type"]
-            ) as smtp_client:
-                # Get all leads for the campaign
-                leads = await get_leads_for_campaign(campaign_id)
-                logger.info(f"Found {len(leads)} leads for campaign")
-                
-                # Send emails to each lead
-                for lead in leads:
-                    try:
-                        if lead.get('email'):  # Only send if lead has email
-                            logger.info(f"Processing email for lead: {lead['email']}")
-                            
-                            # Send email using SMTP client
-                            try:
-                                # Create email log first to get the ID for reply-to
-                                email_log = await create_email_log(
-                                    campaign_id=campaign_id,
-                                    lead_id=lead['id'],
-                                    sent_at=datetime.now(timezone.utc)
-                                )
-                                logger.info(f"Created email_log with id: {email_log['id']}")
-
-                                # Send email with reply-to header
-                                await smtp_client.send_email(
-                                    to_email=lead['email'],
-                                    subject=campaign['email_subject'],
-                                    html_content=campaign['email_body'],
-                                    from_name=company["name"],
-                                    email_log_id=email_log['id']
-                                )
-                                logger.info(f"Successfully sent email to {lead['email']}")
-                                
-                                # Create email log detail
-                                if email_log:
-                                    await create_email_log_detail(
-                                        email_logs_id=email_log['id'],
-                                        message_id=None,
-                                        email_subject=campaign['email_subject'],
-                                        email_body=campaign['email_body'],
-                                        sender_type='assistant',
-                                        sent_at=datetime.now(timezone.utc),
-                                        from_name=company['name'],
-                                        from_email=company['account_email'],
-                                        to_email=lead['email']
-                                    )
-                                    logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-                            except Exception as e:
-                                logger.error(f"Error creating email logs: {str(e)}")
-                                continue
-                            
-                    except Exception as e:
-                        logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
-                        continue
-        except Exception as e:
-            logger.error(f"Failed to initialize SMTP client: {str(e)}")
-            return
-            
-    except Exception as e:
-        logger.error(f"Unexpected error in send_campaign_emails: {str(e)}")
-        return
-
-@app.post("/api/email-campaigns/{campaign_id}/run")
-async def run_email_campaign(
+@app.post("/api/campaigns/{campaign_id}/run")
+async def run_campaign(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
@@ -917,37 +833,39 @@ async def run_email_campaign(
     logger.info(f"Running email campaign {campaign_id}")
     
     # Get the campaign
-    campaign = await get_email_campaign_by_id(campaign_id)
+    campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
-        raise HTTPException(status_code=404, detail="Email campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign not found")
     
     # Get company details and validate email credentials
     company = await get_company_by_id(campaign["company_id"])
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    if not company.get("account_email") or not company.get("account_password"):
-        logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
-        raise HTTPException(
-            status_code=400,
-            detail="Company email credentials not configured. Please set up email account credentials first."
-        )
-        
-    if not company.get("account_type"):
-        raise HTTPException(
-            status_code=400,
-            detail="Email provider type not configured. Please set up email provider type first."
-        )
+    # Only validate email credentials if campaign type is email
+    if campaign['type'] == 'email':
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
+            raise HTTPException(
+                status_code=400,
+                detail="Company email credentials not configured. Please set up email account credentials first."
+            )
+            
+        if not company.get("account_type"):
+            raise HTTPException(
+                status_code=400,
+                detail="Email provider type not configured. Please set up email provider type first."
+            )
     
-    # Add email sending to background tasks
-    background_tasks.add_task(send_campaign_emails, campaign_id)
+    # Add campaign execution to background tasks
+    background_tasks.add_task(run_company_campaign, campaign_id)
     
-    return {"message": "Email campaign started successfully"} 
+    return {"message": "Campaign request initiated successfully"} 
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
 async def generate_campaign(
@@ -1450,3 +1368,351 @@ async def forgot_password(request: ForgotPasswordRequest):
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
+
+async def generate_company_insights(lead: dict, perplexity_service) -> dict:
+    """Generate company insights using Perplexity API for a given lead"""
+    try:
+        company_name = lead.get('company', '')
+        company_website = lead.get('website', '')
+        company_description = lead.get('company_description', '')
+        
+        if not company_name and not company_website:
+            logger.warning(f"Insufficient company data for lead {lead.get('id')}")
+            return None
+            
+        insights = await perplexity_service.get_company_insights(
+            company_name=company_name,
+            company_website=company_website,
+            company_description=company_description
+        )
+        
+        if insights:
+            logger.info(f"Generated insights for company: {company_name}")
+        return insights
+        
+    except Exception as e:
+        logger.error(f"Failed to generate company insights for lead {lead.get('id')}: {str(e)}")
+        return None
+
+async def generate_email_content(lead: dict, campaign: dict, company: dict, insights: str) -> Optional[tuple[str, str]]:
+    """
+    Generate personalized email content based on campaign and company insights using OpenAI.
+    
+    Args:
+        lead: The lead information
+        campaign: The campaign details
+        company: The company information
+        insights: Generated company insights
+        
+    Returns:
+        Optional tuple of (subject, body) containing the generated email content, or None if generation fails
+    """
+    try:
+        settings = get_settings()
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Get product details from database
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            logger.error(f"Product not found for campaign: {campaign['id']}")
+            return None
+        
+        # Construct the prompt with lead and campaign information
+        prompt = f"""
+        You are an expert sales representative who have capabilities to pitch the leads about the product.
+
+        Lead's history and Information:
+        - Company Name: {lead.get('company', '')}
+        - Contact Name: {lead.get('first_name', '')} {lead.get('last_name', '')}
+        - Company Description: {lead.get('company_description', 'Not available')}
+        - Analysis: {insights}
+
+        Product Information:
+        {product.get('description', 'Not available')}
+
+        Company Information (for signature):
+        - Company Name: {company.get('name', '')}
+        - Email: {company.get('account_email', '')}
+
+        Create two pieces of content:
+        1. Email Subject: Compelling subject line mentioning our product and key benefits
+        2. Email Content: Professional HTML email highlighting specific benefits for their business
+
+        Important Instructions for Email Content:
+        - Use a professional tone
+        - Focus on value proposition
+        - Include a clear call to action
+        - End with a professional signature using the company information provided above
+        - DO NOT use placeholders like 'Your Name' or 'Your Position'
+        - Use the company name in the signature
+        - Format the signature as:
+          Best regards,
+          [Company Name]
+
+        Return the response in the following JSON format:
+        {{
+            "subject": "The email subject line",
+            "body": "The HTML email content with proper signature"
+        }}
+        """
+
+        logger.info(f"Generated Prompt: {prompt}")
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert sales representative crafting personalized email content. Always respond with valid JSON containing 'subject' and 'body' fields. Never use placeholder text in signatures."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1000,
+            response_format={ "type": "json_object" }
+        )
+        
+        # Parse the response
+        content = response.choices[0].message.content.strip()
+        email_content = json.loads(content)
+        
+        logger.info(f"Generated email content for lead: {lead.get('email')}")
+        return email_content["subject"], email_content["body"]
+        
+    except Exception as e:
+        logger.error(f"Failed to generate email content: {str(e)}")
+        return None
+
+async def run_email_campaign(campaign: dict, company: dict):
+    """Handle email campaign processing"""
+    if not company.get("account_email") or not company.get("account_password"):
+        logger.error(f"Company {campaign['company_id']} missing credentials")
+        return
+            
+    if not company.get("account_type"):
+        logger.error(f"Company {campaign['company_id']} missing email provider type")
+        return
+            
+    if not company.get("name"):
+        logger.error(f"Company {campaign['company_id']} missing company name")
+        return    
+    
+    # Decrypt the password
+    try:
+        decrypted_password = decrypt_password(company["account_password"])
+    except Exception as e:
+        logger.error(f"Failed to decrypt email password: {str(e)}")
+        return
+    
+    # Initialize SMTP client            
+    async with SMTPClient(
+        account_email=company["account_email"],
+        account_password=decrypted_password,
+        provider=company["account_type"]
+    ) as smtp_client:
+        # Get all leads having email add
+        leads = await get_leads_with_email(campaign['id'])
+        logger.info(f"Found {len(leads)} leads with emails")
+
+        for lead in leads:
+            try:
+                if lead.get('email'):  # Only send if lead has email
+                    logger.info(f"Processing email for lead: {lead['email']}")
+                    
+                    # Generate company insights
+                    insights = await generate_company_insights(lead, perplexity_service)
+                    if insights:
+                        logger.info(f"Generated insights for lead: {lead['email']}")
+                        #logger.info(f"{insights}")
+                        
+                        # Generate personalized email content
+                        subject, body = await generate_email_content(lead, campaign, company, insights)
+                        logger.info(f"Generated email content for lead: {lead['email']}")
+                        logger.info(f"Email Subject: {subject}")
+                        logger.info(f"Email Body: {body}")
+                    
+                    # Send email using SMTP client
+                        try:
+                            # Create email log first to get the ID for reply-to
+                            email_log = await create_email_log(
+                                campaign_id=campaign['id'],
+                                lead_id=lead['id'],
+                                sent_at=datetime.now(timezone.utc)
+                            )
+                            logger.info(f"Created email_log with id: {email_log['id']}")
+
+                            # Send email with reply-to header
+                            await smtp_client.send_email(
+                                to_email=lead['email'],
+                                subject=subject,  # Use generated subject
+                                html_content=body,  # Use generated body
+                                from_name=company["name"],
+                                email_log_id=email_log['id']
+                            )
+                            logger.info(f"Successfully sent email to {lead['email']}")
+                            
+                            # Create email log detail
+                            if email_log:
+                                await create_email_log_detail(
+                                    email_logs_id=email_log['id'],
+                                    message_id=None,
+                                    email_subject=subject,  # Use generated subject
+                                    email_body=body,  # Use generated body
+                                    sender_type='assistant',
+                                    sent_at=datetime.now(timezone.utc),
+                                    from_name=company['name'],
+                                    from_email=company['account_email'],
+                                    to_email=lead['email']
+                                )
+                                logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+                        except Exception as e:
+                            logger.error(f"Error creating email logs: {str(e)}")
+                            continue
+            except Exception as e:
+                logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
+                continue
+
+async def run_company_campaign(campaign_id: UUID):
+    """Background task to run campaign of the company"""
+    logger.info(f"Starting to run campaign_id: {campaign_id}")
+    
+    try:
+        # Get campaign details
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            logger.error(f"Campaign not found: {campaign_id}")
+            return
+        
+        # Get company details
+        company = await get_company_by_id(campaign["company_id"])
+        if not company:
+            logger.error(f"Company not found for campaign: {campaign_id}")
+            return
+        
+        # Process campaign based on type
+        if campaign['type'] == 'email':
+            await run_email_campaign(campaign, company)
+        elif campaign['type'] == 'call':
+            await run_call_campaign(campaign, company)
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
+        return
+
+async def run_call_campaign(campaign: dict, company: dict):
+    """Handle call campaign processing"""
+    
+    # Get all leads having phone number
+    leads = await get_leads_with_phone(company['id'])
+    logger.info(f"Found {len(leads)} leads with phone number")
+
+    for lead in leads:
+        try:
+            if lead.get('phone_number'):  # Only send if lead has phone number, just a safety check here as well
+                logger.info(f"Processing call for lead: {lead['phone_number']}")
+                
+                # Generate company insights
+                insights = await generate_company_insights(lead, perplexity_service)
+                if insights:
+                    #logger.info(f"Generated insights for lead: {lead['phone_number']}")
+                    #logger.info(f"{insights}")
+                    
+                    # Generate personalized call script
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    logger.info(f"Generated call script for lead: {lead['phone_number']}")
+                    logger.info(f"Call Script: {call_script}")
+
+                    # Initiate call
+                    await initiate_call(campaign, lead, call_script)
+
+        except Exception as e:
+            logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
+            continue
+
+async def generate_call_script(lead: dict, campaign: dict, company: dict, insights: str) -> str:
+    """
+    Generate personalized call script based on campaign and company insights using OpenAI.
+    
+    Args:
+        lead: The lead information
+        campaign: The campaign details
+        company: The company information
+        insights: Generated company insights
+        
+    Returns:
+        A string containing the generated call script
+    """
+    try:
+        settings = get_settings()
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Get product details from database
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            logger.error(f"Product not found for campaign: {campaign['id']}")
+            return None
+        
+        # Construct the prompt with lead and campaign information
+        prompt = f"""
+        You are an expert sales representative who have capabilities to pitch the leads about the product.
+
+        Lead's history and Information:
+        - Company Name: {lead.get('company', '')}
+        - Contact Name: {lead.get('first_name', '')} {lead.get('last_name', '')}
+        - Company Description: {lead.get('company_description', 'Not available')}
+        - Analysis: {insights}
+
+        Product Information:
+        {product.get('description', 'Not available')}
+
+        Generate a call script for the lead. For the call script, create an outbound sales conversation following this format:
+        
+        Your name is Alex, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
+
+        The script should:
+        - Start with: "Hello this Alex, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
+        - Focus on understanding their current solution and pain points
+        - Share relevant benefits based on their industry
+        - Include natural back-and-forth dialogue with example prospect responses
+        - Show how to handle common objections
+        - End with clear next steps
+        - Use the company insights and analysis to make the conversation specific to their business
+
+        Format the conversation as:
+        Alex: [what Alex says]
+        Prospect: [likely response]
+        Alex: [Alex's response]
+        [etc.]
+
+        Return the conversation in plain text format, with each line of dialogue on a new line.
+        Do not include any JSON formatting or other markup.
+        """
+
+        logger.info(f"Generated Prompt: {prompt}")
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an AI that creates personalized sales content. Format the conversation as a plain text script with each line of dialogue on a new line."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        # Get the plain text response
+        script = response.choices[0].message.content.strip()
+        return script
+        
+    except Exception as e:
+        logger.error(f"Failed to generate call script: {str(e)}")
+        return None

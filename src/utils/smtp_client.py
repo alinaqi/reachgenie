@@ -200,7 +200,7 @@ class SMTPClient:
             # Create message
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
-            message["From"] = f"{from_name} <{self.email}>" if from_name else self.email
+            message["From"] = f"{from_name}" if from_name else self.email
             message["To"] = to_email
             
             # Add Reply-To header if email_log_id is provided

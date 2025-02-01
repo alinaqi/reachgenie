@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 import json
 import logging
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +91,18 @@ class CallBase(BaseModel):
 class CallCreate(CallBase):
     pass
 
-class CallInDB(CallBase):
+class CallInDB(BaseModel):
     id: UUID
+    lead_id: UUID
+    product_id: UUID
+    campaign_id: UUID
     duration: Optional[int] = None
     sentiment: Optional[str] = None
     summary: Optional[str] = None
     bland_call_id: Optional[str] = None
-    lead_name: Optional[str] = None
-    product_name: Optional[str] = None
     created_at: datetime
+    lead_name: Optional[str] = None
+    campaign_name: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -113,11 +117,15 @@ class BlandWebhookPayload(BaseModel):
     corrected_duration: str
     analysis: dict
 
+class CampaignType(str, Enum):
+    EMAIL = 'email'
+    CALL = 'call'
+
 class EmailCampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
-    email_subject: str
-    email_body: str
+    type: CampaignType = CampaignType.EMAIL
+    product_id: UUID
 
 class EmailCampaignCreate(EmailCampaignBase):
     pass

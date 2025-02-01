@@ -65,9 +65,9 @@ CREATE TABLE IF NOT EXISTS leads (
 -- Calls table
 CREATE TABLE IF NOT EXISTS calls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID REFERENCES companies(id),
     lead_id UUID REFERENCES leads(id),
     product_id UUID REFERENCES products(id),
+    campaign_id UUID REFERENCES campaigns(id),
     duration INTEGER,
     sentiment TEXT,
     summary TEXT,
@@ -76,20 +76,24 @@ CREATE TABLE IF NOT EXISTS calls (
 );
 
 -- Email Campaigns table
-CREATE TABLE IF NOT EXISTS email_campaigns (
+CREATE TABLE IF NOT EXISTS campaigns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     description TEXT,
     company_id UUID REFERENCES companies(id),
-    email_subject TEXT NOT NULL,
-    email_body TEXT NOT NULL,
+    product_id UUID REFERENCES products(id),
+    type TEXT NOT NULL DEFAULT 'email',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add comment to explain the column usage
+COMMENT ON COLUMN campaigns.type IS 'Type of campaign (e.g., email, call, etc.)';
+COMMENT ON COLUMN campaigns.product_id IS 'Reference to the product associated with this campaign';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    campaign_id UUID REFERENCES email_campaigns(id),
+    campaign_id UUID REFERENCES campaigns(id),
     lead_id UUID REFERENCES leads(id),
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
