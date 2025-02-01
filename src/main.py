@@ -750,14 +750,24 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 @app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB])
 async def get_company_calls(
     company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Get all calls for a company, optionally filtered by campaign ID.
+    """
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_calls_by_company_id(company_id)
+    # If campaign_id is provided, validate it belongs to the company
+    if campaign_id:
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign or str(campaign["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    return await get_calls_by_company_id(company_id, campaign_id)
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB)
 async def create_company_campaign(

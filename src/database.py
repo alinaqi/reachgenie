@@ -182,11 +182,18 @@ async def get_calls_by_companies(company_ids: List[str]):
     
     return unique_calls 
 
-async def get_calls_by_company_id(company_id: UUID):
-    # Get calls with their related data
-    response = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,leads(*),products(*)'
-    ).eq('company_id', str(company_id)).order('created_at', desc=True).execute()
+async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
+    # Start with base query
+    query = supabase.table('calls').select(
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,campaign_id,leads(*),products(*),campaigns!inner(*)'
+    ).eq('campaigns.company_id', str(company_id))
+    
+    # Add campaign filter if provided
+    if campaign_id:
+        query = query.eq('campaign_id', str(campaign_id))
+    
+    # Execute query with ordering
+    response = query.order('created_at', desc=True).execute()
     
     # Add lead_name and product_name to each call record
     calls = []
@@ -195,7 +202,7 @@ async def get_calls_by_company_id(company_id: UUID):
         call['product_name'] = call['products']['product_name'] if call.get('products') else None
         calls.append(call)
     
-    return calls 
+    return calls
 
 async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email'):
     campaign_data = {
