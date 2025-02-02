@@ -359,4 +359,13 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     message: str
+
+class EmailLogResponse(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    lead_id: UUID
+    sent_at: datetime
+    campaign_name: Optional[str] = None
+    lead_name: Optional[str] = None
+    lead_email: Optional[str] = None
  

@@ -57,7 +57,8 @@ from src.database import (
     update_task_status,
     get_task_status,
     update_company_account_credentials,
-    update_user
+    update_user,
+    get_company_email_logs
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -70,7 +71,7 @@ from src.models import (
     AccountCredentialsUpdate, UserUpdate, UserInDB,
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
-    ResetPasswordRequest, ResetPasswordResponse
+    ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -801,11 +802,43 @@ async def get_company_campaigns(
     current_user: dict = Depends(get_current_user)
 ):
     # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+    company = await get_company_by_id(company_id)
+    if not company or company['user_id'] != current_user['id']:
         raise HTTPException(status_code=404, detail="Company not found")
-    
     return await get_campaigns_by_company(company_id)
+
+@app.get("/api/companies/{company_id}/emails", response_model=List[EmailLogResponse])
+async def get_company_emails(
+    company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all email logs for a company, optionally filtered by campaign ID
+    """
+    # Validate company access
+    company = await get_company_by_id(company_id)
+    if not company or company['user_id'] != current_user['id']:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Get email logs
+    email_logs = await get_company_email_logs(company_id, campaign_id)
+    
+    # Transform the response to match EmailLogResponse model
+    transformed_logs = []
+    for log in email_logs:
+        transformed_log = {
+            'id': log['id'],
+            'campaign_id': log['campaign_id'],
+            'lead_id': log['lead_id'],
+            'sent_at': log['sent_at'],
+            'campaign_name': log['campaigns']['name'] if log['campaigns'] else None,
+            'lead_name': log['leads']['name'] if log['leads'] else None,
+            'lead_email': log['leads']['email'] if log['leads'] else None
+        }
+        transformed_logs.append(transformed_log)
+    
+    return transformed_logs
 
 @app.get("/api/campaigns/{campaign_id}", response_model=EmailCampaignInDB)
 async def get_campaign(
