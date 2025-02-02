@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field
+from typing import Optional
 
 class Settings(BaseSettings):
     jwt_secret_key: str
@@ -24,11 +25,11 @@ class Settings(BaseSettings):
     mailjet_api_secret: str
     mailjet_sender_email: str
     mailjet_sender_name: str = "Outbound AI"  # Default sender name
-    mailjet_webhook_secret: str
-    mailjet_parse_email: str
+    mailjet_webhook_secret: Optional[str] = None
+    mailjet_parse_email: Optional[str] = None
     
     # Calendar settings
-    calendly_username: str
+    calendly_username: Optional[str] = None
     
     frontend_url: str = "http://localhost:3000"  # Default frontend URL
 
