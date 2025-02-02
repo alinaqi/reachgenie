@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     mailjet_sender_email: str
     mailjet_sender_name: str = "Outbound AI"  # Default sender name
     frontend_url: str = "http://localhost:3000"  # Default frontend URL
+    bland_tool_secret: str
 
     class Config:
         env_file = ".env"

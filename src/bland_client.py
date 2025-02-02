@@ -64,4 +64,78 @@ class BlandClient:
             if response.status_code != 200:
                 raise Exception(f"Bland API error: {response.text}")
                 
+            return response.json()
+
+    async def create_book_appointment_tool(self) -> Dict:
+        """
+        Create a custom tool in Bland AI for booking appointments.
+        This tool will be used to handle appointment scheduling during calls.
+        
+        Returns:
+            Dict containing the created tool details
+        """
+        tool_definition = {
+            "name": "book_appointment",
+            "description": "Book an appointment with the prospect",
+            "speech": "Perfect, I'll schedule that right now, give me just a second.",
+            "url": f"{self.webhook_base_url}/api/calls/book-appointment",
+            "method": "POST",
+            "headers": {
+                "Authorization": "Bearer {{bland_secret_key}}",
+                "Content-Type": "application/json"
+            },
+            "body": {
+                "company_uuid": "{{input.company_uuid}}",
+                "email": "{{input.email}}",
+                "start_time": "{{input.start_time}}",
+                "email_subject": "{{input.email_subject}}"
+            },
+            "input_schema": {
+                "example": {
+                    "company_uuid": "47d4d240-7318-4db0-80hy-b7cd70c50cd4",
+                    "email": "johndoe@gmail.com",
+                    "start_time": "2024-01-01T00:00:00Z",
+                    "email_subject": "Sales Discussion"
+                },
+                "type": "object",
+                "properties": {
+                    "company_uuid": {
+                        "type": "string",
+                        "description": "UUID of the company"
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the lead/prospect",
+                        "format": "email"
+                    },
+                    "start_time": {
+                        "type": "datetime",
+                        "description": "Start date and time of the appointment in ISO 8601 format"
+                    },
+                    "email_subject": {
+                        "type": "string",
+                        "description": "Subject line of the email"
+                    }
+                },
+                "required": ["company_uuid", "email", "start_time", "email_subject"]
+            },
+            "response": {
+                "appointment_booked": "$.message",
+            },
+            "timeout": 20000 # 20 seconds timeout
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/v1/tools",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json=tool_definition
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to create Bland AI tool: {response.text}")
+                
             return response.json() 

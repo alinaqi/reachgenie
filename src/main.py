@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -17,6 +17,7 @@ from pydantic import BaseModel, EmailStr
 from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password
@@ -80,6 +81,7 @@ import secrets
 from src.services.perplexity_service import perplexity_service
 import os
 from src.utils.file_parser import FileParser
+from src.utils.calendar_utils import book_appointment as calendar_book_appointment
 
 # Configure logger
 logging.basicConfig(
@@ -91,6 +93,12 @@ logger = logging.getLogger(__name__)
 class TaskResponse(BaseModel):
     task_id: UUID
     message: str
+
+class BookAppointmentRequest(BaseModel):
+    company_uuid: UUID
+    email: str
+    start_time: datetime
+    email_subject: str
 
 app = FastAPI(
     title="Outbound AI SDR API",
@@ -1758,3 +1766,32 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
     except Exception as e:
         logger.error(f"Failed to generate call script: {str(e)}")
         return None
+
+async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
+    """Verify the Bland tool secret token"""
+    
+    token = credentials.credentials
+    
+    if token != settings.bland_tool_secret:
+        raise HTTPException(status_code=401, detail="Invalid secret token")
+
+@app.post("/api/calls/book-appointment")
+async def book_appointment(
+    request: BookAppointmentRequest,
+    _: None = Depends(verify_bland_token)
+):
+    """
+    Endpoint for Bland AI's book appointment tool.
+    Requires Bearer token authentication.
+    """
+    try:
+        await calendar_book_appointment(
+            company_id=request.company_uuid,
+            email=request.email,
+            start_time=request.start_time,
+            email_subject=request.email_subject
+        )
+        return {"message": "Appointment booked successfully"}
+    except Exception as e:
+        logger.error(f"Failed to book appointment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
