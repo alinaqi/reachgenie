@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     mailjet_api_secret: str
     mailjet_sender_email: str
     mailjet_sender_name: str = "Outbound AI"  # Default sender name
+    mailjet_webhook_secret: str
+    mailjet_parse_email: str
+    
+    # Calendar settings
+    calendly_username: str
+    
     frontend_url: str = "http://localhost:3000"  # Default frontend URL
 
     class Config:
