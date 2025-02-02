@@ -216,8 +216,23 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
 
-async def get_campaigns_by_company(company_id: UUID):
-    response = supabase.table('campaigns').select('*').eq('company_id', str(company_id)).execute()
+async def get_campaigns_by_company(company_id: UUID, campaign_type: Optional[str] = None):
+    """
+    Get campaigns for a company, optionally filtered by type
+    
+    Args:
+        company_id: UUID of the company
+        campaign_type: Optional type filter ('email', 'call', or None for all)
+        
+    Returns:
+        List of campaigns
+    """
+    query = supabase.table('campaigns').select('*').eq('company_id', str(company_id))
+    
+    if campaign_type and campaign_type != 'all':
+        query = query.eq('type', campaign_type)
+    
+    response = query.execute()
     return response.data
 
 async def get_campaign_by_id(campaign_id: UUID):
@@ -522,4 +537,29 @@ async def mark_user_as_verified(user_id: UUID):
 async def get_user_by_id(user_id: UUID):
     """Get user by ID from the database"""
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
-    return response.data[0] if response.data else None 
+    return response.data[0] if response.data else None
+
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None):
+    """
+    Get email logs for a company, optionally filtered by campaign_id
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter by
+        
+    Returns:
+        List of email logs with campaign and lead information
+    """
+    query = supabase.table('email_logs')\
+        .select(
+            'id, campaign_id, lead_id, sent_at, ' +
+            'campaigns!inner(name, company_id), ' +  # Using inner join to ensure campaign exists
+            'leads(name, email)'
+        )\
+        .eq('campaigns.company_id', str(company_id))  # Filter by company_id in the join
+    
+    if campaign_id:
+        query = query.eq('campaign_id', str(campaign_id))
+    
+    response = query.execute()
+    return response.data 
