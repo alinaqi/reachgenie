@@ -83,9 +83,17 @@ async def get_products_by_company(company_id: UUID):
     return response.data
 
 async def create_lead(company_id: UUID, lead_data: dict):
-    lead_data['company_id'] = str(company_id)
-    response = supabase.table('leads').insert(lead_data).execute()
-    return response.data[0]
+    try:
+        lead_data['company_id'] = str(company_id)
+        print("\nAttempting to insert lead with data:")
+        print(lead_data)
+        response = supabase.table('leads').insert(lead_data).execute()
+        print("\nDatabase response:")
+        print(response)
+        return response.data[0]
+    except Exception as e:
+        print(f"\nError in create_lead: {str(e)}")
+        raise e
 
 async def get_leads_by_company(company_id: UUID):
     response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
@@ -117,6 +125,38 @@ async def get_call_summary(call_id: UUID):
 async def get_lead_by_id(lead_id: UUID):
     response = supabase.table('leads').select('*').eq('id', str(lead_id)).execute()
     return response.data[0] if response.data else None
+
+async def delete_lead(lead_id: UUID) -> bool:
+    """
+    Delete a lead from the database and all related records in the correct order:
+    1. email_log_details
+    2. email_logs
+    3. lead
+    
+    Args:
+        lead_id: UUID of the lead to delete
+        
+    Returns:
+        bool: True if lead was deleted successfully, False otherwise
+    """
+    try:
+        # First get all email logs for this lead
+        email_logs = supabase.table('email_logs').select('id').eq('lead_id', str(lead_id)).execute()
+        
+        if email_logs.data:
+            # Delete all email_log_details for these email logs
+            for log in email_logs.data:
+                supabase.table('email_log_details').delete().eq('email_logs_id', str(log['id'])).execute()
+        
+        # Now delete the email logs
+        supabase.table('email_logs').delete().eq('lead_id', str(lead_id)).execute()
+        
+        # Finally delete the lead
+        response = supabase.table('leads').delete().eq('id', str(lead_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error deleting lead {lead_id}: {str(e)}")
+        return False
 
 async def get_product_by_id(product_id: UUID):
     response = supabase.table('products').select('*').eq('id', str(product_id)).execute()
