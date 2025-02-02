@@ -16,7 +16,9 @@ async def initiate_call(
     bland_client = BlandClient(
         api_key=settings.bland_api_key,
         base_url=settings.bland_api_url,
-        webhook_base_url=settings.webhook_base_url
+        webhook_base_url=settings.webhook_base_url,
+        bland_tool_id=settings.bland_tool_id,
+        bland_secret_key=settings.bland_secret_key
     )
     
     try:

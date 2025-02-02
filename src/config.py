@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     bland_api_key: str
     bland_api_url: str = "https://api.bland.ai"
     webhook_base_url: str
+    bland_tool_id: str
+    bland_secret_key: str
     encryption_key: str
     encryption_salt: str
     cronofy_client_id: str
