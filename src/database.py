@@ -41,7 +41,16 @@ async def update_user(user_id: UUID, update_data: dict):
     return response.data[0] if response.data else None
 
 async def get_companies_by_user_id(user_id: UUID):
-    response = supabase.table('companies').select('*').eq('user_id', str(user_id)).execute()
+    """
+    Get all non-deleted companies for a user
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        List of companies where deleted = FALSE
+    """
+    response = supabase.table('companies').select('*').eq('user_id', str(user_id)).eq('deleted', False).execute()
     return response.data
 
 async def db_create_company(
@@ -603,3 +612,20 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     
     response = query.execute()
     return response.data 
+
+async def soft_delete_company(company_id: UUID) -> bool:
+    """
+    Soft delete a company by setting deleted = TRUE
+    
+    Args:
+        company_id: UUID of the company to delete
+        
+    Returns:
+        bool: True if company was marked as deleted successfully, False otherwise
+    """
+    try:
+        response = supabase.table('companies').update({'deleted': True}).eq('id', str(company_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error soft deleting company {company_id}: {str(e)}")
+        return False 

@@ -59,7 +59,9 @@ from src.database import (
     get_task_status,
     update_company_account_credentials,
     update_user,
-    get_company_email_logs
+    get_company_email_logs,
+    delete_lead,
+    soft_delete_company
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -476,6 +478,37 @@ async def get_company(
     
     return company
 
+@app.delete("/api/companies/{company_id}", response_model=dict)
+async def delete_company(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Soft delete a company by setting deleted = TRUE
+    
+    Args:
+        company_id: UUID of the company to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        Dict with success message
+        
+    Raises:
+        404: Company not found
+        403: User doesn't have access to this company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Soft delete the company
+    success = await soft_delete_company(company_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete company")
+    
+    return {"status": "success", "message": "Company deleted successfully"}
+
 # Lead Management endpoints
 @app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse)
 async def upload_leads(
@@ -652,6 +685,47 @@ async def get_lead(
         "data": lead
     }
 
+@app.delete("/api/companies/{company_id}/leads/{lead_id}", response_model=dict)
+async def delete_lead_endpoint(
+    company_id: UUID,
+    lead_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a lead by ID.
+    
+    Args:
+        company_id: UUID of the company
+        lead_id: UUID of the lead to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        Dict with success message
+        
+    Raises:
+        404: Lead not found
+        403: User doesn't have access to this lead
+    """
+    # Get lead data first to verify ownership
+    lead = await get_lead_by_id(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check if lead belongs to the specified company
+    if str(lead["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Lead not found in this company")
+    
+    # Check if user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this company")
+    
+    # Delete the lead
+    success = await delete_lead(lead_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete lead")
+    
+    return {"status": "success", "message": "Lead deleted successfully"}
 
 # Calling functionality endpoints
 @app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB)
@@ -1141,7 +1215,7 @@ Database fields and their types:
 - last_name (text, required) - should be last name if available
 - email (text, required)
 - company (text) - Map from Company Name
-- phone_number (text, required) - Should use Mobile if available, else Direct, else Office
+- phone_number (text, required) - Should map from phone_number, mobile, direct_phone, or office_phone
 - company_size (text)
 - job_title (text)
 - lead_source (text)
@@ -1178,20 +1252,19 @@ Database fields and their types:
 - financials (jsonb)
 - company_founded_year (integer)
 - seniority (text)
-- first_name (text)
-- last_name (text)
 
 Special handling instructions:
 1. Map "First Name" and "Last Name" to first_name and last_name respectively
 2. Map "Company Name" to company
-3. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
-4. Map "Industries" to industries (will be converted to array)
-5. Map "Technologies" to technologies (will be converted to array)
-6. Map "Company Founded Year" to company_founded_year (will be converted to integer)
-7. Map "Headcount" to headcount (will be converted to integer)
+3. Map "phone_number" directly to phone_number field
+4. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
+5. Map "Industries" to industries (will be converted to array)
+6. Map "Technologies" to technologies (will be converted to array)
+7. Map "Company Founded Year" to company_founded_year (will be converted to integer)
+8. Map "Headcount" to headcount (will be converted to integer)
 
 Return ONLY a valid JSON object mapping CSV headers to database field names. If a header doesn't map to any field, map it to null.
-Example format: {{"First Name": "first_name", "Last Name": "last_name", "Unmatched Header": null}}"""
+Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_number": "phone_number", "Unmatched Header": null}}"""
 
         # Get header mapping from OpenAI
         response = await client.chat.completions.create(
@@ -1236,50 +1309,60 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "Unmatch
                         else:
                             lead_data[db_field] = value
             
-            # Handle name fields
+            # Add raw data for debugging
+            print("\nRaw row data:")
+            print(row)
+            print("\nMapped lead_data before name handling:")
+            print(lead_data)
+            
+            # Handle name fields - directly set name if it exists in row
+            if 'name' in row and row['name'].strip():
+                lead_data['name'] = row['name'].strip()
+            
+            # Rest of name handling
             first_name = lead_data.get('first_name', '').strip()
             last_name = lead_data.get('last_name', '').strip()
-            
-            # If name is already set but first_name/last_name are not, try to split it
-            if lead_data.get('name') and not (first_name or last_name):
-                name_parts = lead_data['name'].split(' ', 1)
+            full_name = lead_data.get('name', '').strip()
+
+            # If we have a full name but no first/last name, split it
+            if full_name and not (first_name or last_name):
+                name_parts = full_name.split(' ', 1)
                 if len(name_parts) >= 2:
                     first_name = name_parts[0].strip()
                     last_name = name_parts[1].strip()
-                else:
-                    first_name = name_parts[0].strip()
-                    last_name = ""
-            
+                
                 lead_data['first_name'] = first_name
                 lead_data['last_name'] = last_name
-            # If first_name/last_name are set but name is not, combine them
-            elif (first_name or last_name) and not lead_data.get('name'):
+            
+            # If we have first/last name but no full name, combine them
+            elif (first_name or last_name) and not full_name:
                 lead_data['name'] = f"{first_name} {last_name}".strip()
-                lead_data['first_name'] = first_name
-                lead_data['last_name'] = last_name
             
-            # Skip record if name is empty
+            # Ensure all name fields are set
             if not lead_data.get('name'):
+                lead_data['name'] = f"{first_name} {last_name}".strip()
+            if not lead_data.get('first_name'):
+                lead_data['first_name'] = first_name or (lead_data['name'].split(' ')[0] if lead_data.get('name') else '')
+            if not lead_data.get('last_name'):
+                lead_data['last_name'] = last_name or (' '.join(lead_data['name'].split(' ')[1:]) if lead_data.get('name') else '')
+
+            # Skip only if we have no name information at all
+            if not lead_data.get('name') and not lead_data.get('first_name') and not lead_data.get('last_name'):
+                print("\nSkipping record - no name information available")
                 logger.info(f"Skipping record due to missing name: {row}")
                 skipped_count += 1
                 continue
             
-            # Ensure first_name and last_name are always set
-            if not lead_data.get('first_name') and not lead_data.get('last_name'):
-                name_parts = lead_data['name'].split(' ', 1)
-                if len(name_parts) >= 2:
-                    lead_data['first_name'] = name_parts[0].strip()
-                    lead_data['last_name'] = name_parts[1].strip()
-                else:
-                    lead_data['first_name'] = name_parts[0].strip()
-                    lead_data['last_name'] = ""
-            
             # Handle phone number priority (Mobile > Direct > Office)
-            phone_number = lead_data.get('mobile', '').strip()
+            phone_number = lead_data.get('phone_number', '').strip()  # First try the direct phone_number field
+            if not phone_number:
+                phone_number = lead_data.get('mobile', '').strip()
             if not phone_number:
                 phone_number = lead_data.get('direct_phone', '').strip()
             if not phone_number:
                 phone_number = lead_data.get('office_phone', '').strip()
+            if not phone_number and 'phone_number' in row:  # Fallback to raw data if no phone number found
+                phone_number = row['phone_number'].strip()
             lead_data['phone_number'] = phone_number
             
             # Handle hiring positions
@@ -1326,12 +1409,15 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "Unmatch
             
             # Create the lead
             try:
+                print("\nFinal lead_data before database insert:")
                 print(lead_data)
-                await create_lead(company_id, lead_data)
+                created_lead = await create_lead(company_id, lead_data)
+                print("\nCreated lead response:")
+                print(created_lead)
                 lead_count += 1
             except Exception as e:
                 logger.error(f"Error creating lead: {str(e)}")
-                logger.error(f"Lead data: {lead_data}")
+                logger.error(f"Lead data that failed: {lead_data}")
                 skipped_count += 1
                 continue
         
@@ -1576,7 +1662,6 @@ async def run_email_campaign(campaign: dict, company: dict):
                     insights = await generate_company_insights(lead, perplexity_service)
                     if insights:
                         logger.info(f"Generated insights for lead: {lead['email']}")
-                        #logger.info(f"{insights}")
                         
                         # Generate personalized email content
                         subject, body = await generate_email_content(lead, campaign, company, insights)
@@ -1717,6 +1802,10 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
 
         Product Information:
         {product.get('description', 'Not available')}
+
+        Company Information (for signature):
+        - Company Name: {company.get('name')}.
+        - Email: {company.get('account_email', '')}
 
         Generate a call script for the lead. For the call script, create an outbound sales conversation following this format:
         
