@@ -538,10 +538,10 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     query = supabase.table('email_logs')\
         .select(
             'id, campaign_id, lead_id, sent_at, ' +
-            'campaigns(name), ' +
+            'campaigns!inner(name, company_id), ' +  # Using inner join to ensure campaign exists
             'leads(name, email)'
         )\
-        .eq('campaigns.company_id', str(company_id))
+        .eq('campaigns.company_id', str(company_id))  # Filter by company_id in the join
     
     if campaign_id:
         query = query.eq('campaign_id', str(campaign_id))
