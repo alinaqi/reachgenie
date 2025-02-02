@@ -195,10 +195,11 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     # Execute query with ordering
     response = query.order('created_at', desc=True).execute()
     
-    # Add lead_name and campaign_name to each call record
+    # Add lead_name, lead_phone_number and campaign_name to each call record
     calls = []
     for call in response.data:
         call['lead_name'] = call['leads']['name'] if call.get('leads') else None
+        call['lead_phone_number'] = call['leads']['phone_number'] if call.get('leads') else None
         call['campaign_name'] = call['campaigns']['name'] if call.get('campaigns') else None
         calls.append(call)
     

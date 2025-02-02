@@ -102,6 +102,7 @@ class CallInDB(BaseModel):
     bland_call_id: Optional[str] = None
     created_at: datetime
     lead_name: Optional[str] = None
+    lead_phone_number: Optional[str] = None
     campaign_name: Optional[str] = None
 
 class Token(BaseModel):
