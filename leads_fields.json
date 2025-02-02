@@ -1,0 +1,257 @@
+[
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "uuid",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "phone_number",
+      "data_type": "text",
+      "is_nullable": "NO"
+    },
+    {
+      "column_name": "company_size",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "job_title",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_facebook",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_twitter",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_revenue",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "lead_source",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "education",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "personal_linkedin_url",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "country",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "city",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "state",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "mobile",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "direct_phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "office_phone",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "hq_location",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "website",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "headcount",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "industries",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "department",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "sic_code",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "isic_code",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "naics_code",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_city",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_zip",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_state",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_country",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_hq_address",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_hq_city",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_hq_zip",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_hq_state",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_hq_country",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_linkedin_url",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_type",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_description",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "technologies",
+      "data_type": "ARRAY",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "financials",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "company_founded_year",
+      "data_type": "integer",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "seniority",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "hiring_positions",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "location_move",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "job_change",
+      "data_type": "jsonb",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "first_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    },
+    {
+      "column_name": "last_name",
+      "data_type": "text",
+      "is_nullable": "YES"
+    }
+  ]
