@@ -1772,7 +1772,7 @@ async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends
     
     token = credentials.credentials
     
-    if token != settings.bland_tool_secret:
+    if token != settings.bland_secret_key:
         raise HTTPException(status_code=401, detail="Invalid secret token")
 
 @app.post("/api/calls/book-appointment")
