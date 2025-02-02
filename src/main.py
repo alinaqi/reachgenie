@@ -799,13 +799,22 @@ async def create_company_campaign(
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB])
 async def get_company_campaigns(
     company_id: UUID,
+    type: str = Query('all', description="Filter campaigns by type: 'email', 'call', or 'all'"),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Get all campaigns for a company, optionally filtered by type
+    """
+    # Validate campaign type
+    if type not in ['email', 'call', 'all']:
+        raise HTTPException(status_code=400, detail="Invalid campaign type. Must be 'email', 'call', or 'all'")
+    
     # Validate company access
     company = await get_company_by_id(company_id)
     if not company or company['user_id'] != current_user['id']:
         raise HTTPException(status_code=404, detail="Company not found")
-    return await get_campaigns_by_company(company_id)
+    
+    return await get_campaigns_by_company(company_id, type)
 
 @app.get("/api/companies/{company_id}/emails", response_model=List[EmailLogResponse])
 async def get_company_emails(

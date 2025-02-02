@@ -216,8 +216,23 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
 
-async def get_campaigns_by_company(company_id: UUID):
-    response = supabase.table('campaigns').select('*').eq('company_id', str(company_id)).execute()
+async def get_campaigns_by_company(company_id: UUID, campaign_type: Optional[str] = None):
+    """
+    Get campaigns for a company, optionally filtered by type
+    
+    Args:
+        company_id: UUID of the company
+        campaign_type: Optional type filter ('email', 'call', or None for all)
+        
+    Returns:
+        List of campaigns
+    """
+    query = supabase.table('campaigns').select('*').eq('company_id', str(company_id))
+    
+    if campaign_type and campaign_type != 'all':
+        query = query.eq('type', campaign_type)
+    
+    response = query.execute()
     return response.data
 
 async def get_campaign_by_id(campaign_id: UUID):
