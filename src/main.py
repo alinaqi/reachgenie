@@ -1795,3 +1795,17 @@ async def book_appointment(
     except Exception as e:
         logger.error(f"Failed to book appointment: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/register-bland-tool")
+async def register_tool():
+    settings = get_settings()
+    bland_client = BlandClient(
+        api_key=settings.bland_api_key,
+        base_url=settings.bland_api_url,
+        webhook_base_url=settings.webhook_base_url,
+        bland_tool_id=settings.bland_tool_id,
+        bland_secret_key=settings.bland_secret_key
+    )
+
+    tool = await bland_client.create_book_appointment_tool()
+    logger.info(f"Tool registered: {tool}")

@@ -2,10 +2,12 @@ import httpx
 from typing import Dict
 
 class BlandClient:
-    def __init__(self, api_key: str, base_url: str = "https://api.bland.ai", webhook_base_url: str = "http://localhost:8000"):
+    def __init__(self, api_key: str, base_url: str = "https://api.bland.ai", webhook_base_url: str = "http://localhost:8000", bland_tool_id: str = None, bland_secret_key: str = None):
         self.api_key = api_key
         self.base_url = base_url
         self.webhook_base_url = webhook_base_url
+        self.bland_tool_id = bland_tool_id
+        self.bland_secret_key = bland_secret_key
 
     async def start_call(self, phone_number: str, script: str) -> Dict:
         """
@@ -50,8 +52,12 @@ class BlandClient:
                 json={
                     "phone_number": phone_number,
                     "task": script,
-                    "voice": "josh",
+                    "voice": "Florian",
                     "model": "enhanced",
+                    "tools": [self.bland_tool_id],
+                    "request_data": {
+                        "bland_secret_key": self.bland_secret_key
+                    },
                     "webhook": f"{self.webhook_base_url}/api/calls/webhook",
                     "analysis_prompt": analysis_prompt,
                     "analysis_schema": {
