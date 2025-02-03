@@ -48,4 +48,5 @@ async def initiate_call(
         return call
         
     except Exception as e:
-        raise Exception("Failed to initiate call")
+        logger.error(f"Failed to initiate call: {str(e)}")
+        raise Exception(f"Failed to initiate call: {str(e)}")
