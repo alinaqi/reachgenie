@@ -9,13 +9,14 @@ class BlandClient:
         self.bland_tool_id = bland_tool_id
         self.bland_secret_key = bland_secret_key
 
-    async def start_call(self, phone_number: str, script: str) -> Dict:
+    async def start_call(self, phone_number: str, script: str, request_data: Dict = None) -> Dict:
         """
         Start an automated call using Bland AI
         
         Args:
             phone_number: The phone number to call
             script: The script for the AI to follow
+            request_data: Optional dictionary containing additional data for tools
             
         Returns:
             Dict containing the call details including call_id
@@ -42,6 +43,14 @@ class BlandClient:
         - Sentiment must ALWAYS be either 'positive' or 'negative', never null or empty
         """
 
+        # Prepare request data with bland_secret_key
+        call_request_data = {
+            "bland_secret_key": self.bland_secret_key
+        }
+        # Update with additional request data if provided
+        if request_data:
+            call_request_data.update(request_data)
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/v1/calls",
@@ -55,9 +64,7 @@ class BlandClient:
                     "voice": "Florian",
                     "model": "enhanced",
                     "tools": [self.bland_tool_id],
-                    "request_data": {
-                        "bland_secret_key": self.bland_secret_key
-                    },
+                    "request_data": call_request_data,
                     "webhook": f"{self.webhook_base_url}/api/calls/webhook",
                     "analysis_prompt": analysis_prompt,
                     "analysis_schema": {

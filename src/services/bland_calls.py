@@ -22,9 +22,17 @@ async def initiate_call(
     )
     
     try:
+        # Prepare request data for the call
+        request_data = {
+            "company_uuid": str(campaign['company_id']),
+            "email": lead['email'],
+            "email_subject": "Meeting with " + lead['name']  # You can customize this subject
+        }
+
         bland_response = await bland_client.start_call(
             phone_number=lead['phone_number'],
-            script=call_script
+            script=call_script,
+            request_data=request_data
         )
         
         logger.info(f"Bland Call ID: {bland_response['call_id']}")
