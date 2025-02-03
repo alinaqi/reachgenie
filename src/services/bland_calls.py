@@ -2,7 +2,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call
+from src.database import create_call, get_product_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +22,16 @@ async def initiate_call(
     )
     
     try:
+        # Get product details for email subject
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            raise Exception("Product not found")
+
         # Prepare request data for the call
         request_data = {
             "company_uuid": str(campaign['company_id']),
             "email": lead['email'],
-            "email_subject": "Meeting with " + lead['name']  # You can customize this subject
+            "email_subject": f"'{product['product_name']}' Discovery Call – Exclusive Insights for You!"
         }
 
         bland_response = await bland_client.start_call(
