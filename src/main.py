@@ -61,7 +61,8 @@ from src.database import (
     update_user,
     get_company_email_logs,
     delete_lead,
-    soft_delete_company
+    soft_delete_company,
+    get_email_conversation_history
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -74,7 +75,8 @@ from src.models import (
     AccountCredentialsUpdate, UserUpdate, UserInDB,
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
-    ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse
+    ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
+    EmailLogDetailResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -1898,3 +1900,33 @@ async def register_tool():
 
     tool = await bland_client.create_book_appointment_tool()
     logger.info(f"Tool registered: {tool}")
+
+@app.get("/api/companies/{company_id}/emails/{email_log_id}", response_model=List[EmailLogDetailResponse])
+async def get_email_log_details(
+    company_id: UUID,
+    email_log_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all email messages for a specific email log in ascending order.
+    
+    Args:
+        company_id: UUID of the company
+        email_log_id: UUID of the email log
+        current_user: Current authenticated user
+        
+    Returns:
+        List of email log details ordered by creation time
+        
+    Raises:
+        404: Company not found or user doesn't have access
+    """
+    # Validate company access
+    company = await get_company_by_id(company_id)
+    if not company or company['user_id'] != current_user['id']:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get email log details
+    email_details = await get_email_conversation_history(email_log_id)
+    
+    return email_details

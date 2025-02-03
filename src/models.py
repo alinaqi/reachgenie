@@ -368,4 +368,15 @@ class EmailLogResponse(BaseModel):
     campaign_name: Optional[str] = None
     lead_name: Optional[str] = None
     lead_email: Optional[str] = None
+
+class EmailLogDetailResponse(BaseModel):
+    message_id: Optional[str]
+    email_subject: Optional[str]
+    email_body: Optional[str]
+    sender_type: str
+    sent_at: datetime
+    created_at: datetime
+    from_name: Optional[str]
+    from_email: Optional[str]
+    to_email: Optional[str]
  
