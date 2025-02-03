@@ -89,8 +89,17 @@ class BlandClient:
         """
         tool_definition = {
             "name": "book_appointment",
-            "description": "Book an appointment with the prospect",
-            "speech": "Perfect, I'll schedule that right now, give me just a second.",
+            "description": """Use this tool to schedule a meeting when the prospect agrees to book an appointment or meeting. 
+            This tool will create a calendar event.
+            Call this tool when:
+            - The prospect explicitly agrees to schedule a meeting
+            - You need to book a specific time slot for a meeting
+            - The prospect wants to schedule a demo or consultation
+            Do not use this tool if:
+            - The prospect hasn't agreed to a meeting
+            - The prospect is unsure or needs more time
+            - You haven't discussed timing for the meeting""",
+            "speech": "I'll help you schedule that meeting right now. I'll send you a calendar invitation to your email so you'll have all the details.",
             "url": f"{self.webhook_base_url}/api/calls/book-appointment",
             "method": "POST",
             "headers": {
@@ -118,16 +127,16 @@ class BlandClient:
                     },
                     "email": {
                         "type": "string",
-                        "description": "Email address of the lead/prospect",
+                        "description": "Email address of the prospect",
                         "format": "email"
                     },
                     "start_time": {
                         "type": "datetime",
-                        "description": "Start date and time of the appointment in ISO 8601 format"
+                        "description": "The agreed upon meeting time in ISO 8601 format (e.g., 2024-01-01T10:00:00Z). Ask the prospect for their preferred date and time."
                     },
                     "email_subject": {
                         "type": "string",
-                        "description": "Subject line of the email"
+                        "description": "Subject line for the calendar invitation"
                     }
                 },
                 "required": ["company_uuid", "email", "start_time", "email_subject"]
