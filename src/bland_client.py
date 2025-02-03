@@ -1,5 +1,7 @@
 import httpx
 from typing import Dict
+import logging
+logger = logging.getLogger(__name__)
 
 class BlandClient:
     def __init__(self, api_key: str, base_url: str = "https://api.bland.ai", webhook_base_url: str = "http://localhost:8000", bland_tool_id: str = None, bland_secret_key: str = None):
@@ -50,6 +52,8 @@ class BlandClient:
         # Update with additional request data if provided
         if request_data:
             call_request_data.update(request_data)
+
+        logger.info(f"Call request data: {call_request_data}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
