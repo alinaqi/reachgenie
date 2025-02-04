@@ -2,7 +2,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call, get_product_by_id
+from src.database import create_call, get_product_by_id, get_company_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,11 @@ async def initiate_call(
         if not product:
             raise Exception("Product not found")
 
+        # Get company details
+        company = await get_company_by_id(campaign['company_id'])
+        if not company:
+            raise Exception("Company not found")
+
         # Prepare request data for the call
         request_data = {
             "company_uuid": str(campaign['company_id']),
@@ -37,7 +42,8 @@ async def initiate_call(
         bland_response = await bland_client.start_call(
             phone_number=lead['phone_number'],
             script=call_script,
-            request_data=request_data
+            request_data=request_data,
+            company=company
         )
         
         logger.info(f"Bland Call ID: {bland_response['call_id']}")

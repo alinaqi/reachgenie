@@ -11,7 +11,7 @@ class BlandClient:
         self.bland_tool_id = bland_tool_id
         self.bland_secret_key = bland_secret_key
 
-    async def start_call(self, phone_number: str, script: str, request_data: Dict = None) -> Dict:
+    async def start_call(self, phone_number: str, script: str, request_data: Dict = None, company: Dict = None) -> Dict:
         """
         Start an automated call using Bland AI
         
@@ -19,6 +19,7 @@ class BlandClient:
             phone_number: The phone number to call
             script: The script for the AI to follow
             request_data: Optional dictionary containing additional data for tools
+            company: Company object containing company details
             
         Returns:
             Dict containing the call details including call_id
@@ -53,6 +54,11 @@ class BlandClient:
         if request_data:
             call_request_data.update(request_data)
 
+        # Add company voice agent settings if available
+        voice = "Florian"
+        if company and company.get('voice_agent_settings'):
+            voice = company['voice_agent_settings'].get('voice', voice)
+
         logger.info(f"Call request data: {call_request_data}")
 
         async with httpx.AsyncClient() as client:
@@ -65,7 +71,7 @@ class BlandClient:
                 json={
                     "phone_number": phone_number,
                     "task": script,
-                    "voice": "Florian",
+                    "voice": voice,
                     "model": "enhanced",
                     "tools": [self.bland_tool_id],
                     "request_data": call_request_data,
