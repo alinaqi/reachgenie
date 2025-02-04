@@ -1792,6 +1792,33 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         if not product:
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
+
+        # Default agent name
+        agent_name = "Alex"
+
+        # If company has voice_agent_settings with a prompt, try to extract agent name
+        if company.get('voice_agent_settings') and company['voice_agent_settings'].get('prompt'):
+            # Ask OpenAI to extract the agent name from the prompt
+            name_extraction_response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an AI that extracts the sales agent's name from a prompt. Return ONLY the name, nothing else. If no name is found, return 'Alex'."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Extract the sales agent's name from this sentence: {company['voice_agent_settings']['prompt']}"
+                    }
+                ],
+                temperature=0.0,
+                max_tokens=100
+            )
+            
+            extracted_name = name_extraction_response.choices[0].message.content.strip()
+            if extracted_name and extracted_name != "Alex":
+                agent_name = extracted_name
+                logger.info(f"Extracted agent name from prompt: {agent_name}")
         
         # Construct the prompt with lead and campaign information
         prompt = f"""
@@ -1812,10 +1839,10 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
 
         Generate a call script for the lead. For the call script, create an outbound sales conversation following this format:
         
-        Your name is Alex, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
+        Your name is {agent_name}, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
 
         The script should:
-        - Start with: "Hello this Alex, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
+        - Start with: "Hello this is {agent_name}, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
         - Focus on understanding their current solution and pain points
         - Share relevant benefits based on their industry
         - Include natural back-and-forth dialogue with example prospect responses
@@ -1824,9 +1851,9 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Use the company insights and analysis to make the conversation specific to their business
 
         Format the conversation as:
-        Alex: [what Alex says]
+        {agent_name}: [what {agent_name} says]
         Prospect: [likely response]
-        Alex: [Alex's response]
+        {agent_name}: [{agent_name}'s response]
         [etc.]
 
         Return the conversation in plain text format, with each line of dialogue on a new line.
