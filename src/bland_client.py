@@ -59,7 +59,8 @@ class BlandClient:
         language = "en"
         background_track = "none"
         temperature = 0.7
-        final_script = script
+        final_script = f"Your name is Alex, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
+        
 
         if company and company.get('voice_agent_settings'):
             settings = company['voice_agent_settings']
