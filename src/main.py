@@ -62,7 +62,8 @@ from src.database import (
     get_company_email_logs,
     delete_lead,
     soft_delete_company,
-    get_email_conversation_history
+    get_email_conversation_history,
+    update_company_voice_agent_settings
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -76,7 +77,7 @@ from src.models import (
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
-    EmailLogDetailResponse
+    EmailLogDetailResponse, VoiceAgentSettings
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -1791,6 +1792,33 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         if not product:
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
+
+        # Default agent name
+        agent_name = "Alex"
+
+        # If company has voice_agent_settings with a prompt, try to extract agent name
+        if company.get('voice_agent_settings') and company['voice_agent_settings'].get('prompt'):
+            # Ask OpenAI to extract the agent name from the prompt
+            name_extraction_response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an AI that extracts the sales agent's name from a prompt. Return ONLY the name, nothing else. If no name is found, return 'Alex'."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Extract the sales agent's name from this sentence: {company['voice_agent_settings']['prompt']}"
+                    }
+                ],
+                temperature=0.0,
+                max_tokens=100
+            )
+            
+            extracted_name = name_extraction_response.choices[0].message.content.strip()
+            if extracted_name and extracted_name != "Alex":
+                agent_name = extracted_name
+                logger.info(f"Extracted agent name from prompt: {agent_name}")
         
         # Construct the prompt with lead and campaign information
         prompt = f"""
@@ -1811,10 +1839,10 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
 
         Generate a call script for the lead. For the call script, create an outbound sales conversation following this format:
         
-        Your name is Alex, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
+        Your name is {agent_name}, and you're a sales agent working for {company.get('name')}. You are making an outbound call to a prospect/lead.
 
         The script should:
-        - Start with: "Hello this Alex, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
+        - Start with: "Hello this is {agent_name}, I am calling on behalf of {company.get('name')}. Do you have a bit of time?"
         - Focus on understanding their current solution and pain points
         - Share relevant benefits based on their industry
         - Include natural back-and-forth dialogue with example prospect responses
@@ -1823,9 +1851,9 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Use the company insights and analysis to make the conversation specific to their business
 
         Format the conversation as:
-        Alex: [what Alex says]
+        {agent_name}: [what {agent_name} says]
         Prospect: [likely response]
-        Alex: [Alex's response]
+        {agent_name}: [{agent_name}'s response]
         [etc.]
 
         Return the conversation in plain text format, with each line of dialogue on a new line.
@@ -1930,3 +1958,43 @@ async def get_email_log_details(
     email_details = await get_email_conversation_history(email_log_id)
     
     return email_details
+
+@app.put("/api/companies/{company_id}/voice_agent_settings", response_model=CompanyInDB)
+async def update_voice_agent_settings(
+    company_id: UUID,
+    settings: VoiceAgentSettings,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update voice agent settings for a company. This will replace the entire voice_agent_settings object.
+    
+    Args:
+        company_id: UUID of the company
+        settings: Complete voice agent settings to replace existing settings
+        current_user: Current authenticated user
+        
+    Returns:
+        Updated company record
+        
+    Raises:
+        404: Company not found
+        403: User doesn't have access to this company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Update voice agent settings
+    updated_company = await update_company_voice_agent_settings(
+        company_id=company_id,
+        settings=settings.model_dump()
+    )
+    
+    if not updated_company:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update voice agent settings"
+        )
+    
+    return updated_company

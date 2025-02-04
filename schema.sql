@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS companies (
     cronofy_default_calendar_id TEXT,
     cronofy_default_calendar_name TEXT,
     last_email_processed_at TIMESTAMP WITH TIME ZONE,
+    voice_agent_settings JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
