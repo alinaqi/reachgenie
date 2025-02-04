@@ -56,10 +56,24 @@ class BlandClient:
 
         # Add company voice agent settings if available
         voice = "Florian"
+        language = "en"
+        background_track = "none"
+        temperature = 0.7
+        final_script = script
+
         if company and company.get('voice_agent_settings'):
-            voice = company['voice_agent_settings'].get('voice', voice)
+            settings = company['voice_agent_settings']
+            voice = settings.get('voice', voice)
+            language = settings.get('language', language)
+            background_track = settings.get('background_track', background_track)
+            temperature = settings.get('temperature', temperature)
+            
+            # Prepend the prompt if available
+            if settings.get('prompt'):
+                final_script = f"{settings['prompt']}\n\n{script}"
 
         logger.info(f"Call request data: {call_request_data}")
+        logger.info(f"Final script: {final_script}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -70,8 +84,11 @@ class BlandClient:
                 },
                 json={
                     "phone_number": phone_number,
-                    "task": script,
+                    "task": final_script,
                     "voice": voice,
+                    "language": language,
+                    "background_track": background_track,
+                    "temperature": temperature,
                     "model": "enhanced",
                     "tools": [self.bland_tool_id],
                     "request_data": call_request_data,
