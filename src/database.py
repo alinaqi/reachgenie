@@ -629,3 +629,23 @@ async def soft_delete_company(company_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error soft deleting company {company_id}: {str(e)}")
         return False 
+
+async def update_company_voice_agent_settings(company_id: UUID, settings: dict) -> Optional[dict]:
+    """
+    Update voice agent settings for a company
+    
+    Args:
+        company_id: UUID of the company
+        settings: Dictionary containing voice agent settings
+        
+    Returns:
+        Updated company record or None if company not found
+    """
+    try:
+        response = supabase.table('companies').update({
+            'voice_agent_settings': settings
+        }).eq('id', str(company_id)).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating voice agent settings: {str(e)}")
+        return None 

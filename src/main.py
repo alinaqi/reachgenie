@@ -62,7 +62,8 @@ from src.database import (
     get_company_email_logs,
     delete_lead,
     soft_delete_company,
-    get_email_conversation_history
+    get_email_conversation_history,
+    update_company_voice_agent_settings
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -76,7 +77,7 @@ from src.models import (
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
-    EmailLogDetailResponse
+    EmailLogDetailResponse, VoiceAgentSettings
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -1930,3 +1931,43 @@ async def get_email_log_details(
     email_details = await get_email_conversation_history(email_log_id)
     
     return email_details
+
+@app.put("/api/companies/{company_id}/voice_agent_settings", response_model=CompanyInDB)
+async def update_voice_agent_settings(
+    company_id: UUID,
+    settings: VoiceAgentSettings,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update voice agent settings for a company. This will replace the entire voice_agent_settings object.
+    
+    Args:
+        company_id: UUID of the company
+        settings: Complete voice agent settings to replace existing settings
+        current_user: Current authenticated user
+        
+    Returns:
+        Updated company record
+        
+    Raises:
+        404: Company not found
+        403: User doesn't have access to this company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Update voice agent settings
+    updated_company = await update_company_voice_agent_settings(
+        company_id=company_id,
+        settings=settings.model_dump()
+    )
+    
+    if not updated_company:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update voice agent settings"
+        )
+    
+    return updated_company

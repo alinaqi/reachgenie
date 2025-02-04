@@ -8,6 +8,81 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+class VoiceType(str, Enum):
+    JOSH = "josh"
+    FLORIAN = "florian"
+    DEREK = "derek"
+    JUNE = "june"
+    NAT = "nat"
+    PAIGE = "paige"
+
+class BackgroundTrackType(str, Enum):
+    OFFICE = "office"
+    CAFE = "cafe"
+    RESTAURANT = "restaurant"
+    NONE = "none"
+
+class LanguageCode(str, Enum):
+    EN = "en"
+    EN_US = "en-US"
+    EN_GB = "en-GB"
+    EN_AU = "en-AU"
+    EN_NZ = "en-NZ"
+    EN_IN = "en-IN"
+    ZH = "zh"
+    ZH_CN = "zh-CN"
+    ZH_HANS = "zh-Hans"
+    ZH_TW = "zh-TW"
+    ZH_HANT = "zh-Hant"
+    ES = "es"
+    ES_419 = "es-419"
+    FR = "fr"
+    FR_CA = "fr-CA"
+    DE = "de"
+    EL = "el"
+    HI = "hi"
+    HI_LATN = "hi-Latn"
+    JA = "ja"
+    KO = "ko"
+    KO_KR = "ko-KR"
+    PT = "pt"
+    PT_BR = "pt-BR"
+    IT = "it"
+    NL = "nl"
+    PL = "pl"
+    RU = "ru"
+    SV = "sv"
+    SV_SE = "sv-SE"
+    DA = "da"
+    DA_DK = "da-DK"
+    FI = "fi"
+    ID = "id"
+    MS = "ms"
+    TR = "tr"
+    UK = "uk"
+    BG = "bg"
+    CS = "cs"
+    RO = "ro"
+    SK = "sk"
+
+class VoiceAgentSettings(BaseModel):
+    prompt: str
+    voice: VoiceType
+    background_track: BackgroundTrackType
+    temperature: float = Field(ge=0.0, le=1.0)
+    language: LanguageCode
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "prompt": "You are {name}, a customer service agent at {company} calling {name} about {reason}",
+                "voice": "florian",
+                "background_track": "office",
+                "temperature": 0.7,
+                "language": "en-US"
+            }
+        }
+
 class UserBase(BaseModel):
     email: EmailStr
 
@@ -46,6 +121,7 @@ class CompanyBase(BaseModel):
     cronofy_linked_email: Optional[str] = None
     cronofy_default_calendar_name: Optional[str] = None
     cronofy_default_calendar_id: Optional[str] = None
+    voice_agent_settings: Optional[VoiceAgentSettings] = None
 
 class CompanyCreate(CompanyBase):
     pass
@@ -379,4 +455,79 @@ class EmailLogDetailResponse(BaseModel):
     from_name: Optional[str]
     from_email: Optional[str]
     to_email: Optional[str]
+
+class VoiceType(str, Enum):
+    JOSH = "josh"
+    FLORIAN = "florian"
+    DEREK = "derek"
+    JUNE = "june"
+    NAT = "nat"
+    PAIGE = "paige"
+
+class BackgroundTrackType(str, Enum):
+    OFFICE = "office"
+    CAFE = "cafe"
+    RESTAURANT = "restaurant"
+    NONE = "none"
+
+class LanguageCode(str, Enum):
+    EN = "en"
+    EN_US = "en-US"
+    EN_GB = "en-GB"
+    EN_AU = "en-AU"
+    EN_NZ = "en-NZ"
+    EN_IN = "en-IN"
+    ZH = "zh"
+    ZH_CN = "zh-CN"
+    ZH_HANS = "zh-Hans"
+    ZH_TW = "zh-TW"
+    ZH_HANT = "zh-Hant"
+    ES = "es"
+    ES_419 = "es-419"
+    FR = "fr"
+    FR_CA = "fr-CA"
+    DE = "de"
+    EL = "el"
+    HI = "hi"
+    HI_LATN = "hi-Latn"
+    JA = "ja"
+    KO = "ko"
+    KO_KR = "ko-KR"
+    PT = "pt"
+    PT_BR = "pt-BR"
+    IT = "it"
+    NL = "nl"
+    PL = "pl"
+    RU = "ru"
+    SV = "sv"
+    SV_SE = "sv-SE"
+    DA = "da"
+    DA_DK = "da-DK"
+    FI = "fi"
+    ID = "id"
+    MS = "ms"
+    TR = "tr"
+    UK = "uk"
+    BG = "bg"
+    CS = "cs"
+    RO = "ro"
+    SK = "sk"
+
+class VoiceAgentSettings(BaseModel):
+    prompt: str
+    voice: VoiceType
+    background_track: BackgroundTrackType
+    temperature: float = Field(ge=0.0, le=1.0)
+    language: LanguageCode
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "prompt": "You are {name}, a customer service agent at {company} calling {name} about {reason}",
+                "voice": "florian",
+                "background_track": "office",
+                "temperature": 0.7,
+                "language": "en-US"
+            }
+        }
  
