@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import csv
 import io
 import logging
+import bugsnag
 from typing import List, Optional
 from uuid import UUID
 from openai import AsyncOpenAI
@@ -95,6 +96,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Configure Bugsnag
+bugsnag.configure(
+    api_key=settings.bugsnag_api_key,
+    project_root="/",
+    release_stage=settings.environment,
+    asynchronous=True,
+    auto_capture_sessions=True
+)
+
 class TaskResponse(BaseModel):
     task_id: UUID
     message: str
@@ -165,7 +175,17 @@ async def signup(user: UserCreate):
         await email_service.send_verification_email(user.email, token)
         logger.info(f"Verification email sent to {user.email}")
     except Exception as e:
+        # Log error and notify Bugsnag with context
         logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
+        bugsnag.notify(
+            e,
+            context="signup_verification_email",
+            metadata={
+                "user_email": user.email,
+                "user_id": created_user["id"],
+                "error": str(e)
+            }
+        )
         # Don't fail signup, but let user know they need to request a new verification email
         return {
             "message": "Account created successfully, but verification email could not be sent. Please use the resend verification endpoint."
@@ -385,6 +405,17 @@ async def create_product(
     file_ext = os.path.splitext(file.filename)[1].lower()
     
     if file_ext not in allowed_extensions:
+        bugsnag.notify(
+            Exception("Invalid file type uploaded"),
+            context="create_product_validation",
+            metadata={
+                "file_name": file.filename,
+                "file_extension": file_ext,
+                "allowed_extensions": list(allowed_extensions),
+                "company_id": str(company_id),
+                "user_id": current_user["id"]
+            }
+        )
         raise HTTPException(
             status_code=400,
             detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"

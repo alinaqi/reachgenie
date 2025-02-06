@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     cronofy_client_id: str
     cronofy_client_secret: str
     
+    # Bugsnag settings
+    bugsnag_api_key: str
+    environment: str = "development"
+    
     # Mailjet settings
     mailjet_api_key: str
     mailjet_api_secret: str
