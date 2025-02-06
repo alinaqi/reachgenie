@@ -11,7 +11,8 @@ from src.utils.smtp_client import SMTPClient
 from src.database import (
     get_companies_with_email_credentials,
     update_last_processed_email_date,
-    create_email_log_detail
+    create_email_log_detail,
+    update_email_log_has_replied
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -229,6 +230,13 @@ async def process_emails(
             to_email=email_data['to']
         )
         logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
+
+        # Update has_replied status to True
+        success = await update_email_log_has_replied(email_log_id)
+        if success:
+            logger.info(f"Successfully updated has_replied status for email_log_id: {email_log_id}")
+        else:
+            logger.error(f"Failed to update has_replied status for email_log_id: {email_log_id}")
 
         ai_reply = await generate_ai_reply(email_log_id, email_data)
 

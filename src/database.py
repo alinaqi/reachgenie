@@ -796,3 +796,23 @@ async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str, la
     except Exception as e:
         logger.error(f"Error updating reminder status for log {email_log_id}: {str(e)}")
         return False 
+
+async def update_email_log_has_replied(email_log_id: UUID) -> bool:
+    """
+    Update the has_replied field to True for an email log
+    
+    Args:
+        email_log_id: UUID of the email log to update
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('email_logs')\
+            .update({'has_replied': True})\
+            .eq('id', str(email_log_id))\
+            .execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating has_replied status for log {email_log_id}: {str(e)}")
+        return False 
