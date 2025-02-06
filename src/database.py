@@ -2,7 +2,7 @@ from supabase import create_client, Client
 from src.config import get_settings
 from typing import Optional, List, Dict
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import logging
@@ -350,8 +350,27 @@ async def create_email_log_detail(
     sent_at: Optional[datetime] = None,
     from_name: Optional[str] = None,
     from_email: Optional[str] = None,
-    to_email: Optional[str] = None
+    to_email: Optional[str] = None,
+    reminder_type: Optional[str] = None
 ):
+    """
+    Create a new email log detail record
+    
+    Args:
+        email_logs_id: UUID of the parent email log
+        message_id: Message ID from the email
+        email_subject: Subject of the email
+        email_body: Body content of the email
+        sender_type: Type of sender ('user' or 'assistant')
+        sent_at: Optional timestamp when the email was sent
+        from_name: Optional sender name
+        from_email: Optional sender email
+        to_email: Optional recipient email
+        reminder_type: Optional type of reminder (e.g., 'r1' for first reminder)
+    
+    Returns:
+        Dict containing the created record
+    """
     # Create base log detail data without sent_at
     log_detail_data = {
         'email_logs_id': str(email_logs_id),
@@ -367,6 +386,10 @@ async def create_email_log_detail(
     # Only add sent_at if provided
     if sent_at:
         log_detail_data['sent_at'] = sent_at.isoformat()
+        
+    # Only add reminder_type if provided
+    if reminder_type:
+        log_detail_data['reminder_type'] = reminder_type
     
     #logger.info(f"Inserting email_log_detail with data: {log_detail_data}")
     response = supabase.table('email_log_details').insert(log_detail_data).execute()
@@ -649,3 +672,105 @@ async def update_company_voice_agent_settings(company_id: UUID, settings: dict) 
     except Exception as e:
         logger.error(f"Error updating voice agent settings: {str(e)}")
         return None 
+
+async def get_email_logs_for_reminder1():
+    """
+    Fetch all email logs that need to be processed for first reminder.
+    Joins with campaigns and companies to ensure we only get active records.
+    Excludes deleted companies.
+    Only fetches records where:
+    - No reminder has been sent yet (last_reminder_sent is NULL)
+    - More than 2 days have passed since the initial email was sent
+    
+    Returns:
+        List of dictionaries containing email log data with campaign and company information
+    """
+    try:
+        # Calculate the date threshold (2 days ago from now)
+        two_days_ago = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        
+        response = supabase.table('email_logs')\
+            .select(
+                'id, sent_at, has_replied, last_reminder_sent, lead_id, ' +
+                'campaigns!inner(id, name, company_id, companies!inner(id, name, account_email, account_password, account_type)), ' +
+                'leads!inner(email)'
+            )\
+            .eq('has_replied', False)\
+            .is_('last_reminder_sent', 'null')\
+            .lt('sent_at', two_days_ago)\
+            .eq('campaigns.companies.deleted', False)\
+            .order('sent_at', desc=False)\
+            .execute()
+        
+        # Flatten the nested structure to match the expected format
+        flattened_data = []
+        for record in response.data:
+            campaign = record['campaigns']
+            company = campaign['companies']
+            lead = record['leads']
+            
+            flattened_record = {
+                'email_log_id': record['id'],
+                'sent_at': record['sent_at'],
+                'has_replied': record['has_replied'],
+                'last_reminder_sent': record['last_reminder_sent'],
+                'lead_id': record['lead_id'],
+                'lead_email': lead['email'],
+                'campaign_id': campaign['id'],
+                'campaign_name': campaign['name'],
+                'company_id': company['id'],
+                'company_name': company['name'],
+                'account_email': company['account_email'],
+                'account_password': company['account_password'],
+                'account_type': company['account_type']
+            }
+            flattened_data.append(flattened_record)
+            
+        return flattened_data
+    except Exception as e:
+        logger.error(f"Error fetching email logs for first reminder: {str(e)}")
+        return []
+
+async def get_first_email_detail(email_logs_id: UUID):
+    """
+    Get the first (original) email detail record for a given email_log_id
+    
+    Args:
+        email_logs_id: UUID of the email log
+        
+    Returns:
+        Dict containing the first email detail record or None if not found
+    """
+    try:
+        response = supabase.table('email_log_details')\
+            .select('message_id, email_subject, email_body, sent_at')\
+            .eq('email_logs_id', str(email_logs_id))\
+            .order('sent_at', desc=False)\
+            .limit(1)\
+            .execute()
+            
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error fetching first email detail for log {email_logs_id}: {str(e)}")
+        return None 
+
+async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str) -> bool:
+    """
+    Update the last_reminder_sent field for an email log
+    
+    Args:
+        email_log_id: UUID of the email log to update
+        reminder_type: Type of reminder sent (e.g., 'R1' for first reminder)
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('email_logs')\
+            .update({'last_reminder_sent': reminder_type})\
+            .eq('id', str(email_log_id))\
+            .execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating reminder status for log {email_log_id}: {str(e)}")
+        return False 
