@@ -30,6 +30,13 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
     """
     Generate reminder email content using OpenAI based on the original email
     """
+    # Determine the ordinal based on reminder type
+    reminder_ordinal = {
+        None: "1st",
+        "r1": "2nd",
+        "r2": "3rd and final"
+    }.get(reminder_type, "1st")  # Default to "1st" if unknown type
+    
     system_prompt = """You are an AI assistant helping to generate reminder emails. 
     Your task is to create a polite and professional follow-up email that references 
     the original email content while maintaining a courteous tone.
@@ -41,7 +48,7 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
     4. DO NOT use placeholder values like [Your Name]
     5. End the email naturally with the last sentence of the message"""
     
-    user_prompt = f"""Please generate the 1st reminder email body for the following original email.
+    user_prompt = f"""Please generate the {reminder_ordinal} reminder email body for the following original email.
     The reminder should:
     1. Reference the original email content
     2. Be professional and courteous
@@ -134,7 +141,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         from_name=company['name'],
                         from_email=company['account_email'],
                         to_email=log['lead_email'],  # Using lead's email address
-                        reminder_type='r1'  # First reminder type
+                        reminder_type='r1'
                     )
                     
                     # Send the reminder email
