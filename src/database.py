@@ -754,20 +754,24 @@ async def get_first_email_detail(email_logs_id: UUID):
         logger.error(f"Error fetching first email detail for log {email_logs_id}: {str(e)}")
         return None 
 
-async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str) -> bool:
+async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str, last_reminder_sent_at: datetime) -> bool:
     """
-    Update the last_reminder_sent field for an email log
+    Update the last_reminder_sent field and timestamp for an email log
     
     Args:
         email_log_id: UUID of the email log to update
-        reminder_type: Type of reminder sent (e.g., 'R1' for first reminder)
+        reminder_type: Type of reminder sent (e.g., 'r1' for first reminder)
+        last_reminder_sent_at: Timestamp when the reminder was sent
         
     Returns:
         bool: True if update was successful, False otherwise
     """
     try:
         response = supabase.table('email_logs')\
-            .update({'last_reminder_sent': reminder_type})\
+            .update({
+                'last_reminder_sent': reminder_type,
+                'last_reminder_sent_at': last_reminder_sent_at.isoformat()
+            })\
             .eq('id', str(email_log_id))\
             .execute()
         return bool(response.data)

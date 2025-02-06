@@ -145,14 +145,19 @@ async def send_reminder1_emails(company: Dict) -> None:
                         email_log_id=email_log_id
                     )
                     
-                    # Update the reminder status in database
-                    success = await update_reminder_sent_status(email_log_id, 'r1')
+                    # Update the reminder status in database with current timestamp
+                    current_time = datetime.now(timezone.utc)
+                    success = await update_reminder_sent_status(
+                        email_log_id=email_log_id,
+                        reminder_type='r1',
+                        last_reminder_sent_at=current_time
+                    )
                     if success:
-                        logger.info(f"Successfully updated reminder status for email log {email_log_id}")
+                        logger.info(f"Successfully updated reminder status for log {email_log_id}")
                     else:
-                        logger.error(f"Failed to update reminder status for email log {email_log_id}")
+                        logger.error(f"Failed to update reminder status for log {email_log_id}")
                     
-                    logger.info(f"Successfully sent reminder email for email log {email_log_id} to {log['lead_email']}")
+                    logger.info(f"Successfully sent reminder email for log {email_log_id} to {log['lead_email']}")
                     
                 except Exception as e:
                     logger.error(f"Error processing log {log['email_log_id']}: {str(e)}")
