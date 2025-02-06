@@ -112,6 +112,13 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                 try:
                     email_log_id = UUID(log['email_log_id'])
                     
+                    # Set the next reminder type based on current type
+                    next_reminder_type = {
+                        None: 'r1',
+                        'r1': 'r2',
+                        'r2': 'r3'
+                    }.get(reminder_type, 'r1')
+                    
                     # Get the original email content
                     original_email = await get_first_email_detail(email_log_id)
                     if not original_email:
@@ -141,7 +148,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         from_name=company['name'],
                         from_email=company['account_email'],
                         to_email=log['lead_email'],  # Using lead's email address
-                        reminder_type='r1'
+                        reminder_type=next_reminder_type
                     )
                     
                     # Send the reminder email
@@ -157,7 +164,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     current_time = datetime.now(timezone.utc)
                     success = await update_reminder_sent_status(
                         email_log_id=email_log_id,
-                        reminder_type='r1',
+                        reminder_type=next_reminder_type,
                         last_reminder_sent_at=current_time
                     )
                     if success:
@@ -177,14 +184,14 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
 async def main():
     """Main function to process reminder emails for all companies"""
     try:
-        # Define reminder types to process
+        # Define reminder types to process, if you need another reminder say r3 just add it to this list, no need to change majorly anything else apart from few if conditions above
         reminder_types = [None, 'r1', 'r2']
         
         # Process each reminder type
         for reminder_type in reminder_types:
-            # Fetch all email logs that need first reminder
+            # Fetch all email logs that need to send reminder
             email_logs = await get_email_logs_reminder(reminder_type)
-            logger.info(f"Found {len(email_logs)} email logs to process for first reminder")
+            logger.info(f"Found {len(email_logs)} email logs to process for reminder {reminder_type}")
             
             # Group email logs by company for batch processing
             company_logs = {}
