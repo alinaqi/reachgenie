@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-async def get_reminder_content(original_email_body: str) -> str:
+async def get_reminder_content(original_email_body: str, reminder_type: str) -> str:
     """
     Generate reminder email content using OpenAI based on the original email
     """
@@ -41,7 +41,7 @@ async def get_reminder_content(original_email_body: str) -> str:
     4. DO NOT use placeholder values like [Your Name]
     5. End the email naturally with the last sentence of the message"""
     
-    user_prompt = f"""Please generate a reminder email body for the following original email.
+    user_prompt = f"""Please generate the 1st reminder email body for the following original email.
     The reminder should:
     1. Reference the original email content
     2. Be professional and courteous
@@ -75,16 +75,17 @@ async def get_reminder_content(original_email_body: str) -> str:
         logger.error(f"Error generating reminder content: {str(e)}")
         return None
 
-async def send_reminder_emails(company: Dict) -> None:
+async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
     """
     Send reminder emails for a single company's campaign
     
     Args:
         company: Company data dictionary containing email credentials and settings
+        reminder_type: Type of reminder to send (e.g., 'r1' for first reminder)
     """
     try:
         company_id = UUID(company['id'])
-        logger.info(f"Processing reminder1 emails for company '{company['name']}' ({company_id})")
+        logger.info(f"Processing reminder emails for company '{company['name']}' ({company_id})")
         
         # Decrypt the password
         try:
@@ -111,7 +112,7 @@ async def send_reminder_emails(company: Dict) -> None:
                         continue
                     
                     # Generate reminder content using LLM
-                    reminder_content = await get_reminder_content(original_email['email_body'])
+                    reminder_content = await get_reminder_content(original_email['email_body'], reminder_type)
                     if not reminder_content:
                         logger.error(f"Failed to generate reminder content for email log {email_log_id}")
                         continue
@@ -169,28 +170,33 @@ async def send_reminder_emails(company: Dict) -> None:
 async def main():
     """Main function to process reminder emails for all companies"""
     try:
-        # Fetch all email logs that need first reminder
-        email_logs = await get_email_logs_reminder()  # No reminder_type means get logs with no reminders sent
-        logger.info(f"Found {len(email_logs)} email logs to process for first reminder")
+        # Define reminder types to process
+        reminder_types = [None, 'r1', 'r2']
         
-        # Group email logs by company for batch processing
-        company_logs = {}
-        for log in email_logs:
-            company_id = str(log['company_id'])
-            if company_id not in company_logs:
-                company_logs[company_id] = {
-                    'id': company_id,
-                    'name': log['company_name'],
-                    'account_email': log['account_email'],
-                    'account_password': log['account_password'],
-                    'account_type': log['account_type'],
-                    'logs': []
-                }
-            company_logs[company_id]['logs'].append(log)
-        
-        # Process reminder1 for each company
-        for company_data in company_logs.values():
-            await send_reminder_emails(company_data)
+        # Process each reminder type
+        for reminder_type in reminder_types:
+            # Fetch all email logs that need first reminder
+            email_logs = await get_email_logs_reminder(reminder_type)
+            logger.info(f"Found {len(email_logs)} email logs to process for first reminder")
+            
+            # Group email logs by company for batch processing
+            company_logs = {}
+            for log in email_logs:
+                company_id = str(log['company_id'])
+                if company_id not in company_logs:
+                    company_logs[company_id] = {
+                        'id': company_id,
+                        'name': log['company_name'],
+                        'account_email': log['account_email'],
+                        'account_password': log['account_password'],
+                        'account_type': log['account_type'],
+                        'logs': []
+                    }
+                company_logs[company_id]['logs'].append(log)
+            
+            # Process reminder for each company
+            for company_data in company_logs.values():
+                await send_reminder_emails(company_data, reminder_type)
             
     except Exception as e:
         logger.error(f"Error in main reminder process: {str(e)}")
