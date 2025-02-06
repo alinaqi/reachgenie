@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS email_logs (
     campaign_id UUID REFERENCES campaigns(id),
     lead_id UUID REFERENCES leads(id),
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    has_replied BOOLEAN DEFAULT FALSE,
+    last_reminder_sent VARCHAR(2),
+    last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -112,6 +115,7 @@ CREATE TABLE IF NOT EXISTS email_log_details (
     from_name TEXT,
     from_email TEXT,
     to_email TEXT,
+    reminder_type VARCHAR(2),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
