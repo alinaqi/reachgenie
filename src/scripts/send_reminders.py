@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from src.utils.smtp_client import SMTPClient
 from src.database import (
-    get_email_logs_for_reminder1, 
+    get_email_logs_reminder, 
     get_first_email_detail,
     create_email_log_detail,
     update_reminder_sent_status
@@ -75,9 +75,9 @@ async def get_reminder_content(original_email_body: str) -> str:
         logger.error(f"Error generating reminder content: {str(e)}")
         return None
 
-async def send_reminder1_emails(company: Dict) -> None:
+async def send_reminder_emails(company: Dict) -> None:
     """
-    Send reminder1 emails for a single company's campaign
+    Send reminder emails for a single company's campaign
     
     Args:
         company: Company data dictionary containing email credentials and settings
@@ -170,7 +170,7 @@ async def main():
     """Main function to process reminder emails for all companies"""
     try:
         # Fetch all email logs that need first reminder
-        email_logs = await get_email_logs_for_reminder1()
+        email_logs = await get_email_logs_reminder()  # No reminder_type means get logs with no reminders sent
         logger.info(f"Found {len(email_logs)} email logs to process for first reminder")
         
         # Group email logs by company for batch processing
@@ -190,7 +190,7 @@ async def main():
         
         # Process reminder1 for each company
         for company_data in company_logs.values():
-            await send_reminder1_emails(company_data)
+            await send_reminder_emails(company_data)
             
     except Exception as e:
         logger.error(f"Error in main reminder process: {str(e)}")

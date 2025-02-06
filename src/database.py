@@ -673,14 +673,21 @@ async def update_company_voice_agent_settings(company_id: UUID, settings: dict) 
         logger.error(f"Error updating voice agent settings: {str(e)}")
         return None 
 
-async def get_email_logs_for_reminder1():
+async def get_email_logs_reminder(reminder_type: Optional[str] = None):
     """
-    Fetch all email logs that need to be processed for first reminder.
+    Fetch all email logs that need to be processed for reminders.
     Joins with campaigns and companies to ensure we only get active records.
     Excludes deleted companies.
     Only fetches records where:
-    - No reminder has been sent yet (last_reminder_sent is NULL)
-    - More than 2 days have passed since the initial email was sent
+    - For first reminder (reminder_type is None):
+      - No reminder has been sent yet (last_reminder_sent is NULL)
+      - More than 2 days have passed since the initial email was sent
+    - For subsequent reminders:
+      - last_reminder_sent equals the specified reminder_type
+      - More than 2 days have passed since the last reminder was sent
+    
+    Args:
+        reminder_type: Optional type of reminder to filter by (e.g., 'r1' for first reminder)
     
     Returns:
         List of dictionaries containing email log data with campaign and company information
@@ -689,18 +696,28 @@ async def get_email_logs_for_reminder1():
         # Calculate the date threshold (2 days ago from now)
         two_days_ago = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
         
-        response = supabase.table('email_logs')\
+        # Build the base query
+        query = supabase.table('email_logs')\
             .select(
-                'id, sent_at, has_replied, last_reminder_sent, lead_id, ' +
+                'id, sent_at, has_replied, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
                 'campaigns!inner(id, name, company_id, companies!inner(id, name, account_email, account_password, account_type)), ' +
                 'leads!inner(email)'
             )\
             .eq('has_replied', False)\
-            .is_('last_reminder_sent', 'null')\
-            .lt('sent_at', two_days_ago)\
-            .eq('campaigns.companies.deleted', False)\
-            .order('sent_at', desc=False)\
-            .execute()
+            .eq('campaigns.companies.deleted', False)
+            
+        # Add reminder type filter
+        if reminder_type is None:
+            query = query\
+                .is_('last_reminder_sent', 'null')\
+                .lt('sent_at', two_days_ago)  # Only check sent_at for first reminder
+        else:
+            query = query\
+                .eq('last_reminder_sent', reminder_type)\
+                .lt('last_reminder_sent_at', two_days_ago)  # Check last reminder timing
+            
+        # Execute query with ordering
+        response = query.order('sent_at', desc=False).execute()
         
         # Flatten the nested structure to match the expected format
         flattened_data = []
@@ -714,6 +731,7 @@ async def get_email_logs_for_reminder1():
                 'sent_at': record['sent_at'],
                 'has_replied': record['has_replied'],
                 'last_reminder_sent': record['last_reminder_sent'],
+                'last_reminder_sent_at': record['last_reminder_sent_at'],
                 'lead_id': record['lead_id'],
                 'lead_email': lead['email'],
                 'campaign_id': campaign['id'],
@@ -728,7 +746,7 @@ async def get_email_logs_for_reminder1():
             
         return flattened_data
     except Exception as e:
-        logger.error(f"Error fetching email logs for first reminder: {str(e)}")
+        logger.error(f"Error fetching email logs for reminder: {str(e)}")
         return []
 
 async def get_first_email_detail(email_logs_id: UUID):
