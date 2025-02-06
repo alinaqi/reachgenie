@@ -191,7 +191,7 @@ async def main():
         for reminder_type in reminder_types:
             # Fetch all email logs that need to send reminder
             email_logs = await get_email_logs_reminder(reminder_type)
-            logger.info(f"Found {len(email_logs)} email logs to process for reminder {reminder_type}")
+            logger.info(f"Found {len(email_logs)} email logs to process for reminder [{reminder_type}]")
             
             # Group email logs by company for batch processing
             company_logs = {}
