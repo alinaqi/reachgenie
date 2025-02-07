@@ -65,7 +65,7 @@ async def fetch_emails(company: Dict):
         try:
             decrypted_password = decrypt_password(company['account_password'])
         except Exception as e:
-            logger.error(f"Failed to decrypt password for company {company_id}: {str(e)}")
+            logger.error(f"Failed to decrypt password for company '{company['name']}' ({company_id}): {str(e)}")
             return
         #print(decrypted_password)
         
@@ -95,8 +95,10 @@ async def fetch_emails(company: Dict):
             
             status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
         else:
+            x = int(last_processed_uid) + 1
+            logger.info(f"Processing emails from UID {x} for company '{company['name']}' ({company_id})")
             # Get UIDs after the last processed one
-            status, messages = imap.search(None, f'UID {int(last_processed_uid) + 1}:*')
+            status, messages = imap.search(None, f'UID {x}:*')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
@@ -196,6 +198,7 @@ async def process_emails(
             email_log_id = UUID(email_log_id_str)
             logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
         except (IndexError, ValueError) as e:
+            logger.info(f"Email Subject: {email_data['subject']}")
             logger.info(f"Unable to extract email_log_id from {email_data['to']}. Ignoring this email.")
             continue
 
