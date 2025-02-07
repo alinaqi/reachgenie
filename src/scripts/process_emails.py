@@ -99,7 +99,8 @@ async def fetch_emails(company: Dict):
             x = int(last_processed_uid) + 1
             logger.info(f"Processing emails from UID {x} for company '{company['name']}' ({company_id})")
             # Get UIDs after the last processed one using uid() command with UID keyword
-            status, messages = imap.uid('search', None, f'UID {x}:*')
+            # Using NOT UID 1:(x-1) to ensure we only get UIDs >= x
+            status, messages = imap.uid('search', None, f'NOT (UID 1:{x-1})')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
