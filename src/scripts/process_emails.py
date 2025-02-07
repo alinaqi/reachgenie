@@ -96,7 +96,7 @@ async def fetch_emails(company: Dict):
             status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
         else:
             # Get UIDs after the last processed one
-            status, messages = imap.search(None, f'UID {last_processed_uid + 1}:*')
+            status, messages = imap.search(None, f'UID {int(last_processed_uid) + 1}:*')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
