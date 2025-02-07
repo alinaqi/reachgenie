@@ -10,9 +10,9 @@ from src.utils.smtp_client import SMTPClient
 
 from src.database import (
     get_companies_with_email_credentials,
-    update_last_processed_email_date,
     create_email_log_detail,
-    update_email_log_has_replied
+    update_email_log_has_replied,
+    update_last_processed_uid
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -57,7 +57,7 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 100 # Number of emails to fetch per run
+    max_emails = 3 # Number of emails to fetch per run
     company_id = UUID(company['id'])
 
     try:
@@ -167,13 +167,15 @@ async def fetch_emails(company: Dict):
                         "from_full": from_field,
                         "to": to,
                         "body": body,
-                        "date": date
+                        "date": date,
+                        "uid": email_id.decode('utf-8')  # Add UID to email data
                     })
 
         # Logout and close the connection
         imap.logout()
 
-        await process_emails(email_data, company, decrypted_password)
+        # Process the emails
+        await process_emails(email_data, company, decrypted_password)        
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -259,13 +261,9 @@ async def process_emails(
 
     # After processing all emails, find the maximum date and update the company's last_email_processed_at
     if emails:
-        from email.utils import parsedate_to_datetime
-        max_date = max(
-            parsedate_to_datetime(email['date'])
-            for email in emails
-        )
-        logger.info(f"Updating last_email_processed_at for company '{company['name']}' ({company['id']}) to {max_date}")
-        await update_last_processed_email_date(UUID(company['id']), max_date)
+        max_uid = max(int(email['uid']) for email in emails)
+        logger.info(f"Updating last_processed_uid for company '{company['name']}' ({company['id']}) to {max_uid}")
+        await update_last_processed_uid(UUID(company['id']), str(max_uid))
 
 async def main():
 

@@ -538,6 +538,13 @@ async def update_last_processed_email_date(company_id: UUID, email_date: datetim
     }).eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None 
 
+async def update_last_processed_uid(company_id: UUID, uid: str):
+    """Update the last processed UID for a company"""
+    response = supabase.table('companies').update({
+        'last_processed_uid': uid
+    }).eq('id', str(company_id)).execute()
+    return response.data[0] if response.data else None
+
 async def create_password_reset_token(user_id: UUID, token: str, expires_at: datetime):
     """Create a new password reset token for a user"""
     token_data = {
