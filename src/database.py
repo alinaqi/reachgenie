@@ -521,8 +521,13 @@ async def update_company_account_credentials(company_id: UUID, account_email: st
     return response.data[0] if response.data else None
 
 async def get_companies_with_email_credentials():
-    """Get all companies that have email credentials configured"""
-    response = supabase.table('companies').select('*').not_.is_('account_email', 'null').not_.is_('account_password', 'null').execute()
+    """Get all companies that have email credentials configured and are not deleted"""
+    response = supabase.table('companies')\
+        .select('*')\
+        .not_.is_('account_email', 'null')\
+        .not_.is_('account_password', 'null')\
+        .eq('deleted', False)\
+        .execute()
     return response.data
 
 async def update_last_processed_uid(company_id: UUID, uid: str):
