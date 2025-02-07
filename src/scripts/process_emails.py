@@ -57,7 +57,7 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 3 # Number of emails to fetch per run
+    max_emails = 10 # Number of emails to fetch per run
     company_id = UUID(company['id'])
 
     try:
@@ -93,17 +93,18 @@ async def fetch_emails(company: Dict):
             last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
             logger.info(f"Processing emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
             
-            status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
+            # Use uid('search') instead of search() for consistency
+            status, messages = imap.uid('search', None, f'SINCE "{last_processed_date_str}"')
         else:
             x = int(last_processed_uid) + 1
             logger.info(f"Processing emails from UID {x} for company '{company['name']}' ({company_id})")
-            # Get UIDs after the last processed one
-            status, messages = imap.search(None, f'UID {x}:*')
+            # Get UIDs after the last processed one using uid() command with UID keyword
+            status, messages = imap.uid('search', None, f'UID {x}:*')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
 
-        # Get the list of email IDs
+        # Get the list of email IDs (these are now UIDs in both cases)
         email_ids = messages[0].split()
         
         if not email_ids:
@@ -120,8 +121,9 @@ async def fetch_emails(company: Dict):
 
         # Fetch only the limited UIDs
         for email_id in oldest_email_ids:
-            # Fetch the email by ID
-            res, msg = imap.fetch(email_id, "(RFC822)")
+            # Fetch the email by UID
+            #res, msg = imap.fetch(email_id, "(RFC822)")
+            res, msg = imap.uid('fetch', email_id, "(RFC822)")
             
             logger.info(f"Fetched email with UID {email_id.decode('utf-8')}")
 
