@@ -259,7 +259,7 @@ async def process_emails(
                 )
                 logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
-    # After processing all emails, find the maximum date and update the company's last_email_processed_at
+    # After processing all emails, find the maximum uid and update the company's last_processed_uid
     if emails:
         max_uid = max(int(email['uid']) for email in emails)
         logger.info(f"Updating last_processed_uid for company '{company['name']}' ({company['id']}) to {max_uid}")
