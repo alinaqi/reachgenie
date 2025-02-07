@@ -4,15 +4,15 @@ from email.header import decode_header
 import logging
 import asyncio
 from typing import List, Dict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from src.utils.smtp_client import SMTPClient
 
 from src.database import (
     get_companies_with_email_credentials,
-    update_last_processed_email_date,
     create_email_log_detail,
-    update_email_log_has_replied
+    update_email_log_has_replied,
+    update_last_processed_uid
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -49,7 +49,7 @@ def parse_from_field(from_field: str) -> tuple[str, str]:
         email = from_field.strip()
     return name, email
 
-# Function to fetch the oldest Unseen N emails from IMAP Server based on the since date
+# Function to fetch the oldest N emails from IMAP Server
 async def fetch_emails(company: Dict):
     """
     Process emails for a single company
@@ -57,26 +57,15 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 100 # Number of emails to fetch per run
+    max_emails = 10 # Number of emails to fetch per run
     company_id = UUID(company['id'])
 
     try:
-        # Get the last processed email date
-        last_processed_date = company.get('last_email_processed_at')
-        if not last_processed_date:
-            logger.error(f"No last processed email date found for company '{company['name']}' ({company_id}). Please set an initial processing date.")
-            return
-        
-        # Convert ISO format string to datetime object
-        last_processed_date = datetime.fromisoformat(last_processed_date.replace('Z', '+00:00'))
-        last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
-        logger.info(f"Processing unseen emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
-
         # Decrypt email password
         try:
             decrypted_password = decrypt_password(company['account_password'])
         except Exception as e:
-            logger.error(f"Failed to decrypt password for company {company_id}: {str(e)}")
+            logger.error(f"Failed to decrypt password for company '{company['name']}' ({company_id}): {str(e)}")
             return
         #print(decrypted_password)
         
@@ -92,36 +81,55 @@ async def fetch_emails(company: Dict):
         imap.login(company['account_email'], decrypted_password)
 
         # Select the mailbox you want to use (e.g., INBOX)
-        imap.select("INBOX")
+        imap.select("INBOX", readonly=True)
 
-        # Fetch the emails since a specified date, ordered oldest first, and filter unseen emails
-        # 'Since' ensure that only emails received on or after the since date are retrieved and processed.
-        status, messages = imap.search(None, f'UNSEEN SINCE "{last_processed_date_str}"')
+        last_processed_uid = company.get('last_processed_uid')
+        if not last_processed_uid:
+            # if no last_processed_uid is found, fetch all emails from two days ago
+            # 'Since' ensure that only emails received on or after the since date are fetched
+            last_processed_date = datetime.now(timezone.utc) - timedelta(days=2)
+            logger.info(f"No last_processed_uid found for company '{company['name']}' ({company_id}). Fetching all emails from two days ago.")
+        
+            last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
+            logger.info(f"Processing emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
+            
+            # Use uid('search') instead of search() for consistency
+            status, messages = imap.uid('search', None, f'SINCE "{last_processed_date_str}"')
+        else:
+            x = int(last_processed_uid) + 1
+            logger.info(f"Processing emails from UID {x} for company '{company['name']}' ({company_id})")
+            # Get UIDs after the last processed one using uid() command with UID keyword
+            # Using NOT UID 1:(x-1) to ensure we only get UIDs >= x
+            status, messages = imap.uid('search', None, f'NOT (UID 1:{x-1})')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
 
-        # Get the list of email IDs
+        # Get the list of email IDs (these are now UIDs in both cases)
         email_ids = messages[0].split()
         
         if not email_ids:
-            logger.info(f"No unseen emails found since {last_processed_date_str} for company '{company['name']}'")
+            logger.info(f"No emails found for company '{company['name']}'")
             return []
 
         total_emails = len(email_ids)
-        logger.info(f"Found {total_emails} unseen emails for company '{company['name']}', processing up to {max_emails} in this run")
+        logger.info(f"Found {total_emails} emails for company '{company['name']}', processing up to {max_emails} in this run")
 
-        # Fetch the oldest X number of email IDs (reverse slicing)
+        # Fetch the oldest n number of email IDs (reverse slicing)
         oldest_email_ids = email_ids[:max_emails]
 
         email_data = []
 
+        # Fetch only the limited UIDs
         for email_id in oldest_email_ids:
-            # Fetch the email by ID
-            res, msg = imap.fetch(email_id, "(RFC822)")
+            # Fetch the email by UID
+            #res, msg = imap.fetch(email_id, "(RFC822)")
+            res, msg = imap.uid('fetch', email_id, "(RFC822)")
+            
+            logger.info(f"Fetched email with UID {email_id.decode('utf-8')}")
 
             if res != "OK":
-                raise Exception(f"Failed to fetch email with ID {email_id}")
+                raise Exception(f"Failed to fetch email with UID {email_id.decode('utf-8')}")
 
             for response_part in msg:
                 if isinstance(response_part, tuple):
@@ -164,35 +172,19 @@ async def fetch_emails(company: Dict):
                         "from_full": from_field,
                         "to": to,
                         "body": body,
-                        "date": date
+                        "date": date,
+                        "uid": email_id.decode('utf-8')  # Add UID to email data
                     })
 
         # Logout and close the connection
         imap.logout()
 
-        await process_emails(email_data, company, decrypted_password)
+        # Process the emails
+        await process_emails(email_data, company, decrypted_password)        
 
     except Exception as e:
         print(f"An error occurred: {e}")
         return []
-
-# Example usage
-#if __name__ == "__main__":
-    #username = "naveed.butt@workhub.ai"
-    #password = "wnpc stgq ixsh fhkb"
-
-    #since_date = "20-Jan-2025"
-    #max_emails_to_fetch = 6
-    #emails = fetch_emails(username, password, since_date, max_emails_to_fetch)
-
-    #if not emails:
-    #    print("No emails found to display.")
-    #else:
-    #    for idx, email_info in enumerate(emails, 1):
-            #print(f"=============================== Email {idx}: ===============================\n")
-            #for key, value in email_info.items():
-            #    print(f"{key}: {value}")
-            #print("\n" + "="*50 + "\n")
 
 async def process_emails(
     emails: List[Dict],
@@ -209,6 +201,7 @@ async def process_emails(
             email_log_id = UUID(email_log_id_str)
             logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
         except (IndexError, ValueError) as e:
+            logger.info(f"Email Subject: {email_data['subject']}")
             logger.info(f"Unable to extract email_log_id from {email_data['to']}. Ignoring this email.")
             continue
 
@@ -272,15 +265,11 @@ async def process_emails(
                 )
                 logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
-    # After processing all emails, find the maximum date and update the company's last_email_processed_at
+    # After processing all emails, find the maximum uid and update the company's last_processed_uid
     if emails:
-        from email.utils import parsedate_to_datetime
-        max_date = max(
-            parsedate_to_datetime(email['date'])
-            for email in emails
-        )
-        logger.info(f"Updating last_email_processed_at for company '{company['name']}' ({company['id']}) to {max_date}")
-        await update_last_processed_email_date(UUID(company['id']), max_date)
+        max_uid = max(int(email['uid']) for email in emails)
+        logger.info(f"Updating last_processed_uid for company '{company['name']}' ({company['id']}) to {max_uid}")
+        await update_last_processed_uid(UUID(company['id']), str(max_uid))
 
 async def main():
 
