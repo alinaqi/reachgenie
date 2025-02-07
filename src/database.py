@@ -509,18 +509,12 @@ async def update_company_account_credentials(company_id: UUID, account_email: st
     """
     # Encrypt the password before storing
     encrypted_password = encrypt_password(account_password)
-    
-    # Get current company data to check last_email_processed_at
-    company = supabase.table('companies').select('last_email_processed_at').eq('id', str(company_id)).execute()
+
     update_data = {
         'account_email': account_email,
         'account_password': encrypted_password,
         'account_type': account_type
     }
-    
-    # Only set last_email_processed_at if it's currently NULL
-    if company.data and company.data[0].get('last_email_processed_at') is None:
-        update_data['last_email_processed_at'] = datetime.now(timezone.utc).isoformat()
     
     response = supabase.table('companies').update(update_data).eq('id', str(company_id)).execute()
     
@@ -530,13 +524,6 @@ async def get_companies_with_email_credentials():
     """Get all companies that have email credentials configured"""
     response = supabase.table('companies').select('*').not_.is_('account_email', 'null').not_.is_('account_password', 'null').execute()
     return response.data
-
-async def update_last_processed_email_date(company_id: UUID, email_date: datetime):
-    """Update the last processed email date for a company"""
-    response = supabase.table('companies').update({
-        'last_email_processed_at': email_date.isoformat()
-    }).eq('id', str(company_id)).execute()
-    return response.data[0] if response.data else None 
 
 async def update_last_processed_uid(company_id: UUID, uid: str):
     """Update the last processed UID for a company"""
