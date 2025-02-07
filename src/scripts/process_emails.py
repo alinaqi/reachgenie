@@ -49,7 +49,7 @@ def parse_from_field(from_field: str) -> tuple[str, str]:
         email = from_field.strip()
     return name, email
 
-# Function to fetch the oldest Unseen N emails from IMAP Server based on the since date
+# Function to fetch the oldest N emails from IMAP Server
 async def fetch_emails(company: Dict):
     """
     Process emails for a single company
@@ -92,11 +92,11 @@ async def fetch_emails(company: Dict):
         imap.login(company['account_email'], decrypted_password)
 
         # Select the mailbox you want to use (e.g., INBOX)
-        imap.select("INBOX")
+        imap.select("INBOX", readonly=True)
 
-        # Fetch the emails since a specified date, ordered oldest first, and filter unseen emails
+        # Fetch the emails since a specified date, ordered oldest first
         # 'Since' ensure that only emails received on or after the since date are retrieved and processed.
-        status, messages = imap.search(None, f'UNSEEN SINCE "{last_processed_date_str}"')
+        status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
@@ -109,19 +109,22 @@ async def fetch_emails(company: Dict):
             return []
 
         total_emails = len(email_ids)
-        logger.info(f"Found {total_emails} unseen emails for company '{company['name']}', processing up to {max_emails} in this run")
+        logger.info(f"Found {total_emails} emails for company '{company['name']}', processing up to {max_emails} in this run")
 
-        # Fetch the oldest X number of email IDs (reverse slicing)
+        # Fetch the oldest n number of email IDs (reverse slicing)
         oldest_email_ids = email_ids[:max_emails]
 
         email_data = []
 
+        # Fetch only the limited UIDs
         for email_id in oldest_email_ids:
             # Fetch the email by ID
             res, msg = imap.fetch(email_id, "(RFC822)")
+            
+            logger.info(f"Fetched email with UID {email_id.decode('utf-8')}")
 
             if res != "OK":
-                raise Exception(f"Failed to fetch email with ID {email_id}")
+                raise Exception(f"Failed to fetch email with UID {email_id.decode('utf-8')}")
 
             for response_part in msg:
                 if isinstance(response_part, tuple):
