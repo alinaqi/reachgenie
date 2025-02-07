@@ -4,7 +4,7 @@ from email.header import decode_header
 import logging
 import asyncio
 from typing import List, Dict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from src.utils.smtp_client import SMTPClient
 
@@ -61,17 +61,6 @@ async def fetch_emails(company: Dict):
     company_id = UUID(company['id'])
 
     try:
-        # Get the last processed email date
-        last_processed_date = company.get('last_email_processed_at')
-        if not last_processed_date:
-            logger.error(f"No last processed email date found for company '{company['name']}' ({company_id}). Please set an initial processing date.")
-            return
-        
-        # Convert ISO format string to datetime object
-        last_processed_date = datetime.fromisoformat(last_processed_date.replace('Z', '+00:00'))
-        last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
-        logger.info(f"Processing unseen emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
-
         # Decrypt email password
         try:
             decrypted_password = decrypt_password(company['account_password'])
@@ -94,9 +83,20 @@ async def fetch_emails(company: Dict):
         # Select the mailbox you want to use (e.g., INBOX)
         imap.select("INBOX", readonly=True)
 
-        # Fetch the emails since a specified date, ordered oldest first
-        # 'Since' ensure that only emails received on or after the since date are retrieved and processed.
-        status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
+        last_processed_uid = company.get('last_processed_uid')
+        if not last_processed_uid:
+            # if no last_processed_uid is found, fetch all emails from two days ago
+            # 'Since' ensure that only emails received on or after the since date are fetched
+            last_processed_date = datetime.now(timezone.utc) - timedelta(days=2)
+            logger.info(f"No last_processed_uid found for company '{company['name']}' ({company_id}). Fetching all emails from two days ago.")
+        
+            last_processed_date_str = last_processed_date.strftime("%d-%b-%Y")
+            logger.info(f"Processing emails since {last_processed_date_str} for company '{company['name']}' ({company_id})")
+            
+            status, messages = imap.search(None, f'SINCE "{last_processed_date_str}"')
+        else:
+            # Get UIDs after the last processed one
+            status, messages = imap.search(None, f'UID {last_processed_uid + 1}:*')
 
         if status != "OK":
             raise Exception("Failed to retrieve emails")
@@ -105,7 +105,7 @@ async def fetch_emails(company: Dict):
         email_ids = messages[0].split()
         
         if not email_ids:
-            logger.info(f"No unseen emails found since {last_processed_date_str} for company '{company['name']}'")
+            logger.info(f"No emails found for company '{company['name']}'")
             return []
 
         total_emails = len(email_ids)
@@ -178,24 +178,6 @@ async def fetch_emails(company: Dict):
     except Exception as e:
         print(f"An error occurred: {e}")
         return []
-
-# Example usage
-#if __name__ == "__main__":
-    #username = "naveed.butt@workhub.ai"
-    #password = "wnpc stgq ixsh fhkb"
-
-    #since_date = "20-Jan-2025"
-    #max_emails_to_fetch = 6
-    #emails = fetch_emails(username, password, since_date, max_emails_to_fetch)
-
-    #if not emails:
-    #    print("No emails found to display.")
-    #else:
-    #    for idx, email_info in enumerate(emails, 1):
-            #print(f"=============================== Email {idx}: ===============================\n")
-            #for key, value in email_info.items():
-            #    print(f"{key}: {value}")
-            #print("\n" + "="*50 + "\n")
 
 async def process_emails(
     emails: List[Dict],
