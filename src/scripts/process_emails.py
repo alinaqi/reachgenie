@@ -194,76 +194,92 @@ async def process_emails(
     # Process each email one by one
     for email_data in emails:
         try:
-            # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
-            # We do this inorder to find out only those emails which are sent by leads/customers back to our system, otherwise we have no track to identify such thing
-            # and ignoring all emails which are not related to our system.
-            email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
-            email_log_id = UUID(email_log_id_str)
-            logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
-        except (IndexError, ValueError) as e:
-            logger.info(f"Email Subject: {email_data['subject']}")
-            logger.info(f"Unable to extract email_log_id from {email_data['to']}. Ignoring this email.")
-            continue
+            logger.info(f"\nProcessing email:")
+            logger.info(f"Subject: {email_data.get('subject')}")
+            logger.info(f"To: {email_data.get('to')}")
+            logger.info(f"From: {email_data.get('from')}")
+            
+            # Extract email_log_id from the 'To' field
+            to_address = email_data.get('to', '')
+            logger.info(f"Attempting to extract email_log_id from: {to_address}")
+            
+            try:
+                email_parts = to_address.split('+')
+                logger.info(f"Split parts: {email_parts}")
+                if len(email_parts) > 1:
+                    email_log_id_part = email_parts[1].split('@')[0]
+                    logger.info(f"Extracted potential email_log_id: {email_log_id_part}")
+                    email_log_id = UUID(email_log_id_part)
+                    logger.info(f"Successfully parsed UUID: {email_log_id}")
+                else:
+                    logger.info("No '+' found in email address")
+                    continue
+            except Exception as e:
+                logger.info(f"Error extracting email_log_id: {str(e)}")
+                continue
 
-        # Parse the email date string into a datetime object
-        from email.utils import parsedate_to_datetime
-        sent_at = parsedate_to_datetime(email_data['date'])
-        # sent_at will already have the correct timezone from the email header
+            # Parse the email date string into a datetime object
+            from email.utils import parsedate_to_datetime
+            sent_at = parsedate_to_datetime(email_data['date'])
+            # sent_at will already have the correct timezone from the email header
 
-        logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
-        await create_email_log_detail(
-            email_logs_id=email_log_id,
-            message_id=email_data['message_id'],
-            email_subject=email_data['subject'],
-            email_body=email_data['body'],
-            sent_at=sent_at,  # This will now have the original timezone from the email
-            sender_type='user',  # This is a user reply
-            from_name=email_data['from_name'],
-            from_email=email_data['from'],
-            to_email=email_data['to']
-        )
-        logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
-
-        # Update has_replied status to True
-        success = await update_email_log_has_replied(email_log_id)
-        if success:
-            logger.info(f"Successfully updated has_replied status for email_log_id: {email_log_id}")
-        else:
-            logger.error(f"Failed to update has_replied status for email_log_id: {email_log_id}")
-
-        ai_reply = await generate_ai_reply(email_log_id, email_data)
-
-        if ai_reply:
-            logger.info(f"Creating email_log_detail for the AI reply")
-            response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
+            logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
             await create_email_log_detail(
                 email_logs_id=email_log_id,
-                message_id=None,
-                email_subject=response_subject,
-                email_body=ai_reply,
-                sender_type='assistant',
-                sent_at=datetime.now(timezone.utc),
-                from_name=company['name'],
-                from_email=company['account_email'],
-                to_email=email_data['from']
+                message_id=email_data['message_id'],
+                email_subject=email_data['subject'],
+                email_body=email_data['body'],
+                sent_at=sent_at,  # This will now have the original timezone from the email
+                sender_type='user',  # This is a user reply
+                from_name=email_data['from_name'],
+                from_email=email_data['from'],
+                to_email=email_data['to']
             )
-            logger.info("Successfully created email_log_detail for the AI reply")
+            logger.info(f"Successfully created email_log_detail for message_id: {email_data['message_id']}")
 
-            async with SMTPClient(
-                account_email=company['account_email'],
-                account_password=decrypted_password,  # Use decrypted password
-                provider=company['account_type']
-            ) as smtp_client:
+            # Update has_replied status to True
+            success = await update_email_log_has_replied(email_log_id)
+            if success:
+                logger.info(f"Successfully updated has_replied status for email_log_id: {email_log_id}")
+            else:
+                logger.error(f"Failed to update has_replied status for email_log_id: {email_log_id}")
 
-                # Send email with reply-to header
-                await smtp_client.send_email(
-                    to_email=email_data['from'],
-                    subject=response_subject,
-                    html_content=ai_reply,
-                    from_name=company["name"],
-                    email_log_id=email_log_id
+            ai_reply = await generate_ai_reply(email_log_id, email_data)
+
+            if ai_reply:
+                logger.info(f"Creating email_log_detail for the AI reply")
+                response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
+                await create_email_log_detail(
+                    email_logs_id=email_log_id,
+                    message_id=None,
+                    email_subject=response_subject,
+                    email_body=ai_reply,
+                    sender_type='assistant',
+                    sent_at=datetime.now(timezone.utc),
+                    from_name=company['name'],
+                    from_email=company['account_email'],
+                    to_email=email_data['from']
                 )
-                logger.info(f"Successfully sent AI reply email to {email_data['from']}")
+                logger.info("Successfully created email_log_detail for the AI reply")
+
+                async with SMTPClient(
+                    account_email=company['account_email'],
+                    account_password=decrypted_password,  # Use decrypted password
+                    provider=company['account_type']
+                ) as smtp_client:
+
+                    # Send email with reply-to header
+                    await smtp_client.send_email(
+                        to_email=email_data['from'],
+                        subject=response_subject,
+                        html_content=ai_reply,
+                        from_name=company["name"],
+                        email_log_id=email_log_id
+                    )
+                    logger.info(f"Successfully sent AI reply email to {email_data['from']}")
+
+        except Exception as e:
+            logger.error(f"Error processing email: {str(e)}")
 
     # After processing all emails, find the maximum uid and update the company's last_processed_uid
     if emails:
