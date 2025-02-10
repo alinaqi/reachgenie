@@ -181,7 +181,9 @@ class SMTPClient:
         subject: str,
         html_content: str,
         from_name: Optional[str] = None,
-        email_log_id: Optional[UUID] = None
+        email_log_id: Optional[UUID] = None,
+        in_reply_to: Optional[str] = None,
+        references: Optional[str] = None
     ) -> None:
         """
         Send an email using the configured SMTP connection
@@ -192,6 +194,8 @@ class SMTPClient:
             html_content: HTML content of the email
             from_name: Optional sender name to display
             email_log_id: Optional UUID to be used in reply-to address
+            in_reply_to: Optional Message-ID to reference in In-Reply-To header
+            references: Optional References header value for threading
         """
         if not self.smtp or not self.smtp.is_connected:
             await self.connect()
@@ -211,6 +215,14 @@ class SMTPClient:
                 email_log_id_str = str(email_log_id) if isinstance(email_log_id, UUID) else email_log_id
                 reply_to = f"{local_part}+{email_log_id_str}@{domain}"
                 message["Reply-To"] = reply_to
+            
+            # Add In-Reply-To header if provided
+            if in_reply_to:
+                message["In-Reply-To"] = in_reply_to
+                
+            # Add References header if provided
+            if references:
+                message["References"] = references
             
             # Attach HTML content
             html_part = MIMEText(html_content, "html")
