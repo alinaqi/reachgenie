@@ -142,6 +142,7 @@ async def fetch_emails(company: Dict):
                     to = decode_header_value(msg_obj.get("To"))
                     date = msg_obj.get("Date")
                     message_id = msg_obj.get("Message-ID")
+                    references = msg_obj.get("References")  # Get References header
 
                     # Extract the email body
                     body = ""
@@ -167,6 +168,7 @@ async def fetch_emails(company: Dict):
                     email_data.append({
                         "subject": subject,
                         "message_id": message_id,
+                        "references": references,  # Add References to the data
                         "from": sender_email,
                         "from_name": sender_name,
                         "from_full": from_field,
