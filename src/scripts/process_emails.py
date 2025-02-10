@@ -264,7 +264,8 @@ async def process_emails(
                     html_content=ai_reply,
                     from_name=company["name"],
                     email_log_id=email_log_id,
-                    in_reply_to=email_data['message_id']
+                    in_reply_to=email_data['message_id'],
+                    references=email_data['references']
                 )
                 logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
