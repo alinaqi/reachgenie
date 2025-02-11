@@ -147,3 +147,12 @@ CREATE TABLE IF NOT EXISTS invite_tokens (
     used BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- User Company Profiles table
+CREATE TABLE IF NOT EXISTS user_company_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    role VARCHAR(5) NOT NULL CHECK (role IN ('admin', 'sdr')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
