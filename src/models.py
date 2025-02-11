@@ -150,6 +150,10 @@ class CompanyInviteResponse(BaseModel):
             }
         }
 
+class InvitePasswordRequest(BaseModel):
+    token: str
+    password: str
+
 class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None

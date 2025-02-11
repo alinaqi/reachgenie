@@ -856,3 +856,20 @@ async def create_invite_token(user_id: UUID):
     }
     response = supabase.table('invite_tokens').insert(token_data).execute()
     return response.data[0] if response.data else None 
+
+async def get_valid_invite_token(token: str):
+    """Get a valid (not used) invite token"""
+    response = supabase.table('invite_tokens')\
+        .select('*')\
+        .eq('token', token)\
+        .eq('used', False)\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def mark_invite_token_used(token: str):
+    """Mark an invite token as used"""
+    response = supabase.table('invite_tokens')\
+        .update({'used': True})\
+        .eq('token', token)\
+        .execute()
+    return response.data[0] if response.data else None 

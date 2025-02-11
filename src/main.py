@@ -68,7 +68,9 @@ from src.database import (
     get_user_company_profile,
     create_user_company_profile,
     create_invite_token,
-    create_unverified_user
+    create_unverified_user,
+    get_valid_invite_token,
+    mark_invite_token_used
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -83,7 +85,8 @@ from src.models import (
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
     EmailLogDetailResponse, VoiceAgentSettings,
-    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse
+    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
+    InvitePasswordRequest
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -2153,3 +2156,43 @@ async def invite_users_to_company(
         "message": "Processed all invites",
         "results": results
     }
+
+@app.post("/api/auth/invite-password", response_model=dict)
+async def set_invite_password(request: InvitePasswordRequest):
+    """
+    Set password for a user invited to join a company.
+    Validates the invite token and updates the user's password.
+    
+    Args:
+        request: Contains the invite token and new password
+        
+    Returns:
+        dict: A message indicating success
+        
+    Raises:
+        HTTPException: If token is invalid or already used
+    """
+    # Verify token
+    token_data = await get_valid_invite_token(request.token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or already used invite token"
+        )
+    
+    # Hash new password
+    password_hash = get_password_hash(request.password)
+    
+    # Update user's password and mark as verified
+    await update_user(
+        user_id=UUID(token_data["user_id"]),
+        update_data={
+            "password_hash": password_hash,
+            "verified": True
+        }
+    )
+    
+    # Mark token as used
+    await mark_invite_token_used(request.token)
+    
+    return {"message": "Password set successfully. You can now log in."}
