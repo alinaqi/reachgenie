@@ -8,7 +8,8 @@ from src.config import get_settings
 from src.templates.email_templates import (
     get_password_reset_template,
     get_welcome_template,
-    get_account_verification_template
+    get_account_verification_template,
+    get_invite_template
 )
 
 settings = get_settings()
@@ -140,6 +141,28 @@ class EmailService:
         return await self.send_email(
             to_email=email,
             subject="Verify Your Account",
+            html_content=html_content
+        )
+
+    async def send_invite_email(self, to_email: str, company_name: str, invite_token: str, inviter_name: str) -> Dict:
+        """
+        Send company invite email.
+        
+        Args:
+            to_email: Recipient's email address
+            company_name: Name of the company sending invite
+            invite_token: Invite token for the link
+            inviter_name: Name of the person sending the invite
+            
+        Returns:
+            Dict: Response from Mailjet API
+        """
+        invite_link = f"{settings.frontend_url}/invite?token={invite_token}"
+        html_content = get_invite_template(company_name, invite_link, inviter_name)
+        
+        return await self.send_email(
+            to_email=to_email,
+            subject=f"Invitation to join {company_name} on ReachGenie",
             html_content=html_content
         )
 

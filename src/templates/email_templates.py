@@ -186,4 +186,33 @@ def get_account_verification_template(verification_link: str) -> str:
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """
+    return get_base_template(content)
+
+def get_invite_template(company_name: str, invite_link: str, inviter_name: str) -> str:
+    """
+    Company invite email template.
+    
+    Args:
+        company_name: Name of the company sending the invite
+        invite_link: The invite link with token
+        inviter_name: Name of the person who sent the invite
+        
+    Returns:
+        str: Complete HTML template for company invite email
+    """
+    content = f"""
+        <div class="header">
+            <h1>You've Been Invited to Join {company_name}</h1>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>{inviter_name} has invited you to join {company_name} on ReachGenie. Click the button below to accept the invitation and set up your account:</p>
+            <p style="text-align: center;">
+                <a href="{invite_link}" class="button">Accept Invitation</a>
+            </p>
+            <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
+            <p class="link-text">{invite_link}</p>
+            <p>Best regards,<br>ReachGenie Support Team</p>
+        </div>
+    """
     return get_base_template(content) 

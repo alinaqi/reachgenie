@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import logging
+import secrets
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -815,3 +816,43 @@ async def update_email_log_has_replied(email_log_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error updating has_replied status for log {email_log_id}: {str(e)}")
         return False 
+
+async def create_unverified_user(email: str, name: Optional[str] = None):
+    """Create a new unverified user without password"""
+    user_data = {
+        'email': email,
+        'name': name,
+        'password_hash': 'PENDING_INVITE',  # Temporary value that can't be used to log in
+        'verified': False
+    }
+    response = supabase.table('users').insert(user_data).execute()
+    return response.data[0] if response.data else None
+
+async def create_user_company_profile(user_id: UUID, company_id: UUID, role: str):
+    """Create a user-company profile with specified role"""
+    profile_data = {
+        'user_id': str(user_id),
+        'company_id': str(company_id),
+        'role': role
+    }
+    response = supabase.table('user_company_profiles').insert(profile_data).execute()
+    return response.data[0] if response.data else None
+
+async def get_user_company_profile(user_id: UUID, company_id: UUID):
+    """Get user-company profile if exists"""
+    response = supabase.table('user_company_profiles')\
+        .select('*')\
+        .eq('user_id', str(user_id))\
+        .eq('company_id', str(company_id))\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def create_invite_token(user_id: UUID):
+    """Create a new invite token for a user"""
+    token_data = {
+        'user_id': str(user_id),
+        'token': secrets.token_urlsafe(32),
+        'used': False
+    }
+    response = supabase.table('invite_tokens').insert(token_data).execute()
+    return response.data[0] if response.data else None 

@@ -108,6 +108,48 @@ class UserInDB(UserBase):
     verified: bool = False
     created_at: datetime
 
+class InviteUserRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    role: str
+
+    @field_validator('role')
+    def validate_role(cls, v):
+        if v not in ['admin', 'sdr']:
+            raise ValueError('role must be either "admin" or "sdr"')
+        return v
+
+class CompanyInviteRequest(BaseModel):
+    invites: List[InviteUserRequest]
+
+class InviteResult(BaseModel):
+    email: str
+    status: str
+    message: str
+
+class CompanyInviteResponse(BaseModel):
+    message: str
+    results: List[InviteResult]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Processed all invites",
+                "results": [
+                    {
+                        "email": "john@hotmail.com",
+                        "status": "success",
+                        "message": "Created user and sent invite"
+                    },
+                    {
+                        "email": "fahad@hotmail.com",
+                        "status": "success",
+                        "message": "Added existing user to company"
+                    }
+                ]
+            }
+        }
+
 class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None

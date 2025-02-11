@@ -64,7 +64,11 @@ from src.database import (
     delete_lead,
     soft_delete_company,
     get_email_conversation_history,
-    update_company_voice_agent_settings
+    update_company_voice_agent_settings,
+    get_user_company_profile,
+    create_user_company_profile,
+    create_invite_token,
+    create_unverified_user
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -78,7 +82,8 @@ from src.models import (
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
-    EmailLogDetailResponse, VoiceAgentSettings
+    EmailLogDetailResponse, VoiceAgentSettings,
+    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -2029,3 +2034,122 @@ async def update_voice_agent_settings(
         )
     
     return updated_company
+
+@app.post("/api/companies/{company_id}/invite", response_model=CompanyInviteResponse)
+async def invite_users_to_company(
+    company_id: UUID,
+    invite_request: CompanyInviteRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Invite users to join a company. For each user:
+    - If they don't exist, create them and send invite
+    - If they exist, just add them to the company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get company details for the email
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Track results
+    results = []
+    
+    for invite in invite_request.invites:
+        try:
+            # Check if user exists
+            existing_user = await get_user_by_email(invite.email)
+            
+            if existing_user:
+                # Check if user is already in the company
+                existing_profile = await get_user_company_profile(UUID(existing_user["id"]), company_id)
+                if existing_profile:
+                    results.append({
+                        "email": invite.email,
+                        "status": "skipped",
+                        "message": "User already exists in company"
+                    })
+                    continue
+                
+                # Add existing user to company
+                profile = await create_user_company_profile(
+                    user_id=UUID(existing_user["id"]),
+                    company_id=company_id,
+                    role=invite.role
+                )
+                
+                results.append({
+                    "email": invite.email,
+                    "status": "success",
+                    "message": "Added existing user to company"
+                })
+                
+            else:
+                # Create new user
+                new_user = await create_unverified_user(
+                    email=invite.email,
+                    name=invite.name
+                )
+                
+                if not new_user:
+                    results.append({
+                        "email": invite.email,
+                        "status": "error",
+                        "message": "Failed to create user"
+                    })
+                    continue
+                
+                # Create user-company profile
+                profile = await create_user_company_profile(
+                    user_id=UUID(new_user["id"]),
+                    company_id=company_id,
+                    role=invite.role
+                )
+                
+                # Create invite token
+                invite_token = await create_invite_token(UUID(new_user["id"]))
+                if not invite_token:
+                    results.append({
+                        "email": invite.email,
+                        "status": "error",
+                        "message": "Failed to create invite token"
+                    })
+                    continue
+                
+                # Send invite email
+                try:
+                    inviter_name = current_user.get('name') if current_user.get('name') and current_user['name'].strip() else current_user['email'].split('@')[0]
+                    await email_service.send_invite_email(
+                        to_email=invite.email,
+                        company_name=company["name"],
+                        invite_token=invite_token["token"],
+                        inviter_name=inviter_name
+                    )
+                    
+                    results.append({
+                        "email": invite.email,
+                        "status": "success",
+                        "message": "Created user and sent invite"
+                    })
+                except Exception as e:
+                    results.append({
+                        "email": invite.email,
+                        "status": "partial_success",
+                        "message": f"User created but failed to send invite: {str(e)}"
+                    })
+                    
+        except Exception as e:
+            results.append({
+                "email": invite.email,
+                "status": "error",
+                "message": str(e)
+            })
+    
+    return {
+        "message": "Processed all invites",
+        "results": results
+    }
