@@ -547,6 +547,7 @@ async def delete_company(
 ):
     """
     Soft delete a company by setting deleted = TRUE
+    Only users with admin role can delete a company.
     
     Args:
         company_id: UUID of the company to delete
@@ -557,12 +558,20 @@ async def delete_company(
         
     Raises:
         404: Company not found
-        403: User doesn't have access to this company
+        403: User doesn't have access to this company or is not an admin
     """
     # Verify user has access to the company
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can delete a company"
+        )
     
     # Soft delete the company
     success = await soft_delete_company(company_id)
