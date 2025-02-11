@@ -910,3 +910,28 @@ async def get_company_users(company_id: UUID) -> List[dict]:
         })
     
     return users 
+
+async def delete_user_company_profile(profile_id: UUID) -> bool:
+    """
+    Delete a user-company profile by its ID
+    
+    Args:
+        profile_id: UUID of the user-company profile to delete
+        
+    Returns:
+        bool: True if profile was deleted successfully, False otherwise
+    """
+    try:
+        response = supabase.table('user_company_profiles').delete().eq('id', str(profile_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error deleting user company profile {profile_id}: {str(e)}")
+        return False 
+
+async def get_user_company_profile_by_id(profile_id: UUID):
+    """Get user-company profile by its ID"""
+    response = supabase.table('user_company_profiles')\
+        .select('*')\
+        .eq('id', str(profile_id))\
+        .execute()
+    return response.data[0] if response.data else None 

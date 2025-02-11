@@ -71,7 +71,9 @@ from src.database import (
     create_unverified_user,
     get_valid_invite_token,
     mark_invite_token_used,
-    get_company_users
+    get_company_users,
+    get_user_company_profile_by_id,
+    delete_user_company_profile
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -2317,3 +2319,47 @@ async def get_company_users_endpoint(
     # Get all users for the company
     users = await get_company_users(company_id)
     return users
+
+@app.delete("/api/user_company_profile/{user_company_profile_id}", response_model=dict)
+async def delete_user_company_profile_endpoint(
+    user_company_profile_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a user-company profile. Only company admins can delete profiles.
+    The admin cannot delete their own profile.
+    """
+    # First get the profile to be deleted to get the company_id
+    profile_to_delete = await get_user_company_profile_by_id(user_company_profile_id)
+    if not profile_to_delete:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Get current user's profile for this company to check if they're an admin
+    current_user_profile = await get_user_company_profile(
+        UUID(current_user["id"]), 
+        UUID(profile_to_delete["company_id"])
+    )
+    
+    # Check if current user is an admin of the company
+    if not current_user_profile or current_user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only company administrators can delete user profiles"
+        )
+    
+    # Prevent admin from deleting their own profile
+    if str(user_company_profile_id) == str(current_user_profile["id"]):
+        raise HTTPException(
+            status_code=400,
+            detail="Administrators cannot delete their own profile"
+        )
+    
+    # Delete the profile
+    success = await delete_user_company_profile(user_company_profile_id)
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete user profile"
+        )
+    
+    return {"message": "User profile deleted successfully"}
