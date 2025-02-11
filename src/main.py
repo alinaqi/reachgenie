@@ -963,8 +963,8 @@ async def get_company_campaigns(
         raise HTTPException(status_code=400, detail="Invalid campaign type. Must be 'email', 'call', or 'all'")
     
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
     return await get_campaigns_by_company(company_id, type)
