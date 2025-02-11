@@ -873,3 +873,21 @@ async def mark_invite_token_used(token: str):
         .eq('token', token)\
         .execute()
     return response.data[0] if response.data else None 
+
+async def get_user_accessible_companies(user_id: UUID):
+    """
+    Get all companies that a user has access to through user_company_profiles
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        List of companies the user has access to
+    """
+    response = supabase.table('companies')\
+        .select('companies.*')\
+        .eq('deleted', False)\
+        .eq('user_company_profiles.user_id', str(user_id))\
+        .join('user_company_profiles', 'companies.id', 'user_company_profiles.company_id')\
+        .execute()
+    return response.data 
