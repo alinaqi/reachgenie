@@ -979,10 +979,9 @@ async def get_company_emails(
     Get all email logs for a company, optionally filtered by campaign ID
     """
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-
     # Get email logs
     email_logs = await get_company_email_logs(company_id, campaign_id)
     
