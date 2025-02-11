@@ -502,6 +502,16 @@ class EmailLogDetailResponse(BaseModel):
     from_email: Optional[str]
     to_email: Optional[str]
 
+class InviteTokenResponse(BaseModel):
+    email: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "john@hotmail.com"
+            }
+        }
+
 class VoiceType(str, Enum):
     JOSH = "josh"
     FLORIAN = "florian"

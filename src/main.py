@@ -86,7 +86,7 @@ from src.models import (
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
     EmailLogDetailResponse, VoiceAgentSettings,
     InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
-    InvitePasswordRequest
+    InvitePasswordRequest, InviteTokenResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -2196,3 +2196,35 @@ async def set_invite_password(request: InvitePasswordRequest):
     await mark_invite_token_used(request.token)
     
     return {"message": "Password set successfully. You can now log in."}
+
+@app.get("/api/auth/invite-token/{token}", response_model=InviteTokenResponse)
+async def get_invite_token_info(token: str):
+    """
+    Get user email associated with an invite token.
+    
+    Args:
+        token: The invite token string
+        
+    Returns:
+        InviteTokenResponse: Contains the email of the user associated with the token
+        
+    Raises:
+        HTTPException: If token is invalid, already used, or user not found
+    """
+    # Verify token exists and is valid
+    token_data = await get_valid_invite_token(token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or already used invite token"
+        )
+    
+    # Get user info
+    user = await get_user_by_id(UUID(token_data["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return {"email": user["email"]}
