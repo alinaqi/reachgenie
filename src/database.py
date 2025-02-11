@@ -880,3 +880,32 @@ async def get_companies_by_user_id(user_id: UUID):
         .execute()
     
     return response.data 
+
+async def get_company_users(company_id: UUID) -> List[dict]:
+    """
+    Get all users associated with a company through user_company_profiles.
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        List of dicts containing user details (name, email, role)
+    """
+    response = supabase.table('user_company_profiles')\
+        .select(
+            'role,users!inner(name,email)'  # Inner join with users table
+        )\
+        .eq('company_id', str(company_id))\
+        .execute()
+    
+    # Transform the response to match the expected format
+    users = []
+    for record in response.data:
+        user = record['users']
+        users.append({
+            'name': user['name'],
+            'email': user['email'],
+            'role': record['role']
+        })
+    
+    return users 

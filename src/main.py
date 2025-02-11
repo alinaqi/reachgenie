@@ -70,7 +70,8 @@ from src.database import (
     create_invite_token,
     create_unverified_user,
     get_valid_invite_token,
-    mark_invite_token_used
+    mark_invite_token_used,
+    get_company_users
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -86,7 +87,8 @@ from src.models import (
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
     EmailLogDetailResponse, VoiceAgentSettings,
     InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
-    InvitePasswordRequest, InviteTokenResponse
+    InvitePasswordRequest, InviteTokenResponse,
+    CompanyUserResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -2288,3 +2290,30 @@ async def get_invite_token_info(token: str):
         )
     
     return {"email": user["email"]}
+
+@app.get("/api/companies/{company_id}/users", response_model=List[CompanyUserResponse])
+async def get_company_users_endpoint(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all users associated with a company
+    
+    Args:
+        company_id: UUID of the company
+        current_user: Current authenticated user
+        
+    Returns:
+        List of users with their roles in the company
+        
+    Raises:
+        404: Company not found or user doesn't have access
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get all users for the company
+    users = await get_company_users(company_id)
+    return users

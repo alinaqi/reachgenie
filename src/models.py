@@ -586,4 +586,18 @@ class VoiceAgentSettings(BaseModel):
                 "language": "en-US"
             }
         }
+
+class CompanyUserResponse(BaseModel):
+    name: Optional[str]
+    email: str
+    role: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "role": "admin"
+            }
+        }
  
