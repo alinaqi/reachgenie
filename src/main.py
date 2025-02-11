@@ -1144,6 +1144,14 @@ async def cronofy_auth(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can connect to calendar"
+        )
+
     settings = get_settings()
     cronofy = pycronofy.Client(
         client_id=settings.cronofy_client_id,
@@ -1538,6 +1546,14 @@ async def update_account_credentials(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can update account credentials"
+        )
+
     # Currently only supporting 'gmail' type
     if credentials.type != 'gmail':
         raise HTTPException(status_code=400, detail="Currently only 'gmail' account type is supported")
@@ -2052,6 +2068,14 @@ async def update_voice_agent_settings(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can update voice agent settings"
+        )
+
     # Update voice agent settings
     updated_company = await update_company_voice_agent_settings(
         company_id=company_id,
@@ -2082,6 +2106,14 @@ async def invite_users_to_company(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can invite users"
+        )
+
     # Get company details for the email
     company = await get_company_by_id(company_id)
     if not company:
