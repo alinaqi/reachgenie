@@ -70,8 +70,7 @@ from src.database import (
     create_invite_token,
     create_unverified_user,
     get_valid_invite_token,
-    mark_invite_token_used,
-    get_user_accessible_companies
+    mark_invite_token_used
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -524,7 +523,7 @@ async def get_companies(current_user: dict = Depends(get_current_user)):
     """
     Get all companies that the user has access to, through user_company_profiles
     """
-    return await get_user_accessible_companies(UUID(current_user["id"]))
+    return await get_companies_by_user_id(UUID(current_user["id"]))
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB)
 async def get_company(

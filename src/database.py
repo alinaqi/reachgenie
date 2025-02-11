@@ -41,19 +41,6 @@ async def update_user(user_id: UUID, update_data: dict):
     response = supabase.table('users').update(update_data).eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_companies_by_user_id(user_id: UUID):
-    """
-    Get all non-deleted companies for a user
-    
-    Args:
-        user_id: UUID of the user
-        
-    Returns:
-        List of companies where deleted = FALSE
-    """
-    response = supabase.table('companies').select('*').eq('user_id', str(user_id)).eq('deleted', False).execute()
-    return response.data
-
 async def db_create_company(
     user_id: UUID, 
     name: str, 
@@ -874,7 +861,7 @@ async def mark_invite_token_used(token: str):
         .execute()
     return response.data[0] if response.data else None 
 
-async def get_user_accessible_companies(user_id: UUID):
+async def get_companies_by_user_id(user_id: UUID):
     """
     Get all companies that a user has access to through user_company_profiles
     
