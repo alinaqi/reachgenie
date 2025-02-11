@@ -889,11 +889,11 @@ async def get_company_users(company_id: UUID) -> List[dict]:
         company_id: UUID of the company
         
     Returns:
-        List of dicts containing user details (name, email, role)
+        List of dicts containing user details (name, email, role, user_company_profile_id)
     """
     response = supabase.table('user_company_profiles')\
         .select(
-            'role,users!inner(name,email)'  # Inner join with users table
+            'id,role,users!inner(name,email)'  # Added id field from user_company_profiles
         )\
         .eq('company_id', str(company_id))\
         .execute()
@@ -905,7 +905,8 @@ async def get_company_users(company_id: UUID) -> List[dict]:
         users.append({
             'name': user['name'],
             'email': user['email'],
-            'role': record['role']
+            'role': record['role'],
+            'user_company_profile_id': record['id']  # Added user_company_profile_id
         })
     
     return users 

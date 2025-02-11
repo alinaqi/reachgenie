@@ -591,13 +591,15 @@ class CompanyUserResponse(BaseModel):
     name: Optional[str]
     email: str
     role: str
+    user_company_profile_id: UUID
 
     class Config:
         json_schema_extra = {
             "example": {
                 "name": "John Doe",
                 "email": "john@example.com",
-                "role": "admin"
+                "role": "admin",
+                "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000"
             }
         }
  
