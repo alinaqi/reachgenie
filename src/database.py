@@ -885,9 +885,11 @@ async def get_user_accessible_companies(user_id: UUID):
         List of companies the user has access to
     """
     response = supabase.table('companies')\
-        .select('companies.*')\
+        .select(
+            '*,user_company_profiles!inner(*)'  # Inner join with user_company_profiles table
+        )\
         .eq('deleted', False)\
         .eq('user_company_profiles.user_id', str(user_id))\
-        .join('user_company_profiles', 'companies.id', 'user_company_profiles.company_id')\
         .execute()
+    
     return response.data 
