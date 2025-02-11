@@ -2017,8 +2017,8 @@ async def get_email_log_details(
         404: Company not found or user doesn't have access
     """
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Get email log details
