@@ -385,7 +385,8 @@ async def create_company(
             logger.error(f"Error fetching company info: {str(e)}")
             # Continue with company creation even if Perplexity fails
 
-    return await db_create_company(
+    # Create the company
+    created_company = await db_create_company(
         current_user["id"],
         company.name,
         address,
@@ -395,6 +396,22 @@ async def create_company(
         background,
         products_services
     )
+
+    # Create user-company profile with admin role
+    try:
+        await create_user_company_profile(
+            user_id=UUID(current_user["id"]),
+            company_id=UUID(created_company["id"]),
+            role="admin"
+        )
+    except Exception as e:
+        logger.error(f"Error creating user-company profile: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Company created but failed to set up admin access"
+        )
+
+    return created_company
 
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
