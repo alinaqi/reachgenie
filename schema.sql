@@ -156,3 +156,6 @@ CREATE TABLE IF NOT EXISTS user_company_profiles (
     role VARCHAR(5) NOT NULL CHECK (role IN ('admin', 'sdr')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add unique composite index on user_id, company_id, and role
+CREATE UNIQUE INDEX IF NOT EXISTS user_company_profiles_unique_idx ON user_company_profiles (user_id, company_id, role);
