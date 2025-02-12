@@ -9,7 +9,8 @@ from src.templates.email_templates import (
     get_password_reset_template,
     get_welcome_template,
     get_account_verification_template,
-    get_invite_template
+    get_invite_template,
+    get_company_addition_template
 )
 
 settings = get_settings()
@@ -163,6 +164,27 @@ class EmailService:
         return await self.send_email(
             to_email=to_email,
             subject=f"Invitation to join {company_name} on ReachGenie",
+            html_content=html_content
+        )
+
+    async def send_company_addition_email(self, to_email: str, user_name: str, company_name: str, inviter_name: str) -> Dict:
+        """
+        Send notification email to existing users when added to a company.
+        
+        Args:
+            to_email: Recipient's email address
+            user_name: Name of the user being added
+            company_name: Name of the company they're being added to
+            inviter_name: Name of the person who added them
+            
+        Returns:
+            Dict: Response from Mailjet API
+        """
+        html_content = get_company_addition_template(user_name, company_name, inviter_name)
+        
+        return await self.send_email(
+            to_email=to_email,
+            subject=f"You've Been Added to {company_name} on ReachGenie",
             html_content=html_content
         )
 

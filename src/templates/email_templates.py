@@ -215,4 +215,29 @@ def get_invite_template(company_name: str, invite_link: str, inviter_name: str) 
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """
-    return get_base_template(content) 
+    return get_base_template(content)
+
+def get_company_addition_template(user_name: str, company_name: str, inviter_name: str) -> str:
+    """
+    Template for notifying existing users they've been added to a company.
+    
+    Args:
+        user_name: Name of the user being added
+        company_name: Name of the company they're being added to
+        inviter_name: Name of the person who added them
+        
+    Returns:
+        str: Complete HTML template for company addition notification
+    """
+    content = f"""
+        <div class="header">
+            <h1>You've Been Added to {company_name}</h1>
+        </div>
+        <div class="content">
+            <p>Hello {user_name},</p>
+            <p>{inviter_name} has added you to {company_name} on ReachGenie. You can now access the company's dashboard and collaborate with your team members.</p>
+            <p>To access your new company workspace, simply log in to your ReachGenie account and select {company_name} from your company list.</p>
+            <p>Best regards,<br>ReachGenie Support Team</p>
+        </div>
+    """
+    return get_base_template(content)
