@@ -202,11 +202,11 @@ def get_invite_template(company_name: str, invite_link: str, inviter_name: str) 
     """
     content = f"""
         <div class="header">
-            <h1>You've Been Invited to Join {company_name}</h1>
+            <h1>You've Been Invited to Join "{company_name}"</h1>
         </div>
         <div class="content">
             <p>Hello,</p>
-            <p>{inviter_name} has invited you to join {company_name} on ReachGenie. Click the button below to accept the invitation and set up your account:</p>
+            <p>{inviter_name} has invited you to join "{company_name}" on ReachGenie. Click the button below to accept the invitation and set up your account:</p>
             <p style="text-align: center;">
                 <a href="{invite_link}" class="button">Accept Invitation</a>
             </p>
@@ -231,12 +231,12 @@ def get_company_addition_template(user_name: str, company_name: str, inviter_nam
     """
     content = f"""
         <div class="header">
-            <h1>You've Been Added to {company_name}</h1>
+            <h1>You've Been Added to "{company_name}"</h1>
         </div>
         <div class="content">
             <p>Hello {user_name},</p>
-            <p>{inviter_name} has added you to {company_name} on ReachGenie. You can now access the company's dashboard and collaborate with your team members.</p>
-            <p>To access your new company workspace, simply log in to your ReachGenie account and select {company_name} from your company list.</p>
+            <p>{inviter_name} has added you to "{company_name}" on ReachGenie. You can now access the company's dashboard and collaborate with your team members.</p>
+            <p>To access your new company workspace, simply log in to your ReachGenie account and select "{company_name}" from your company list.</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """
