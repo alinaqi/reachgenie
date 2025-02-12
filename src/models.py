@@ -102,11 +102,33 @@ class UserUpdate(BaseModel):
                 raise ValueError('old_password is required when setting new_password')
         return value
 
+class UserCompanyRole(BaseModel):
+    company_id: UUID
+    role: str
+
 class UserInDB(UserBase):
     id: UUID
     name: Optional[str] = None
     verified: bool = False
     created_at: datetime
+    company_roles: Optional[List[UserCompanyRole]] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "user@example.com",
+                "name": "John Doe",
+                "verified": True,
+                "created_at": "2024-03-15T00:00:00Z",
+                "company_roles": [
+                    {
+                        "company_id": "6f141775-3e94-44ee-99d4-8e704cbe3e4a",
+                        "role": "admin"
+                    }
+                ]
+            }
+        }
 
 class InviteUserRequest(BaseModel):
     email: EmailStr

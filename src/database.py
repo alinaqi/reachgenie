@@ -935,3 +935,20 @@ async def get_user_company_profile_by_id(profile_id: UUID):
         .eq('id', str(profile_id))\
         .execute()
     return response.data[0] if response.data else None 
+
+async def get_user_company_roles(user_id: UUID) -> List[dict]:
+    """
+    Get all company roles for a user
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        List of dicts containing company_id and role
+    """
+    response = supabase.table('user_company_profiles')\
+        .select('company_id,role')\
+        .eq('user_id', str(user_id))\
+        .execute()
+    
+    return [{"company_id": record["company_id"], "role": record["role"]} for record in response.data] 

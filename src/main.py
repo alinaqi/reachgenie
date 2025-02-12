@@ -73,7 +73,8 @@ from src.database import (
     mark_invite_token_used,
     get_company_users,
     get_user_company_profile_by_id,
-    delete_user_company_profile
+    delete_user_company_profile,
+    get_user_company_roles
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -355,6 +356,11 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    
+    # Get user's company roles
+    company_roles = await get_user_company_roles(UUID(user["id"]))
+    user["company_roles"] = company_roles
+    
     return user
 
 # Company Management endpoints
