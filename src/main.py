@@ -2149,6 +2149,20 @@ async def invite_users_to_company(
                     role=invite.role
                 )
                 
+                # Send welcome email to existing user
+                try:
+                    inviter_name = current_user.get('name') if current_user.get('name') and current_user['name'].strip() else current_user['email'].split('@')[0]
+                    user_name = existing_user.get('name') if existing_user.get('name') and existing_user['name'].strip() else existing_user['email'].split('@')[0]
+                    await email_service.send_company_addition_email(
+                        to_email=existing_user['email'],
+                        user_name=user_name,
+                        company_name=company["name"],
+                        inviter_name=inviter_name
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send company addition email to {existing_user['email']}: {str(e)}")
+                    # Don't fail the process if email sending fails
+                
                 results.append({
                     "email": invite.email,
                     "status": "success",
