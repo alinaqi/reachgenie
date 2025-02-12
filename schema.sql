@@ -138,3 +138,24 @@ CREATE TABLE IF NOT EXISTS verification_tokens (
     used BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Invite Tokens table
+CREATE TABLE IF NOT EXISTS invite_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User Company Profiles table
+CREATE TABLE IF NOT EXISTS user_company_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    role VARCHAR(5) NOT NULL CHECK (role IN ('admin', 'sdr')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add unique composite index on user_id, company_id, and role
+CREATE UNIQUE INDEX IF NOT EXISTS user_company_profiles_unique_idx ON user_company_profiles (user_id, company_id, role);

@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import logging
+import secrets
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -39,19 +40,6 @@ async def update_user(user_id: UUID, update_data: dict):
     """
     response = supabase.table('users').update(update_data).eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
-
-async def get_companies_by_user_id(user_id: UUID):
-    """
-    Get all non-deleted companies for a user
-    
-    Args:
-        user_id: UUID of the user
-        
-    Returns:
-        List of companies where deleted = FALSE
-    """
-    response = supabase.table('companies').select('*').eq('user_id', str(user_id)).eq('deleted', False).execute()
-    return response.data
 
 async def db_create_company(
     user_id: UUID, 
@@ -815,3 +803,152 @@ async def update_email_log_has_replied(email_log_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error updating has_replied status for log {email_log_id}: {str(e)}")
         return False 
+
+async def create_unverified_user(email: str, name: Optional[str] = None):
+    """Create a new unverified user without password"""
+    user_data = {
+        'email': email,
+        'name': name,
+        'password_hash': 'PENDING_INVITE',  # Temporary value that can't be used to log in
+        'verified': False
+    }
+    response = supabase.table('users').insert(user_data).execute()
+    return response.data[0] if response.data else None
+
+async def create_user_company_profile(user_id: UUID, company_id: UUID, role: str):
+    """Create a user-company profile with specified role"""
+    profile_data = {
+        'user_id': str(user_id),
+        'company_id': str(company_id),
+        'role': role
+    }
+    response = supabase.table('user_company_profiles').insert(profile_data).execute()
+    return response.data[0] if response.data else None
+
+async def get_user_company_profile(user_id: UUID, company_id: UUID):
+    """Get user-company profile if exists"""
+    response = supabase.table('user_company_profiles')\
+        .select('*')\
+        .eq('user_id', str(user_id))\
+        .eq('company_id', str(company_id))\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def create_invite_token(user_id: UUID):
+    """Create a new invite token for a user"""
+    token_data = {
+        'user_id': str(user_id),
+        'token': secrets.token_urlsafe(32),
+        'used': False
+    }
+    response = supabase.table('invite_tokens').insert(token_data).execute()
+    return response.data[0] if response.data else None 
+
+async def get_valid_invite_token(token: str):
+    """Get a valid (not used) invite token"""
+    response = supabase.table('invite_tokens')\
+        .select('*')\
+        .eq('token', token)\
+        .eq('used', False)\
+        .execute()
+    return response.data[0] if response.data else None
+
+async def mark_invite_token_used(token: str):
+    """Mark an invite token as used"""
+    response = supabase.table('invite_tokens')\
+        .update({'used': True})\
+        .eq('token', token)\
+        .execute()
+    return response.data[0] if response.data else None 
+
+async def get_companies_by_user_id(user_id: UUID):
+    """
+    Get all companies that a user has access to through user_company_profiles
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        List of companies the user has access to
+    """
+    response = supabase.table('companies')\
+        .select(
+            '*,user_company_profiles!inner(*)'  # Inner join with user_company_profiles table
+        )\
+        .eq('deleted', False)\
+        .eq('user_company_profiles.user_id', str(user_id))\
+        .execute()
+    
+    return response.data 
+
+async def get_company_users(company_id: UUID) -> List[dict]:
+    """
+    Get all users associated with a company through user_company_profiles.
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        List of dicts containing user details (name, email, role, user_company_profile_id)
+    """
+    response = supabase.table('user_company_profiles')\
+        .select(
+            'id,role,users!inner(name,email)'  # Added id field from user_company_profiles
+        )\
+        .eq('company_id', str(company_id))\
+        .execute()
+    
+    # Transform the response to match the expected format
+    users = []
+    for record in response.data:
+        user = record['users']
+        users.append({
+            'name': user['name'],
+            'email': user['email'],
+            'role': record['role'],
+            'user_company_profile_id': record['id']  # Added user_company_profile_id
+        })
+    
+    return users 
+
+async def delete_user_company_profile(profile_id: UUID) -> bool:
+    """
+    Delete a user-company profile by its ID
+    
+    Args:
+        profile_id: UUID of the user-company profile to delete
+        
+    Returns:
+        bool: True if profile was deleted successfully, False otherwise
+    """
+    try:
+        response = supabase.table('user_company_profiles').delete().eq('id', str(profile_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error deleting user company profile {profile_id}: {str(e)}")
+        return False 
+
+async def get_user_company_profile_by_id(profile_id: UUID):
+    """Get user-company profile by its ID"""
+    response = supabase.table('user_company_profiles')\
+        .select('*')\
+        .eq('id', str(profile_id))\
+        .execute()
+    return response.data[0] if response.data else None 
+
+async def get_user_company_roles(user_id: UUID) -> List[dict]:
+    """
+    Get all company roles for a user
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        List of dicts containing company_id and role
+    """
+    response = supabase.table('user_company_profiles')\
+        .select('company_id,role')\
+        .eq('user_id', str(user_id))\
+        .execute()
+    
+    return [{"company_id": record["company_id"], "role": record["role"]} for record in response.data] 

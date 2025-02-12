@@ -102,11 +102,79 @@ class UserUpdate(BaseModel):
                 raise ValueError('old_password is required when setting new_password')
         return value
 
+class UserCompanyRole(BaseModel):
+    company_id: UUID
+    role: str
+
 class UserInDB(UserBase):
     id: UUID
     name: Optional[str] = None
     verified: bool = False
     created_at: datetime
+    company_roles: Optional[List[UserCompanyRole]] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "user@example.com",
+                "name": "John Doe",
+                "verified": True,
+                "created_at": "2024-03-15T00:00:00Z",
+                "company_roles": [
+                    {
+                        "company_id": "6f141775-3e94-44ee-99d4-8e704cbe3e4a",
+                        "role": "admin"
+                    }
+                ]
+            }
+        }
+
+class InviteUserRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    role: str
+
+    @field_validator('role')
+    def validate_role(cls, v):
+        if v not in ['admin', 'sdr']:
+            raise ValueError('role must be either "admin" or "sdr"')
+        return v
+
+class CompanyInviteRequest(BaseModel):
+    invites: List[InviteUserRequest]
+
+class InviteResult(BaseModel):
+    email: str
+    status: str
+    message: str
+
+class CompanyInviteResponse(BaseModel):
+    message: str
+    results: List[InviteResult]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Processed all invites",
+                "results": [
+                    {
+                        "email": "john@hotmail.com",
+                        "status": "success",
+                        "message": "Created user and sent invite"
+                    },
+                    {
+                        "email": "fahad@hotmail.com",
+                        "status": "success",
+                        "message": "Added existing user to company"
+                    }
+                ]
+            }
+        }
+
+class InvitePasswordRequest(BaseModel):
+    token: str
+    password: str
 
 class CompanyBase(BaseModel):
     name: str
@@ -456,6 +524,16 @@ class EmailLogDetailResponse(BaseModel):
     from_email: Optional[str]
     to_email: Optional[str]
 
+class InviteTokenResponse(BaseModel):
+    email: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "john@hotmail.com"
+            }
+        }
+
 class VoiceType(str, Enum):
     JOSH = "josh"
     FLORIAN = "florian"
@@ -528,6 +606,22 @@ class VoiceAgentSettings(BaseModel):
                 "background_track": "office",
                 "temperature": 0.7,
                 "language": "en-US"
+            }
+        }
+
+class CompanyUserResponse(BaseModel):
+    name: Optional[str]
+    email: str
+    role: str
+    user_company_profile_id: UUID
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "role": "admin",
+                "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000"
             }
         }
  

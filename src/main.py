@@ -64,7 +64,17 @@ from src.database import (
     delete_lead,
     soft_delete_company,
     get_email_conversation_history,
-    update_company_voice_agent_settings
+    update_company_voice_agent_settings,
+    get_user_company_profile,
+    create_user_company_profile,
+    create_invite_token,
+    create_unverified_user,
+    get_valid_invite_token,
+    mark_invite_token_used,
+    get_company_users,
+    get_user_company_profile_by_id,
+    delete_user_company_profile,
+    get_user_company_roles
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -78,7 +88,10 @@ from src.models import (
     EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
-    EmailLogDetailResponse, VoiceAgentSettings
+    EmailLogDetailResponse, VoiceAgentSettings,
+    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
+    InvitePasswordRequest, InviteTokenResponse,
+    CompanyUserResponse
 )
 from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
@@ -343,6 +356,11 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    
+    # Get user's company roles
+    company_roles = await get_user_company_roles(UUID(user["id"]))
+    user["company_roles"] = company_roles
+    
     return user
 
 # Company Management endpoints
@@ -377,7 +395,8 @@ async def create_company(
             logger.error(f"Error fetching company info: {str(e)}")
             # Continue with company creation even if Perplexity fails
 
-    return await db_create_company(
+    # Create the company
+    created_company = await db_create_company(
         current_user["id"],
         company.name,
         address,
@@ -387,6 +406,22 @@ async def create_company(
         background,
         products_services
     )
+
+    # Create user-company profile with admin role
+    try:
+        await create_user_company_profile(
+            user_id=UUID(current_user["id"]),
+            company_id=UUID(created_company["id"]),
+            role="admin"
+        )
+    except Exception as e:
+        logger.error(f"Error creating user-company profile: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Company created but failed to set up admin access"
+        )
+
+    return created_company
 
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
@@ -495,7 +530,10 @@ async def update_product(
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
 async def get_companies(current_user: dict = Depends(get_current_user)):
-    return await get_companies_by_user_id(current_user["id"])
+    """
+    Get all companies that the user has access to, through user_company_profiles
+    """
+    return await get_companies_by_user_id(UUID(current_user["id"]))
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB)
 async def get_company(
@@ -519,6 +557,7 @@ async def delete_company(
 ):
     """
     Soft delete a company by setting deleted = TRUE
+    Only users with admin role can delete a company.
     
     Args:
         company_id: UUID of the company to delete
@@ -529,12 +568,20 @@ async def delete_company(
         
     Raises:
         404: Company not found
-        403: User doesn't have access to this company
+        403: User doesn't have access to this company or is not an admin
     """
     # Verify user has access to the company
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can delete a company"
+        )
     
     # Soft delete the company
     success = await soft_delete_company(company_id)
@@ -926,8 +973,8 @@ async def get_company_campaigns(
         raise HTTPException(status_code=400, detail="Invalid campaign type. Must be 'email', 'call', or 'all'")
     
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
     return await get_campaigns_by_company(company_id, type)
@@ -942,10 +989,9 @@ async def get_company_emails(
     Get all email logs for a company, optionally filtered by campaign ID
     """
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-
     # Get email logs
     email_logs = await get_company_email_logs(company_id, campaign_id)
     
@@ -1107,6 +1153,14 @@ async def cronofy_auth(
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
+
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can connect to calendar"
+        )
 
     settings = get_settings()
     cronofy = pycronofy.Client(
@@ -1502,6 +1556,14 @@ async def update_account_credentials(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can update account credentials"
+        )
+
     # Currently only supporting 'gmail' type
     if credentials.type != 'gmail':
         raise HTTPException(status_code=400, detail="Currently only 'gmail' account type is supported")
@@ -1981,8 +2043,8 @@ async def get_email_log_details(
         404: Company not found or user doesn't have access
     """
     # Validate company access
-    company = await get_company_by_id(company_id)
-    if not company or company['user_id'] != current_user['id']:
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Get email log details
@@ -2016,6 +2078,14 @@ async def update_voice_agent_settings(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can update voice agent settings"
+        )
+
     # Update voice agent settings
     updated_company = await update_company_voice_agent_settings(
         company_id=company_id,
@@ -2029,3 +2099,287 @@ async def update_voice_agent_settings(
         )
     
     return updated_company
+
+@app.post("/api/companies/{company_id}/invite", response_model=CompanyInviteResponse)
+async def invite_users_to_company(
+    company_id: UUID,
+    invite_request: CompanyInviteRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Invite users to join a company. For each user:
+    - If they don't exist, create them and send invite
+    - If they exist, just add them to the company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Check if user has admin role for this company
+    user_profile = await get_user_company_profile(UUID(current_user["id"]), company_id)
+    if not user_profile or user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only company administrators can invite users"
+        )
+
+    # Get company details for the email
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Track results
+    results = []
+    
+    for invite in invite_request.invites:
+        try:
+            # Check if user exists
+            existing_user = await get_user_by_email(invite.email)
+            
+            if existing_user:
+                # Check if user is already in the company
+                existing_profile = await get_user_company_profile(UUID(existing_user["id"]), company_id)
+                if existing_profile:
+                    results.append({
+                        "email": invite.email,
+                        "status": "skipped",
+                        "message": "User already exists in company"
+                    })
+                    continue
+                
+                # Add existing user to company
+                profile = await create_user_company_profile(
+                    user_id=UUID(existing_user["id"]),
+                    company_id=company_id,
+                    role=invite.role
+                )
+                
+                # Send welcome email to existing user
+                try:
+                    inviter_name = current_user.get('name') if current_user.get('name') and current_user['name'].strip() else current_user['email'].split('@')[0]
+                    user_name = existing_user.get('name') if existing_user.get('name') and existing_user['name'].strip() else existing_user['email'].split('@')[0]
+                    await email_service.send_company_addition_email(
+                        to_email=existing_user['email'],
+                        user_name=user_name,
+                        company_name=company["name"],
+                        inviter_name=inviter_name
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send company addition email to {existing_user['email']}: {str(e)}")
+                    # Don't fail the process if email sending fails
+                
+                results.append({
+                    "email": invite.email,
+                    "status": "success",
+                    "message": "Added existing user to company"
+                })
+                
+            else:
+                # Create new user
+                new_user = await create_unverified_user(
+                    email=invite.email,
+                    name=invite.name
+                )
+                
+                if not new_user:
+                    results.append({
+                        "email": invite.email,
+                        "status": "error",
+                        "message": "Failed to create user"
+                    })
+                    continue
+                
+                # Create user-company profile
+                profile = await create_user_company_profile(
+                    user_id=UUID(new_user["id"]),
+                    company_id=company_id,
+                    role=invite.role
+                )
+                
+                # Create invite token
+                invite_token = await create_invite_token(UUID(new_user["id"]))
+                if not invite_token:
+                    results.append({
+                        "email": invite.email,
+                        "status": "error",
+                        "message": "Failed to create invite token"
+                    })
+                    continue
+                
+                # Send invite email
+                try:
+                    inviter_name = current_user.get('name') if current_user.get('name') and current_user['name'].strip() else current_user['email'].split('@')[0]
+                    await email_service.send_invite_email(
+                        to_email=invite.email,
+                        company_name=company["name"],
+                        invite_token=invite_token["token"],
+                        inviter_name=inviter_name
+                    )
+                    
+                    results.append({
+                        "email": invite.email,
+                        "status": "success",
+                        "message": "Created user and sent invite"
+                    })
+                except Exception as e:
+                    results.append({
+                        "email": invite.email,
+                        "status": "partial_success",
+                        "message": f"User created but failed to send invite: {str(e)}"
+                    })
+                    
+        except Exception as e:
+            results.append({
+                "email": invite.email,
+                "status": "error",
+                "message": str(e)
+            })
+    
+    return {
+        "message": "Processed all invites",
+        "results": results
+    }
+
+@app.post("/api/auth/invite-password", response_model=dict)
+async def set_invite_password(request: InvitePasswordRequest):
+    """
+    Set password for a user invited to join a company.
+    Validates the invite token and updates the user's password.
+    
+    Args:
+        request: Contains the invite token and new password
+        
+    Returns:
+        dict: A message indicating success
+        
+    Raises:
+        HTTPException: If token is invalid or already used
+    """
+    # Verify token
+    token_data = await get_valid_invite_token(request.token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or already used invite token"
+        )
+    
+    # Hash new password
+    password_hash = get_password_hash(request.password)
+    
+    # Update user's password and mark as verified
+    await update_user(
+        user_id=UUID(token_data["user_id"]),
+        update_data={
+            "password_hash": password_hash,
+            "verified": True
+        }
+    )
+    
+    # Mark token as used
+    await mark_invite_token_used(request.token)
+    
+    return {"message": "Password set successfully. You can now log in."}
+
+@app.get("/api/auth/invite-token/{token}", response_model=InviteTokenResponse)
+async def get_invite_token_info(token: str):
+    """
+    Get user email associated with an invite token.
+    
+    Args:
+        token: The invite token string
+        
+    Returns:
+        InviteTokenResponse: Contains the email of the user associated with the token
+        
+    Raises:
+        HTTPException: If token is invalid, already used, or user not found
+    """
+    # Verify token exists and is valid
+    token_data = await get_valid_invite_token(token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or already used invite token"
+        )
+    
+    # Get user info
+    user = await get_user_by_id(UUID(token_data["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return {"email": user["email"]}
+
+@app.get("/api/companies/{company_id}/users", response_model=List[CompanyUserResponse])
+async def get_company_users_endpoint(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all users associated with a company
+    
+    Args:
+        company_id: UUID of the company
+        current_user: Current authenticated user
+        
+    Returns:
+        List of users with their roles in the company
+        
+    Raises:
+        404: Company not found or user doesn't have access
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get all users for the company
+    users = await get_company_users(company_id)
+    return users
+
+@app.delete("/api/user_company_profile/{user_company_profile_id}", response_model=dict)
+async def delete_user_company_profile_endpoint(
+    user_company_profile_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a user-company profile. Only company admins can delete profiles.
+    The admin cannot delete their own profile.
+    """
+    # First get the profile to be deleted to get the company_id
+    profile_to_delete = await get_user_company_profile_by_id(user_company_profile_id)
+    if not profile_to_delete:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Get current user's profile for this company to check if they're an admin
+    current_user_profile = await get_user_company_profile(
+        UUID(current_user["id"]), 
+        UUID(profile_to_delete["company_id"])
+    )
+    
+    # Check if current user is an admin of the company
+    if not current_user_profile or current_user_profile["role"] != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only company administrators can delete user profiles"
+        )
+    
+    # Prevent admin from deleting their own profile
+    if str(user_company_profile_id) == str(current_user_profile["id"]):
+        raise HTTPException(
+            status_code=400,
+            detail="Administrators cannot delete their own profile"
+        )
+    
+    # Delete the profile
+    success = await delete_user_company_profile(user_company_profile_id)
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete user profile"
+        )
+    
+    return {"message": "User profile deleted successfully"}
