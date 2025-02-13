@@ -906,8 +906,6 @@ async def get_companies_by_user_id(user_id: UUID):
             'user_id': profile['user_id']  # Use the user_id from the profile
         }
         companies.append(company_data)
-    
-    logger.info(f"Response of get_companies_by_user_id: {companies}")
 
     return companies
 
