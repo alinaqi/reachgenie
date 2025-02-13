@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, B
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from datetime import datetime, timezone, timedelta
 import csv
 import io
@@ -74,7 +74,8 @@ from src.database import (
     get_company_users,
     get_user_company_profile_by_id,
     delete_user_company_profile,
-    get_user_company_roles
+    get_user_company_roles,
+    update_email_log_has_opened
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -1764,6 +1765,8 @@ async def run_email_campaign(campaign: dict, company: dict):
                         logger.info(f"Generated email content for lead: {lead['email']}")
                         logger.info(f"Email Subject: {subject}")
                         logger.info(f"Email Body: {body}")
+
+                        body_without_tracking_pixel = body
                     
                     # Send email using SMTP client
                         try:
@@ -1775,11 +1778,22 @@ async def run_email_campaign(campaign: dict, company: dict):
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
+                            # Add tracking pixel to the email body
+                            settings = get_settings()
+                            tracking_pixel_url = f"{settings.webhook_base_url}/api/track-email/{email_log['id']}"
+                            tracking_pixel = f'<img src="{tracking_pixel_url}" width="1" height="1" style="display:none" alt="" />'
+                            
+                            # Append tracking pixel to the body
+                            if "</body>" in body:
+                                body = body.replace("</body>", f"{tracking_pixel}</body>")
+                            else:
+                                body = f"{body}{tracking_pixel}"
+
                             # Send email with reply-to header
                             await smtp_client.send_email(
                                 to_email=lead['email'],
                                 subject=subject,  # Use generated subject
-                                html_content=body,  # Use generated body
+                                html_content=body,  # Use generated body with tracking pixel
                                 from_name=company["name"],
                                 email_log_id=email_log['id']
                             )
@@ -1791,7 +1805,7 @@ async def run_email_campaign(campaign: dict, company: dict):
                                     email_logs_id=email_log['id'],
                                     message_id=None,
                                     email_subject=subject,  # Use generated subject
-                                    email_body=body,  # Use generated body
+                                    email_body=body_without_tracking_pixel,  # Use generated body without tracking pixel
                                     sender_type='assistant',
                                     sent_at=datetime.now(timezone.utc),
                                     from_name=company['name'],
@@ -2383,3 +2397,22 @@ async def delete_user_company_profile_endpoint(
         )
     
     return {"message": "User profile deleted successfully"}
+
+@app.get("/api/track-email/{email_log_id}")
+async def track_email(email_log_id: UUID):
+    try:
+        # Update the email_log has_opened status using the database function
+        await update_email_log_has_opened(email_log_id)
+        
+        # Return a 1x1 transparent pixel
+        return Response(
+            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
+            media_type='image/gif'
+        )
+    except Exception as e:
+        logger.error(f"Error tracking email open for log {email_log_id}: {str(e)}")
+        # Still return the pixel even if tracking fails
+        return Response(
+            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
+            media_type='image/gif'
+        )

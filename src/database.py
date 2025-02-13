@@ -952,3 +952,22 @@ async def get_user_company_roles(user_id: UUID) -> List[dict]:
         .execute()
     
     return [{"company_id": record["company_id"], "role": record["role"]} for record in response.data] 
+
+async def update_email_log_has_opened(email_log_id: UUID) -> bool:
+    """
+    Update the has_opened status of an email log to True.
+    
+    Args:
+        email_log_id: UUID of the email log to update
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('email_logs').update({
+            'has_opened': True
+        }).eq('id', str(email_log_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating email_log has_opened status for {email_log_id}: {str(e)}")
+        return False 
