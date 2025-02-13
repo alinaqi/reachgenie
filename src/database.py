@@ -939,12 +939,38 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                             .execute()
                         total_positive_calls = positive_calls_response.count
                     
+                        # Fetch all sent emails for this product
+                        sent_emails_response = supabase.table('email_logs')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .execute()
+                        total_sent_emails = sent_emails_response.count
+
+                        # Fetch all opened emails for this product
+                        opened_emails_response = supabase.table('email_logs')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_opened', True)\
+                            .execute()
+                        total_opened_emails = opened_emails_response.count
+
+                        # Fetch all replied emails for this product
+                        replied_emails_response = supabase.table('email_logs')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_replied', True)\
+                            .execute()
+                        total_replied_emails = replied_emails_response.count
+
                     products.append({
                         'id': product['id'],
                         'name': product['product_name'],
                         'total_campaigns': campaigns_response.count,
                         'total_calls': total_calls,
-                        'total_positive_calls': total_positive_calls
+                        'total_positive_calls': total_positive_calls,
+                        'total_sent_emails': total_sent_emails,
+                        'total_opened_emails': total_opened_emails,
+                        'total_replied_emails': total_replied_emails
                     })
                 company_data['products'] = products
             else:
