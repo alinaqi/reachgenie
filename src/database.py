@@ -863,23 +863,40 @@ async def mark_invite_token_used(token: str):
 
 async def get_companies_by_user_id(user_id: UUID):
     """
-    Get all companies that a user has access to through user_company_profiles
+    Get all companies that a user has access to through user_company_profiles,
+    including their products
     
     Args:
         user_id: UUID of the user
         
     Returns:
-        List of companies the user has access to
+        List of companies the user has access to, each including an array of products
     """
     response = supabase.table('companies')\
         .select(
-            '*,user_company_profiles!inner(*)'  # Inner join with user_company_profiles table
+            '*,' +
+            'user_company_profiles!inner(*),' +
+            'products(id,product_name)'  # Left join with products table
         )\
         .eq('deleted', False)\
         .eq('user_company_profiles.user_id', str(user_id))\
         .execute()
     
-    return response.data 
+    # Transform the response to include products in the desired format
+    companies = []
+    for company in response.data:
+        # Extract products and format them
+        products = [
+            {'id': product['id'], 'name': product['product_name']}
+            for product in company.get('products', [])
+        ]
+        
+        # Create company object with all fields and add products array
+        company_data = {**company}
+        company_data['products'] = products
+        companies.append(company_data)
+    
+    return companies
 
 async def get_company_users(company_id: UUID) -> List[dict]:
     """
