@@ -872,28 +872,40 @@ async def get_companies_by_user_id(user_id: UUID):
     Returns:
         List of companies the user has access to, each including an array of products
     """
-    response = supabase.table('companies')\
+    response = supabase.table('user_company_profiles')\
         .select(
-            '*,' +
-            'user_company_profiles!inner(*),' +
-            'products(id,product_name)'  # Left join with products table
+            'role,' +
+            'companies!inner(id, name, address, industry, website, deleted, created_at, products(id, product_name))'
         )\
-        .eq('deleted', False)\
-        .eq('user_company_profiles.user_id', str(user_id))\
+        .eq('user_id', str(user_id))\
+        .eq('companies.deleted', False)\
         .execute()
     
     # Transform the response to include products in the desired format
     companies = []
-    for company in response.data:
+    for profile in response.data:
+        company = profile['companies']
+        
         # Extract products and format them
-        products = [
-            {'id': product['id'], 'name': product['product_name']}
-            for product in company.get('products', [])
-        ]
+        products = []
+        if 'products' in company:
+            products = [
+                {'id': product['id'], 'name': product['product_name']}
+                for product in company['products']
+            ]
         
         # Create company object with all fields and add products array
-        company_data = {**company}
-        company_data['products'] = products
+        company_data = {
+            'id': company['id'],
+            'name': company['name'],
+            'address': company['address'],
+            'industry': company['industry'],
+            'website': company['website'],
+            'created_at': company['created_at'],
+            'products': products,
+            'role': profile['role'],
+            'user_id': str(user_id)  # Add the user_id to each company object
+        }
         companies.append(company_data)
     
     return companies
