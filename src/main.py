@@ -1034,7 +1034,7 @@ async def run_campaign(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
-    logger.info(f"Running email campaign {campaign_id}")
+    logger.info(f"Running campaign {campaign_id}")
     
     # Get the campaign
     campaign = await get_campaign_by_id(campaign_id)
