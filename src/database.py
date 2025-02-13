@@ -924,17 +924,27 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                     # Get total calls for all campaigns of this product
                     total_calls = 0
                     if campaign_ids:  # Only query if there are campaigns
+                        # Fetch all calls for this product
                         calls_response = supabase.table('calls')\
                             .select('id', count='exact')\
                             .in_('campaign_id', campaign_ids)\
                             .execute()
                         total_calls = calls_response.count
+
+                        # Fetch all positive calls for this product
+                        positive_calls_response = supabase.table('calls')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('sentiment', 'positive')\
+                            .execute()
+                        total_positive_calls = positive_calls_response.count
                     
                     products.append({
                         'id': product['id'],
                         'name': product['product_name'],
                         'total_campaigns': campaigns_response.count,
-                        'total_calls': total_calls
+                        'total_calls': total_calls,
+                        'total_positive_calls': total_positive_calls
                     })
                 company_data['products'] = products
             else:
