@@ -786,7 +786,8 @@ async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str, la
 
 async def update_email_log_has_replied(email_log_id: UUID) -> bool:
     """
-    Update the has_replied field to True for an email log
+    Update the has_replied field to True for an email log and also set has_opened to True
+    since a reply implies the email was opened.
     
     Args:
         email_log_id: UUID of the email log to update
@@ -796,7 +797,10 @@ async def update_email_log_has_replied(email_log_id: UUID) -> bool:
     """
     try:
         response = supabase.table('email_logs')\
-            .update({'has_replied': True})\
+            .update({
+                'has_replied': True,
+                'has_opened': True
+            })\
             .eq('id', str(email_log_id))\
             .execute()
         return bool(response.data)
