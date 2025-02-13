@@ -874,13 +874,12 @@ async def get_companies_by_user_id(user_id: UUID):
     """
     response = supabase.table('user_company_profiles')\
         .select(
-            'role,' +
-            'companies!inner(id, name, address, industry, website, deleted, created_at, products(id, product_name))'
+            'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at, products(id, product_name))'
         )\
         .eq('user_id', str(user_id))\
         .eq('companies.deleted', False)\
         .execute()
-    
+
     # Transform the response to include products in the desired format
     companies = []
     for profile in response.data:
@@ -904,10 +903,12 @@ async def get_companies_by_user_id(user_id: UUID):
             'created_at': company['created_at'],
             'products': products,
             'role': profile['role'],
-            'user_id': str(user_id)  # Add the user_id to each company object
+            'user_id': profile['user_id']  # Use the user_id from the profile
         }
         companies.append(company_data)
     
+    logger.info(f"Response of get_companies_by_user_id: {companies}")
+
     return companies
 
 async def get_company_users(company_id: UUID) -> List[dict]:
