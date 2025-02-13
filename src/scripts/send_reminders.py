@@ -5,7 +5,7 @@ from uuid import UUID
 from openai import AsyncOpenAI
 from src.config import get_settings
 from datetime import datetime, timezone
-
+from src.utils.email_utils import add_tracking_pixel
 from src.utils.smtp_client import SMTPClient
 from src.database import (
     get_email_logs_reminder, 
@@ -151,11 +151,14 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         reminder_type=next_reminder_type
                     )
                     
+                    # Add tracking pixel to the email body
+                    reminder_content = add_tracking_pixel(reminder_content, email_log_id)
+                    
                     # Send the reminder email
                     await smtp_client.send_email(
                         to_email=log['lead_email'],  # Using lead's email address
                         subject=subject,
-                        html_content=reminder_content,
+                        html_content=reminder_content, # add tracking pixel to the email body
                         from_name=company['name'],
                         email_log_id=email_log_id
                     )

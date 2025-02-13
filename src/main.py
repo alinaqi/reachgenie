@@ -14,7 +14,7 @@ from openai import AsyncOpenAI
 import json
 import pycronofy
 import uuid
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
