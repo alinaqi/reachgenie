@@ -101,6 +101,7 @@ from src.services.perplexity_service import perplexity_service
 import os
 from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
+from src.utils.email_utils import add_tracking_pixel
 
 # Configure logger
 logging.basicConfig(
@@ -1778,16 +1779,8 @@ async def run_email_campaign(campaign: dict, company: dict):
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
                             # Add tracking pixel to the email body
-                            settings = get_settings()
-                            tracking_pixel_url = f"{settings.webhook_base_url}/api/track-email/{email_log['id']}"
-                            tracking_pixel = f'<img src="{tracking_pixel_url}" width="1" height="1" style="display:none" alt="" />'
+                            body = add_tracking_pixel(body, email_log['id'])
                             
-                            # Append tracking pixel to the body
-                            if "</body>" in body:
-                                body = body.replace("</body>", f"{tracking_pixel}</body>")
-                            else:
-                                body = f"{body}{tracking_pixel}"
-
                             # Send email with reply-to header
                             await smtp_client.send_email(
                                 to_email=lead['email'],
