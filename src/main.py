@@ -530,11 +530,15 @@ async def update_product(
     return await update_product_details(product_id, product.product_name)
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
-async def get_companies(current_user: dict = Depends(get_current_user)):
+async def get_companies(
+    show_stats: bool = Query(False, description="Include products in the response"),
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Get all companies that the user has access to, through user_company_profiles
+    Get all companies that the user has access to, through user_company_profiles.
+    Optionally include products in the response if show_stats is True.
     """
-    return await get_companies_by_user_id(UUID(current_user["id"]))
+    return await get_companies_by_user_id(UUID(current_user["id"]), show_stats)
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB)
 async def get_company(

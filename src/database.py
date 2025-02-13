@@ -861,21 +861,26 @@ async def mark_invite_token_used(token: str):
         .execute()
     return response.data[0] if response.data else None 
 
-async def get_companies_by_user_id(user_id: UUID):
+async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
     """
     Get all companies that a user has access to through user_company_profiles,
-    including their products
+    including their products if show_stats is True
     
     Args:
         user_id: UUID of the user
+        show_stats: bool, if True includes products in the response
         
     Returns:
-        List of companies the user has access to, each including an array of products
+        List of companies the user has access to, optionally including array of products
     """
+    # Build the select statement based on show_stats
+    select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
+    if show_stats:
+        select_fields += ', products(id, product_name)'
+    select_fields += ')'
+
     response = supabase.table('user_company_profiles')\
-        .select(
-            'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at, products(id, product_name))'
-        )\
+        .select(select_fields)\
         .eq('user_id', str(user_id))\
         .eq('companies.deleted', False)\
         .execute()
@@ -885,15 +890,7 @@ async def get_companies_by_user_id(user_id: UUID):
     for profile in response.data:
         company = profile['companies']
         
-        # Extract products and format them
-        products = []
-        if 'products' in company:
-            products = [
-                {'id': product['id'], 'name': product['product_name']}
-                for product in company['products']
-            ]
-        
-        # Create company object with all fields and add products array
+        # Create base company data
         company_data = {
             'id': company['id'],
             'name': company['name'],
@@ -901,12 +898,22 @@ async def get_companies_by_user_id(user_id: UUID):
             'industry': company['industry'],
             'website': company['website'],
             'created_at': company['created_at'],
-            'products': products,
             'role': profile['role'],
-            'user_id': profile['user_id']  # Use the user_id from the profile
+            'user_id': profile['user_id']
         }
-        companies.append(company_data)
+        
+        # Add products only if show_stats is True and products exist
+        if show_stats and 'products' in company:
+            products = [
+                {'id': product['id'], 'name': product['product_name']}
+                for product in company['products']
+            ]
+            company_data['products'] = products
+        elif show_stats:
+            company_data['products'] = []
 
+        companies.append(company_data)
+    
     return companies
 
 async def get_company_users(company_id: UUID) -> List[dict]:
