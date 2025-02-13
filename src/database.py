@@ -864,14 +864,14 @@ async def mark_invite_token_used(token: str):
 async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
     """
     Get all companies that a user has access to through user_company_profiles,
-    including their products (with campaign counts) and total leads count if show_stats is True
+    including their products (with campaign counts and total calls) and total leads count if show_stats is True
     
     Args:
         user_id: UUID of the user
-        show_stats: bool, if True includes products (with campaign counts) and total leads count in the response
+        show_stats: bool, if True includes products (with campaign and call counts) and total leads count in the response
         
     Returns:
-        List of companies the user has access to, optionally including array of products (with campaign counts) and total leads
+        List of companies the user has access to, optionally including array of products (with campaign and call counts) and total leads
     """
     # Build the select statement based on show_stats
     select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
@@ -909,15 +909,26 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                 products = []
                 for product in company['products']:
                     # Get campaign count for this product
-                    campaigns_count_response = supabase.table('campaigns')\
+                    campaigns_response = supabase.table('campaigns')\
                         .select('id', count='exact')\
                         .eq('product_id', product['id'])\
+                        .execute()
+                    
+                    # Get total calls for all campaigns of this product
+                    calls_response = supabase.table('calls')\
+                        .select('id', count='exact')\
+                        .in_('campaign_id', 
+                            supabase.table('campaigns')
+                            .select('id')
+                            .eq('product_id', product['id'])
+                        )\
                         .execute()
                     
                     products.append({
                         'id': product['id'],
                         'name': product['product_name'],
-                        'total_campaigns': campaigns_count_response.count
+                        'total_campaigns': campaigns_response.count,
+                        'total_calls': calls_response.count
                     })
                 company_data['products'] = products
             else:
