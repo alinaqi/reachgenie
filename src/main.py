@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Header
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -90,11 +90,10 @@ from src.models import (
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
     EmailLogDetailResponse, VoiceAgentSettings,
-    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
+    CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
     CompanyUserResponse
 )
-from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
 import secrets
