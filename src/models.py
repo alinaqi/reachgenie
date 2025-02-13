@@ -191,6 +191,7 @@ class CompanyBase(BaseModel):
     cronofy_default_calendar_id: Optional[str] = None
     voice_agent_settings: Optional[VoiceAgentSettings] = None
     products: Optional[List[Dict[str, Any]]] = None
+    total_leads: Optional[int] = None
 
 class CompanyCreate(CompanyBase):
     pass
