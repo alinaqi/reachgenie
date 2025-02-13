@@ -2396,15 +2396,27 @@ async def track_email(email_log_id: UUID):
         # Update the email_log has_opened status using the database function
         await update_email_log_has_opened(email_log_id)
         
-        # Return a 1x1 transparent pixel
+        # Return a 1x1 transparent pixel with cache control headers
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
         return Response(
             content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
-            media_type='image/gif'
+            media_type='image/gif',
+            headers=headers
         )
     except Exception as e:
         logger.error(f"Error tracking email open for log {email_log_id}: {str(e)}")
-        # Still return the pixel even if tracking fails
+        # Still return the pixel even if tracking fails, with same headers
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
         return Response(
             content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
-            media_type='image/gif'
+            media_type='image/gif',
+            headers=headers
         )

@@ -14,7 +14,15 @@ def add_tracking_pixel(body: str, email_log_id: UUID) -> str:
     """
     settings = get_settings()
     tracking_pixel_url = f"{settings.webhook_base_url}/api/track-email/{email_log_id}"
-    tracking_pixel = f'<img src="{tracking_pixel_url}" width="1" height="1" style="display:none" alt="" />'
+    tracking_pixel = (
+        f'<img src="{tracking_pixel_url}" '
+        'width="1" height="1" '
+        'style="display:none" '
+        'alt="" '
+        'referrerpolicy="no-referrer-when-downgrade" '
+        'loading="eager" '
+        '/>'
+    )
     
     # Append tracking pixel to the body
     if "</body>" in body:
