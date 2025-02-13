@@ -864,19 +864,19 @@ async def mark_invite_token_used(token: str):
 async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
     """
     Get all companies that a user has access to through user_company_profiles,
-    including their products if show_stats is True
+    including their products and total leads count if show_stats is True
     
     Args:
         user_id: UUID of the user
-        show_stats: bool, if True includes products in the response
+        show_stats: bool, if True includes products and total leads count in the response
         
     Returns:
-        List of companies the user has access to, optionally including array of products
+        List of companies the user has access to, optionally including array of products and total leads
     """
     # Build the select statement based on show_stats
     select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
     if show_stats:
-        select_fields += ', products(id, product_name)'
+        select_fields += ', products(id, product_name)'  # Only include products in the main query
     select_fields += ')'
 
     response = supabase.table('user_company_profiles')\
@@ -885,7 +885,7 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
         .eq('companies.deleted', False)\
         .execute()
 
-    # Transform the response to include products in the desired format
+    # Transform the response to include products and leads count in the desired format
     companies = []
     for profile in response.data:
         company = profile['companies']
@@ -902,15 +902,24 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
             'user_id': profile['user_id']
         }
         
-        # Add products only if show_stats is True and products exist
-        if show_stats and 'products' in company:
-            products = [
-                {'id': product['id'], 'name': product['product_name']}
-                for product in company['products']
-            ]
-            company_data['products'] = products
-        elif show_stats:
-            company_data['products'] = []
+        # Add products and total leads only if show_stats is True
+        if show_stats:
+            # Add products if they exist
+            if 'products' in company:
+                products = [
+                    {'id': product['id'], 'name': product['product_name']}
+                    for product in company['products']
+                ]
+                company_data['products'] = products
+            else:
+                company_data['products'] = []
+            
+            # Get total leads count using a separate count query
+            leads_count_response = supabase.table('leads')\
+                .select('id', count='exact')\
+                .eq('company_id', company['id'])\
+                .execute()
+            company_data['total_leads'] = leads_count_response.count
 
         companies.append(company_data)
     
