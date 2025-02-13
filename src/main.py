@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Header
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from datetime import datetime, timezone, timedelta
 import csv
 import io
@@ -74,7 +74,8 @@ from src.database import (
     get_company_users,
     get_user_company_profile_by_id,
     delete_user_company_profile,
-    get_user_company_roles
+    get_user_company_roles,
+    update_email_log_has_opened
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -89,11 +90,10 @@ from src.models import (
     ResendVerificationRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ResetPasswordResponse, EmailLogResponse,
     EmailLogDetailResponse, VoiceAgentSettings,
-    InviteUserRequest, CompanyInviteRequest, CompanyInviteResponse,
+    CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
     CompanyUserResponse
 )
-from src.perplexity_enrichment import PerplexityEnricher
 from src.config import get_settings
 from src.bland_client import BlandClient
 import secrets
@@ -101,6 +101,7 @@ from src.services.perplexity_service import perplexity_service
 import os
 from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
+from src.utils.email_utils import add_tracking_pixel
 
 # Configure logger
 logging.basicConfig(
@@ -1034,7 +1035,7 @@ async def run_campaign(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
-    logger.info(f"Running email campaign {campaign_id}")
+    logger.info(f"Running campaign {campaign_id}")
     
     # Get the campaign
     campaign = await get_campaign_by_id(campaign_id)
@@ -1764,6 +1765,8 @@ async def run_email_campaign(campaign: dict, company: dict):
                         logger.info(f"Generated email content for lead: {lead['email']}")
                         logger.info(f"Email Subject: {subject}")
                         logger.info(f"Email Body: {body}")
+
+                        body_without_tracking_pixel = body
                     
                     # Send email using SMTP client
                         try:
@@ -1775,11 +1778,14 @@ async def run_email_campaign(campaign: dict, company: dict):
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
+                            # Add tracking pixel to the email body
+                            body = add_tracking_pixel(body, email_log['id'])
+                            
                             # Send email with reply-to header
                             await smtp_client.send_email(
                                 to_email=lead['email'],
                                 subject=subject,  # Use generated subject
-                                html_content=body,  # Use generated body
+                                html_content=body,  # Use generated body with tracking pixel
                                 from_name=company["name"],
                                 email_log_id=email_log['id']
                             )
@@ -1791,7 +1797,7 @@ async def run_email_campaign(campaign: dict, company: dict):
                                     email_logs_id=email_log['id'],
                                     message_id=None,
                                     email_subject=subject,  # Use generated subject
-                                    email_body=body,  # Use generated body
+                                    email_body=body_without_tracking_pixel,  # Use generated body without tracking pixel
                                     sender_type='assistant',
                                     sent_at=datetime.now(timezone.utc),
                                     from_name=company['name'],
@@ -2383,3 +2389,34 @@ async def delete_user_company_profile_endpoint(
         )
     
     return {"message": "User profile deleted successfully"}
+
+@app.get("/api/track-email/{email_log_id}")
+async def track_email(email_log_id: UUID):
+    try:
+        # Update the email_log has_opened status using the database function
+        await update_email_log_has_opened(email_log_id)
+        
+        # Return a 1x1 transparent pixel with cache control headers
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+        return Response(
+            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
+            media_type='image/gif',
+            headers=headers
+        )
+    except Exception as e:
+        logger.error(f"Error tracking email open for log {email_log_id}: {str(e)}")
+        # Still return the pixel even if tracking fails, with same headers
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+        return Response(
+            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
+            media_type='image/gif',
+            headers=headers
+        )
