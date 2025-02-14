@@ -190,6 +190,12 @@ class CompanyBase(BaseModel):
     cronofy_default_calendar_name: Optional[str] = None
     cronofy_default_calendar_id: Optional[str] = None
     voice_agent_settings: Optional[VoiceAgentSettings] = None
+    products: Optional[List[Dict[str, Any]]] = Field(None, example=[{
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "name": "Product Name",
+        "total_campaigns": 5
+    }])
+    total_leads: Optional[int] = None
 
 class CompanyCreate(CompanyBase):
     pass

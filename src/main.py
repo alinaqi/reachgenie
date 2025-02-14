@@ -530,11 +530,15 @@ async def update_product(
     return await update_product_details(product_id, product.product_name)
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
-async def get_companies(current_user: dict = Depends(get_current_user)):
+async def get_companies(
+    show_stats: bool = Query(False, description="Include products in the response"),
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Get all companies that the user has access to, through user_company_profiles
+    Get all companies that the user has access to, through user_company_profiles.
+    Optionally include products in the response if show_stats is True.
     """
-    return await get_companies_by_user_id(UUID(current_user["id"]))
+    return await get_companies_by_user_id(UUID(current_user["id"]), show_stats)
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB)
 async def get_company(
@@ -984,17 +988,19 @@ async def get_company_campaigns(
 async def get_company_emails(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
+    lead_id: Optional[UUID] = Query(None, description="Filter emails by lead ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get all email logs for a company, optionally filtered by campaign ID
+    Get all email logs for a company, optionally filtered by campaign ID and/or lead ID
     """
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
+    
     # Get email logs
-    email_logs = await get_company_email_logs(company_id, campaign_id)
+    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id)
     
     # Transform the response to match EmailLogResponse model
     transformed_logs = []
