@@ -598,13 +598,14 @@ async def get_user_by_id(user_id: UUID):
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None):
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
     """
-    Get email logs for a company, optionally filtered by campaign_id
+    Get email logs for a company, optionally filtered by campaign_id and/or lead_id
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
+        lead_id: Optional UUID of the lead to filter by
         
     Returns:
         List of email logs with campaign and lead information
@@ -620,8 +621,11 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     if campaign_id:
         query = query.eq('campaign_id', str(campaign_id))
     
+    if lead_id:
+        query = query.eq('lead_id', str(lead_id))
+    
     response = query.execute()
-    return response.data 
+    return response.data
 
 async def soft_delete_company(company_id: UUID) -> bool:
     """
