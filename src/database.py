@@ -924,7 +924,16 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                         .eq('product_id', product['id'])\
                         .execute()
                     campaign_ids = [campaign['id'] for campaign in campaign_ids_response.data]
-                    
+
+                    # Call the stored postgres function using Supabase RPC
+                    response = supabase.rpc("count_unique_leads_by_campaign", {"campaign_ids": campaign_ids}).execute()
+
+                    # Extract and print the result
+                    if response.data:
+                        unique_leads_contacted = response.data
+                    else:
+                        unique_leads_contacted = 0
+
                     # Get total calls for all campaigns of this product
                     total_calls = 0
                     if campaign_ids:  # Only query if there are campaigns
@@ -974,7 +983,8 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                         'total_positive_calls': total_positive_calls,
                         'total_sent_emails': total_sent_emails,
                         'total_opened_emails': total_opened_emails,
-                        'total_replied_emails': total_replied_emails
+                        'total_replied_emails': total_replied_emails,
+                        'unique_leads_contacted': unique_leads_contacted
                     })
                 company_data['products'] = products
             else:
