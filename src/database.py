@@ -1119,7 +1119,7 @@ async def get_incomplete_calls() -> List[Dict]:
     try:
         response = supabase.table('calls') \
             .select('id, bland_call_id') \
-            .not_('bland_call_id', 'is', 'null') \
+            .not_.is_('bland_call_id', 'null') \
             .is_('duration', 'null') \
             .execute()
         
