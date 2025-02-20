@@ -188,4 +188,29 @@ class BlandClient:
             if response.status_code != 200:
                 raise Exception(f"Failed to create Bland AI tool: {response.text}")
                 
+            return response.json()
+
+    async def get_call_details(self, call_id: str) -> Dict:
+        """
+        Get call details from Bland AI API
+        
+        Args:
+            call_id: The Bland AI call ID to fetch details for
+            
+        Returns:
+            Dict containing the call details including duration, sentiment, and summary
+            
+        Raises:
+            httpx.HTTPError: If the API request fails
+        """
+        async with httpx.AsyncClient() as client:
+            headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+            response = await client.get(
+                f"{self.base_url}/v1/calls/{call_id}",
+                headers=headers
+            )
+            response.raise_for_status()
             return response.json() 
