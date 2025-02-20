@@ -66,6 +66,10 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         "type": "string",
                         "description": "UUID of the company - use the exact company_id provided in the system prompt"
                     },
+                    "email_log_id": {
+                        "type": "string",
+                        "description": "UUID of the email_log - use the exact email_log_id provided in the system prompt"
+                    },
                     "email": {
                         "type": "string",
                         "description": "Email address of the attendee - use the exact from_email provided in the system prompt"
@@ -80,7 +84,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                         "description": "Use the exact email_subject provided in the system prompt"
                     }
                 },
-                "required": ["company_id", "email", "start_time", "email_subject"]
+                "required": ["company_id", "email_log_id", "email", "start_time", "email_subject"]
             }
         })
     
@@ -103,6 +107,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                  * company_id: "{str(company_id)}"
                  * email: "{email_data['from']}"
                  * email_subject: "{email_data['subject']}"
+                 * email_log_id: "{str(email_log_id)}"
                  * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
                '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
                }
@@ -165,9 +170,11 @@ The function will schedule a 30-minute meeting at the specified time.""",
             # Call the booking function
             booking_info = await book_appointment(
                 company_id=UUID(function_args["company_id"]),
+                log_id=UUID(function_args["email_log_id"]),
                 email=function_args["email"],
                 start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00')),
-                email_subject=function_args["email_subject"]
+                email_subject=function_args["email_subject"],
+                campaign_type="email"
             )
             
             # Add the function response to the messages

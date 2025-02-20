@@ -96,12 +96,11 @@ async def get_leads_by_company(company_id: UUID):
     response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
     return response.data
 
-async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, bland_call_id: str):
+async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID):
     call_data = {
         'lead_id': str(lead_id),
         'product_id': str(product_id),
-        'campaign_id': str(campaign_id),
-        'bland_call_id': bland_call_id
+        'campaign_id': str(campaign_id)
     }
     response = supabase.table('calls').insert(call_data).execute()
     return response.data[0]
@@ -1127,3 +1126,42 @@ async def get_incomplete_calls() -> List[Dict]:
     except Exception as e:
         logger.error(f"Error fetching incomplete calls: {str(e)}")
         return []
+
+async def update_email_log_has_booked(email_log_id: UUID) -> Dict:
+    """
+    Update the has_booked status for an email log
+    
+    Args:
+        email_log_id: UUID of the email log record
+        
+    Returns:
+        Dict containing the updated record
+    """
+    response = supabase.table('email_logs').update({
+        'has_meeting_booked': True
+    }).eq('id', str(email_log_id)).execute()
+    
+    return response.data[0] if response.data else None
+
+async def update_call_log_has_booked(call_log_id: UUID) -> Dict:
+    """
+    Update the has_booked status for a call log
+    
+    Args:
+        call_log_id: UUID of the call log record
+        
+    Returns:
+        Dict containing the updated record
+    """
+    response = supabase.table('calls').update({
+        'has_meeting_booked': True
+    }).eq('id', str(call_log_id)).execute()
+    
+    return response.data[0] if response.data else None
+
+async def update_call_details(call_id: UUID, bland_call_id: str):
+    call_data = {
+        'bland_call_id': bland_call_id
+    }
+    response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
+    return response.data[0]
