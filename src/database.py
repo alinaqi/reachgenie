@@ -1106,26 +1106,3 @@ async def get_incomplete_calls() -> List[Dict]:
         .or_('duration.is.null,sentiment.is.null,summary.is.null') \
         .execute()
     return response.data
-
-async def update_call_stats(call_id: UUID, duration: int, sentiment: str, summary: str) -> None:
-    """
-    Update call record with duration, sentiment and summary
-    """
-    try:
-        response = supabase.table('calls') \
-            .update({
-                'duration': duration,
-                'sentiment': sentiment,
-                'summary': summary
-            }) \
-            .eq('id', str(call_id)) \
-            .execute()
-        
-        if not response.data:
-            logger.error(f"No call record found with ID {call_id}")
-            return None
-            
-        return response.data[0]
-    except Exception as e:
-        logger.error(f"Error updating call record {call_id}: {str(e)}")
-        return None 
