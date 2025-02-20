@@ -173,13 +173,29 @@ async def get_company_by_id(company_id: UUID):
     return response.data[0] if response.data else None
 
 async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str):
-    call_data = {
-        'duration': int(float(duration)),
-        'sentiment': sentiment,
-        'summary': summary
-    }
-    response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
-    return response.data[0] if response.data else None
+    """
+    Update call record with webhook data from Bland AI
+    
+    Args:
+        bland_call_id: The Bland AI call ID
+        duration: Call duration in seconds
+        sentiment: Call sentiment analysis result
+        summary: Call summary
+        
+    Returns:
+        Updated call record or None if update fails
+    """
+    try:
+        call_data = {
+            'duration': int(float(duration)),
+            'sentiment': sentiment,
+            'summary': summary
+        }
+        response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating call webhook data for bland_call_id {bland_call_id}: {str(e)}")
+        return None
 
 async def get_calls_by_companies(company_ids: List[str]):
     # Get all leads for the companies
@@ -1100,9 +1116,14 @@ async def get_incomplete_calls() -> List[Dict]:
     """
     Fetch calls that have bland_call_id but missing duration, sentiment, or summary
     """
-    response = supabase.table('calls') \
-        .select('id, bland_call_id') \
-        .not_('bland_call_id', 'is', 'null') \
-        .or_('duration.is.null,sentiment.is.null,summary.is.null') \
-        .execute()
-    return response.data
+    try:
+        response = supabase.table('calls') \
+            .select('id, bland_call_id') \
+            .not_('bland_call_id', 'is', 'null') \
+            .is_('duration', 'null') \
+            .execute()
+        
+        return response.data if response.data else []
+    except Exception as e:
+        logger.error(f"Error fetching incomplete calls: {str(e)}")
+        return []
