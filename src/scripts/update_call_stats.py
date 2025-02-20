@@ -1,7 +1,5 @@
 import logging
 import asyncio
-import httpx
-from typing import List, Dict
 from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -14,20 +12,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def update_call_record(call_id: UUID, bland_call_id: str, bland_client: BlandClient) -> None:
+async def update_call_record(bland_call_id: str, bland_client: BlandClient) -> None:
     """
     Update call record with data from Bland API
     """
     try:
-        # Get call details from Bland API
-        async with httpx.AsyncClient() as client:
-            headers = {"authorization": bland_client.api_key}
-            response = await client.get(
-                f"{bland_client.base_url}/v1/calls/{bland_call_id}",
-                headers=headers
-            )
-            response.raise_for_status()
-            call_data = response.json()
+        # Get call details using BlandClient
+        call_data = await bland_client.get_call_details(bland_call_id)
 
         # Extract relevant information
         duration = str(call_data.get("corrected_duration", 0))  # Convert to string as expected by update_call_webhook_data
@@ -59,7 +50,6 @@ async def main():
         # Update each call record
         for call in incomplete_calls:
             await update_call_record(
-                call_id=UUID(call["id"]),
                 bland_call_id=call["bland_call_id"],
                 bland_client=bland_client
             )
