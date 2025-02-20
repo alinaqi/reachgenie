@@ -127,7 +127,7 @@ class BlandClient:
             - The prospect hasn't agreed to a meeting
             - The prospect is unsure or needs more time
             - You haven't discussed timing for the meeting""",
-            "speech": "I'll help you schedule that meeting right now. I'll send you a calendar invitation to your email so you'll have all the details.",
+            "speech": "I'll help you schedule that meeting right now. please hold on for a moment.",
             "url": f"{self.webhook_base_url}/api/calls/book-appointment",
             "method": "POST",
             "headers": {
@@ -136,6 +136,7 @@ class BlandClient:
             },
             "body": {
                 "company_uuid": "{{input.company_uuid}}",
+                "call_log_id": "{{input.call_log_id}}",
                 "email": "{{input.email}}",
                 "start_time": "{{input.start_time}}",
                 "email_subject": "{{input.email_subject}}"
@@ -143,6 +144,7 @@ class BlandClient:
             "input_schema": {
                 "example": {
                     "company_uuid": "47d4d240-7318-4db0-80hy-b7cd70c50cd4",
+                    "call_log_id": "91c67842-7318-4db0-80hy-b7cd70c50cd4",
                     "email": "johndoe@gmail.com",
                     "start_time": "2024-01-01T00:00:00Z",
                     "email_subject": "Sales Discussion"
@@ -152,6 +154,10 @@ class BlandClient:
                     "company_uuid": {
                         "type": "string",
                         "description": "UUID of the company"
+                    },
+                    "call_log_id": {
+                        "type": "string",
+                        "description": "UUID of the call log"
                     },
                     "email": {
                         "type": "string",
@@ -167,7 +173,7 @@ class BlandClient:
                         "description": "Subject line for the calendar invitation"
                     }
                 },
-                "required": ["company_uuid", "email", "start_time", "email_subject"]
+                "required": ["company_uuid", "call_log_id", "email", "start_time", "email_subject"]
             },
             "response": {
                 "appointment_booked": "$.message",

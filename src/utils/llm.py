@@ -170,10 +170,11 @@ The function will schedule a 30-minute meeting at the specified time.""",
             # Call the booking function
             booking_info = await book_appointment(
                 company_id=UUID(function_args["company_id"]),
-                email_log_id=UUID(function_args["email_log_id"]),
+                log_id=UUID(function_args["email_log_id"]),
                 email=function_args["email"],
                 start_time=datetime.fromisoformat(function_args["start_time"].replace('Z', '+00:00')),
-                email_subject=function_args["email_subject"]
+                email_subject=function_args["email_subject"],
+                campaign_type="email"
             )
             
             # Add the function response to the messages

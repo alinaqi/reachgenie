@@ -125,6 +125,7 @@ class TaskResponse(BaseModel):
 
 class BookAppointmentRequest(BaseModel):
     company_uuid: UUID
+    call_log_id: UUID
     email: str
     start_time: datetime
     email_subject: str
@@ -2013,9 +2014,11 @@ async def book_appointment(
     try:
         await calendar_book_appointment(
             company_id=request.company_uuid,
+            log_id=request.call_log_id,
             email=request.email,
             start_time=request.start_time,
-            email_subject=request.email_subject
+            email_subject=request.email_subject,
+            campaign_type="call"
         )
         return {"message": "Appointment booked successfully"}
     except Exception as e:
