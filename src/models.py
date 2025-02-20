@@ -518,6 +518,8 @@ class EmailLogResponse(BaseModel):
     campaign_name: Optional[str] = None
     lead_name: Optional[str] = None
     lead_email: Optional[str] = None
+    has_opened: bool
+    has_replied: bool
 
 class EmailLogDetailResponse(BaseModel):
     message_id: Optional[str]
