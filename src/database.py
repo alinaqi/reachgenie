@@ -1095,3 +1095,37 @@ async def update_email_log_has_opened(email_log_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error updating email_log has_opened status for {email_log_id}: {str(e)}")
         return False 
+
+async def get_incomplete_calls() -> List[Dict]:
+    """
+    Fetch calls that have bland_call_id but missing duration, sentiment, or summary
+    """
+    response = supabase.table('calls') \
+        .select('id, bland_call_id') \
+        .not_('bland_call_id', 'is', 'null') \
+        .or_('duration.is.null,sentiment.is.null,summary.is.null') \
+        .execute()
+    return response.data
+
+async def update_call_stats(call_id: UUID, duration: int, sentiment: str, summary: str) -> None:
+    """
+    Update call record with duration, sentiment and summary
+    """
+    try:
+        response = supabase.table('calls') \
+            .update({
+                'duration': duration,
+                'sentiment': sentiment,
+                'summary': summary
+            }) \
+            .eq('id', str(call_id)) \
+            .execute()
+        
+        if not response.data:
+            logger.error(f"No call record found with ID {call_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating call record {call_id}: {str(e)}")
+        return None 
