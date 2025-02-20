@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS calls (
     sentiment TEXT,
     summary TEXT,
     bland_call_id TEXT,
+    has_meeting_booked BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS email_logs (
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     has_replied BOOLEAN DEFAULT FALSE,
     has_opened BOOLEAN DEFAULT FALSE,
+    has_meeting_booked BOOLEAN DEFAULT FALSE,
     last_reminder_sent VARCHAR(2),
     last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
