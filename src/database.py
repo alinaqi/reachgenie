@@ -1127,3 +1127,19 @@ async def get_incomplete_calls() -> List[Dict]:
     except Exception as e:
         logger.error(f"Error fetching incomplete calls: {str(e)}")
         return []
+
+async def update_email_log_has_booked(email_log_id: UUID) -> Dict:
+    """
+    Update the has_booked status for an email log
+    
+    Args:
+        email_log_id: UUID of the email log record
+        
+    Returns:
+        Dict containing the updated record
+    """
+    response = supabase.table('email_logs').update({
+        'has_meeting_booked': True
+    }).eq('id', str(email_log_id)).execute()
+    
+    return response.data[0] if response.data else None

@@ -4,7 +4,7 @@ import pycronofy
 import logging
 from typing import Dict
 from fastapi import HTTPException
-from src.database import get_company_by_id, update_company_cronofy_tokens
+from src.database import get_company_by_id, update_company_cronofy_tokens, update_email_log_has_booked
 from src.config import get_settings
 import uuid
 
@@ -15,12 +15,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def book_appointment(company_id: UUID, email: str, start_time: datetime, email_subject: str = "Sales Discussion") -> Dict[str, str]:
+async def book_appointment(company_id: UUID, email_log_id: UUID, email: str, start_time: datetime, email_subject: str = "Sales Discussion") -> Dict[str, str]:
     """
     Create a calendar event using Cronofy
     
     Args:
         company_id: UUID of the company
+        email_log_id: UUID of the email_log
         email: Lead's email address
         start_time: datetime for when the meeting should start
         email_subject: Subject line to use for the event summary
@@ -36,6 +37,7 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime, e
         cleaned_subject = cleaned_subject[3:].strip()
     
     logger.info(f"Company ID: {company_id}")
+    logger.info(f"Email Log ID: {email_log_id}")
     logger.info(f"Attendee/Lead Email: {email}")
     logger.info(f"Meeting start time: {start_time}")
     logger.info(f"Event summary: {cleaned_subject}")
@@ -75,6 +77,9 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime, e
             event=event
         )
         
+        # Update the email log to indicate that the meeting has been booked
+        await update_email_log_has_booked(email_log_id)
+
         return {
             "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
         }
@@ -104,6 +109,9 @@ async def book_appointment(company_id: UUID, email: str, start_time: datetime, e
                     event=event
                 )
                 
+                # Update the email log to indicate that the meeting has been booked
+                await update_email_log_has_booked(email_log_id)
+
                 return {
                     "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
                 }
