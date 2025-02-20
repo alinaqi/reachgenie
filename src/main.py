@@ -1010,6 +1010,8 @@ async def get_company_emails(
             'campaign_id': log['campaign_id'],
             'lead_id': log['lead_id'],
             'sent_at': log['sent_at'],
+            'has_opened': log['has_opened'],
+            'has_replied': log['has_replied'],
             'campaign_name': log['campaigns']['name'] if log['campaigns'] else None,
             'lead_name': log['leads']['name'] if log['leads'] else None,
             'lead_email': log['leads']['email'] if log['leads'] else None
