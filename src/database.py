@@ -237,7 +237,7 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,campaign_id,leads(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided
@@ -627,7 +627,7 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     """
     query = supabase.table('email_logs')\
         .select(
-            'id, campaign_id, lead_id, sent_at, has_opened, has_replied, ' +
+            'id, campaign_id, lead_id, sent_at, has_opened, has_replied, has_meeting_booked, ' +
             'campaigns!inner(name, company_id), ' +  # Using inner join to ensure campaign exists
             'leads(name, email)'
         )\
@@ -959,6 +959,8 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                     total_sent_emails = 0
                     total_opened_emails = 0
                     total_replied_emails = 0
+                    total_meetings_booked_in_calls = 0
+                    total_meetings_booked_in_emails = 0
 
                     if campaign_ids:  # Only query if there are campaigns
                         # Fetch all calls for this product
@@ -999,6 +1001,22 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                             .execute()
                         total_replied_emails = replied_emails_response.count
 
+                        # Fetch all meetings booked in calls for this product
+                        meetings_booked_calls_response = supabase.table('calls')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_meeting_booked', True)\
+                            .execute()
+                        total_meetings_booked_in_calls = meetings_booked_calls_response.count
+
+                        # Fetch all meetings booked in emails for this product
+                        meetings_booked_emails_response = supabase.table('email_logs')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_meeting_booked', True)\
+                            .execute()
+                        total_meetings_booked_in_emails = meetings_booked_emails_response.count
+                    
                     products.append({
                         'id': product['id'],
                         'name': product['product_name'],
@@ -1008,6 +1026,8 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                         'total_sent_emails': total_sent_emails,
                         'total_opened_emails': total_opened_emails,
                         'total_replied_emails': total_replied_emails,
+                        'total_meetings_booked_in_calls': total_meetings_booked_in_calls,
+                        'total_meetings_booked_in_emails': total_meetings_booked_in_emails,
                         'unique_leads_contacted': unique_leads_contacted
                     })
                 company_data['products'] = products

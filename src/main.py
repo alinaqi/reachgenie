@@ -1022,6 +1022,7 @@ async def get_company_emails(
             'sent_at': log['sent_at'],
             'has_opened': log['has_opened'],
             'has_replied': log['has_replied'],
+            'has_meeting_booked': log['has_meeting_booked'],
             'campaign_name': log['campaigns']['name'] if log['campaigns'] else None,
             'lead_name': log['leads']['name'] if log['leads'] else None,
             'lead_email': log['leads']['email'] if log['leads'] else None

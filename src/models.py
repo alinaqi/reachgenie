@@ -250,6 +250,7 @@ class CallInDB(BaseModel):
     sentiment: Optional[str] = None
     summary: Optional[str] = None
     bland_call_id: Optional[str] = None
+    has_meeting_booked: bool
     created_at: datetime
     lead_name: Optional[str] = None
     lead_phone_number: Optional[str] = None
@@ -520,6 +521,7 @@ class EmailLogResponse(BaseModel):
     lead_email: Optional[str] = None
     has_opened: bool
     has_replied: bool
+    has_meeting_booked: bool
 
 class EmailLogDetailResponse(BaseModel):
     message_id: Optional[str]
