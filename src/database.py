@@ -953,8 +953,13 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                     else:
                         unique_leads_contacted = 0
 
-                    # Get total calls for all campaigns of this product
+                    # Initialize all statistics variables
                     total_calls = 0
+                    total_positive_calls = 0
+                    total_sent_emails = 0
+                    total_opened_emails = 0
+                    total_replied_emails = 0
+
                     if campaign_ids:  # Only query if there are campaigns
                         # Fetch all calls for this product
                         calls_response = supabase.table('calls')\
