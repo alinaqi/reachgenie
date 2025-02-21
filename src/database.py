@@ -237,7 +237,7 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,created_at,campaign_id,leads(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided
@@ -627,7 +627,7 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     """
     query = supabase.table('email_logs')\
         .select(
-            'id, campaign_id, lead_id, sent_at, has_opened, has_replied, ' +
+            'id, campaign_id, lead_id, sent_at, has_opened, has_replied, has_meeting_booked, ' +
             'campaigns!inner(name, company_id), ' +  # Using inner join to ensure campaign exists
             'leads(name, email)'
         )\
