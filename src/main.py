@@ -102,6 +102,7 @@ import os
 from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
 from src.utils.email_utils import add_tracking_pixel
+from bugsnag.handlers import BugsnagHandler
 
 # Configure logger
 logging.basicConfig(
@@ -113,11 +114,16 @@ logger = logging.getLogger(__name__)
 # Configure Bugsnag
 bugsnag.configure(
     api_key=settings.bugsnag_api_key,
-    project_root="/",
+    #project_root="/",
     release_stage=settings.environment,
-    asynchronous=True,
-    auto_capture_sessions=True
+    #asynchronous=True,
+    #auto_capture_sessions=True
 )
+
+handler = BugsnagHandler()
+# send only ERROR-level logs and above
+handler.setLevel(logging.ERROR)
+logger.addHandler(handler)
 
 class TaskResponse(BaseModel):
     task_id: UUID
@@ -539,7 +545,10 @@ async def get_companies(
     Get all companies that the user has access to, through user_company_profiles.
     Optionally include products in the response if show_stats is True.
     """
-    return await get_companies_by_user_id(UUID(current_user["id"]), show_stats)
+    try:
+        return await get_companies_by_user_id(UUID(current_user["id"]), show_stats)
+    except Exception as e:
+        logger.error(f"Error in get_companies: {str(e)}") 
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB)
 async def get_company(
