@@ -959,6 +959,8 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                     total_sent_emails = 0
                     total_opened_emails = 0
                     total_replied_emails = 0
+                    total_meetings_booked_in_calls = 0
+                    total_meetings_booked_in_emails = 0
 
                     if campaign_ids:  # Only query if there are campaigns
                         # Fetch all calls for this product
@@ -999,6 +1001,22 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                             .execute()
                         total_replied_emails = replied_emails_response.count
 
+                        # Fetch all meetings booked in calls for this product
+                        meetings_booked_calls_response = supabase.table('calls')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_meeting_booked', True)\
+                            .execute()
+                        total_meetings_booked_in_calls = meetings_booked_calls_response.count
+
+                        # Fetch all meetings booked in emails for this product
+                        meetings_booked_emails_response = supabase.table('email_logs')\
+                            .select('id', count='exact')\
+                            .in_('campaign_id', campaign_ids)\
+                            .eq('has_meeting_booked', True)\
+                            .execute()
+                        total_meetings_booked_in_emails = meetings_booked_emails_response.count
+                    
                     products.append({
                         'id': product['id'],
                         'name': product['product_name'],
@@ -1008,6 +1026,8 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
                         'total_sent_emails': total_sent_emails,
                         'total_opened_emails': total_opened_emails,
                         'total_replied_emails': total_replied_emails,
+                        'total_meetings_booked_in_calls': total_meetings_booked_in_calls,
+                        'total_meetings_booked_in_emails': total_meetings_booked_in_emails,
                         'unique_leads_contacted': unique_leads_contacted
                     })
                 company_data['products'] = products
