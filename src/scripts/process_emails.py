@@ -12,7 +12,8 @@ from src.database import (
     get_companies_with_email_credentials,
     create_email_log_detail,
     update_email_log_has_replied,
-    update_last_processed_uid
+    update_last_processed_uid,
+    get_campaign_from_email_log
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -233,16 +234,32 @@ async def process_emails(
         else:
             logger.error(f"Failed to update has_replied status for email_log_id: {email_log_id}")
 
+        # Get campaign details to get the template
+        campaign = await get_campaign_from_email_log(email_log_id)
+        if not campaign:
+            logger.error(f"Failed to get campaign for email_log_id: {email_log_id}")
+            continue
+
+        # Get the template
+        template = campaign.get('template')
+        if not template:
+            logger.error(f"Campaign {campaign['id']} missing email template")
+            continue
+
         ai_reply = await generate_ai_reply(email_log_id, email_data)
 
         if ai_reply:
             logger.info(f"Creating email_log_detail for the AI reply")
             response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
+
+            # Replace {email_body} placeholder in template with generated AI reply
+            final_body = template.replace("{email_body}", ai_reply)
+
             await create_email_log_detail(
                 email_logs_id=email_log_id,
                 message_id=None,
                 email_subject=response_subject,
-                email_body=ai_reply,
+                email_body=final_body,  # Use the template with AI reply
                 sender_type='assistant',
                 sent_at=datetime.now(timezone.utc),
                 from_name=company['name'],
@@ -261,7 +278,7 @@ async def process_emails(
                 await smtp_client.send_email(
                     to_email=email_data['from'],
                     subject=response_subject,
-                    html_content=ai_reply,
+                    html_content=final_body,  # Use the template with AI reply
                     from_name=company["name"],
                     email_log_id=email_log_id,
                     in_reply_to=email_data['message_id'],
