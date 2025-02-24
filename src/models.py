@@ -208,6 +208,7 @@ class ProductBase(BaseModel):
     product_name: str
     file_name: Optional[str] = None
     original_filename: Optional[str] = None
+    description: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass

@@ -431,6 +431,53 @@ async def create_company(
 
     return created_company
 
+@app.get("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
+async def get_product(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get a specific product by ID.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to retrieve
+        current_user: Current authenticated user
+        
+    Returns:
+        Product information
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Verify product belongs to the specified company
+    if str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Product not found in this company")
+    
+    return product
+
+@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
+async def get_products(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    return await get_products_by_company(company_id)
+
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
     company_id: UUID,
@@ -504,16 +551,6 @@ async def create_product(
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to process file")
-
-@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
-async def get_products(
-    company_id: UUID,
-    current_user: dict = Depends(get_current_user)
-):
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    return await get_products_by_company(company_id)
 
 @app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
 async def update_product(
