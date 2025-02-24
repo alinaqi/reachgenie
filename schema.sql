@@ -75,8 +75,12 @@ CREATE TABLE IF NOT EXISTS calls (
     bland_call_id TEXT,
     has_meeting_booked BOOLEAN DEFAULT FALSE,
     transcripts JSONB,
+    script TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add comment to explain the script column
+COMMENT ON COLUMN calls.script IS 'The generated call script used for this call';
 
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
