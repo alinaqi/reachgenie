@@ -268,7 +268,7 @@ class BlandWebhookPayload(BaseModel):
     summary: str
     corrected_duration: str
     analysis: dict
-    transcripts: dict
+    transcripts: list[dict]
 
 class CampaignType(str, Enum):
     EMAIL = 'email'
