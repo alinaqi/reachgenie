@@ -251,6 +251,7 @@ class CallInDB(BaseModel):
     summary: Optional[str] = None
     bland_call_id: Optional[str] = None
     has_meeting_booked: bool
+    transcripts: Optional[list[dict]] = None
     created_at: datetime
     lead_name: Optional[str] = None
     lead_phone_number: Optional[str] = None
