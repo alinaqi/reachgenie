@@ -903,13 +903,15 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
         duration = payload.corrected_duration
         sentiment = payload.analysis.get('sentiment', 'neutral')
         summary = payload.summary
+        transcripts = payload.transcripts
         
         # Update the call record in the database
         updated_call = await update_call_webhook_data(
             bland_call_id=bland_call_id,
             duration=duration,
             sentiment=sentiment,
-            summary=summary
+            summary=summary,
+            transcripts=transcripts
         )
         
         if not updated_call:

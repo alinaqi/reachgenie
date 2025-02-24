@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS calls (
     summary TEXT,
     bland_call_id TEXT,
     has_meeting_booked BOOLEAN DEFAULT FALSE,
+    transcripts JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
