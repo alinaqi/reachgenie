@@ -258,13 +258,14 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     
     return calls
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email'):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
         'description': description,
         'product_id': str(product_id),
-        'type': type
+        'type': type,
+        'template': template
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
@@ -1185,9 +1186,21 @@ async def update_call_log_has_booked(call_log_id: UUID) -> Dict:
     
     return response.data[0] if response.data else None
 
-async def update_call_details(call_id: UUID, bland_call_id: str):
-    call_data = {
-        'bland_call_id': bland_call_id
-    }
-    response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
-    return response.data[0]
+async def get_campaign_from_email_log(email_log_id: UUID):
+    """
+    Get campaign details including template from an email log ID
+    
+    Args:
+        email_log_id: UUID of the email log
+        
+    Returns:
+        Campaign details including template if found, None otherwise
+    """
+    response = supabase.table('email_logs')\
+        .select('campaign_id, campaigns(*)')\
+        .eq('id', str(email_log_id))\
+        .execute()
+    
+    if response.data and response.data[0].get('campaigns'):
+        return response.data[0]['campaigns']
+    return None

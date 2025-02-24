@@ -280,6 +280,7 @@ class EmailCampaignBase(BaseModel):
     description: Optional[str] = None
     type: CampaignType = CampaignType.EMAIL
     product_id: UUID
+    template: Optional[str] = None
 
 class EmailCampaignCreate(EmailCampaignBase):
     pass
