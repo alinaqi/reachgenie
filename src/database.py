@@ -171,7 +171,7 @@ async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
 
-async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str):
+async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: dict):
     """
     Update call record with webhook data from Bland AI
     
@@ -188,7 +188,8 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
         call_data = {
             'duration': int(float(duration)),
             'sentiment': sentiment,
-            'summary': summary
+            'summary': summary,
+            'transcripts': transcripts
         }
         response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
         return response.data[0] if response.data else None
