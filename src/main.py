@@ -1755,6 +1755,12 @@ async def run_email_campaign(campaign: dict, company: dict):
         logger.error(f"Company {campaign['company_id']} missing company name")
         return    
     
+    # Get campaign template
+    template = campaign.get('template')
+    if not template:
+        logger.error(f"Campaign {campaign['id']} missing email template")
+        return
+    
     # Decrypt the password
     try:
         decrypted_password = decrypt_password(company["account_password"])
@@ -1788,9 +1794,11 @@ async def run_email_campaign(campaign: dict, company: dict):
                         logger.info(f"Email Subject: {subject}")
                         logger.info(f"Email Body: {body}")
 
-                        body_without_tracking_pixel = body
+                        # Replace {email_body} placeholder in template with generated body
+                        final_body = template.replace("{email_body}", body)
+                        body_without_tracking_pixel = final_body
                     
-                    # Send email using SMTP client
+                        # Send email using SMTP client
                         try:
                             # Create email log first to get the ID for reply-to
                             email_log = await create_email_log(
@@ -1801,13 +1809,13 @@ async def run_email_campaign(campaign: dict, company: dict):
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
                             # Add tracking pixel to the email body
-                            body = add_tracking_pixel(body, email_log['id'])
+                            final_body_with_tracking = add_tracking_pixel(final_body, email_log['id'])
                             
                             # Send email with reply-to header
                             await smtp_client.send_email(
                                 to_email=lead['email'],
                                 subject=subject,  # Use generated subject
-                                html_content=body,  # Use generated body with tracking pixel
+                                html_content=final_body_with_tracking,  # Use template with generated body and tracking pixel
                                 from_name=company["name"],
                                 email_log_id=email_log['id']
                             )
@@ -1819,7 +1827,7 @@ async def run_email_campaign(campaign: dict, company: dict):
                                     email_logs_id=email_log['id'],
                                     message_id=None,
                                     email_subject=subject,  # Use generated subject
-                                    email_body=body_without_tracking_pixel,  # Use generated body without tracking pixel
+                                    email_body=body_without_tracking_pixel,  # Use template with generated body without tracking pixel
                                     sender_type='assistant',
                                     sent_at=datetime.now(timezone.utc),
                                     from_name=company['name'],
