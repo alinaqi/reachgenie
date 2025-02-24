@@ -96,11 +96,12 @@ async def get_leads_by_company(company_id: UUID):
     response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
     return response.data
 
-async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID):
+async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None):
     call_data = {
         'lead_id': str(lead_id),
         'product_id': str(product_id),
-        'campaign_id': str(campaign_id)
+        'campaign_id': str(campaign_id),
+        'script': script
     }
     response = supabase.table('calls').insert(call_data).execute()
     return response.data[0]
@@ -1204,3 +1205,79 @@ async def get_campaign_from_email_log(email_log_id: UUID):
     if response.data and response.data[0].get('campaigns'):
         return response.data[0]['campaigns']
     return None
+
+async def get_lead_by_email(email: str):
+    """
+    Get a lead by email address
+    """
+    response = supabase.table('leads').select('*').eq('email', email).execute()
+    return response.data[0] if response.data else None
+
+async def get_lead_by_phone(phone: str):
+    """
+    Get a lead by phone number, checking all phone number fields
+    """
+    fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
+    
+    for field in fields:
+        response = supabase.table('leads').select('*').eq(field, phone).execute()
+        if response.data:
+            return response.data[0]
+    
+    return None
+
+async def get_lead_communication_history(lead_id: UUID):
+    """
+    Get complete communication history for a lead including emails and calls
+    """
+    # Get email logs with campaign info
+    email_logs = supabase.table('email_logs').select(
+        'id, campaign_id, sent_at, has_opened, has_replied, has_meeting_booked, ' +
+        'campaigns!inner(name, products(product_name))'
+    ).eq('lead_id', str(lead_id)).execute()
+
+    # Get email details for each log
+    email_history = []
+    for log in email_logs.data:
+        details = supabase.table('email_log_details').select(
+            'message_id, email_subject, email_body, sender_type, sent_at, created_at, from_name, from_email, to_email'
+        ).eq('email_logs_id', str(log['id'])).order('created_at', desc=False).execute()
+
+        email_history.append({
+            'id': log['id'],
+            'campaign_id': log['campaign_id'],
+            'campaign_name': log['campaigns']['name'],
+            'product_name': log['campaigns']['products']['product_name'] if log['campaigns'].get('products') else None,
+            'sent_at': log['sent_at'],
+            'has_opened': log['has_opened'],
+            'has_replied': log['has_replied'],
+            'has_meeting_booked': log['has_meeting_booked'],
+            'messages': details.data
+        })
+
+    # Get call logs with campaign info
+    calls = supabase.table('calls').select(
+        'id, campaign_id, duration, sentiment, summary, bland_call_id, has_meeting_booked, transcripts, created_at, ' +
+        'campaigns!inner(name, products(product_name))'
+    ).eq('lead_id', str(lead_id)).execute()
+
+    call_history = []
+    for call in calls.data:
+        call_history.append({
+            'id': call['id'],
+            'campaign_id': call['campaign_id'],
+            'campaign_name': call['campaigns']['name'],
+            'product_name': call['campaigns']['products']['product_name'] if call['campaigns'].get('products') else None,
+            'duration': call['duration'],
+            'sentiment': call['sentiment'],
+            'summary': call['summary'],
+            'bland_call_id': call['bland_call_id'],
+            'has_meeting_booked': call['has_meeting_booked'],
+            'transcripts': call['transcripts'],
+            'created_at': call['created_at']
+        })
+
+    return {
+        'email_history': email_history,
+        'call_history': call_history
+    }

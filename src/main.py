@@ -75,7 +75,12 @@ from src.database import (
     get_user_company_profile_by_id,
     delete_user_company_profile,
     get_user_company_roles,
-    update_email_log_has_opened
+    update_email_log_has_opened,
+    get_lead_communication_history,
+    get_lead_by_email,
+    get_lead_by_phone,
+    update_company_cronofy_tokens,
+    get_company_id_from_email_log
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -92,7 +97,7 @@ from src.models import (
     EmailLogDetailResponse, VoiceAgentSettings,
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
-    CompanyUserResponse
+    CompanyUserResponse, LeadSearchResponse
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -431,6 +436,53 @@ async def create_company(
 
     return created_company
 
+@app.get("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
+async def get_product(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get a specific product by ID.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to retrieve
+        current_user: Current authenticated user
+        
+    Returns:
+        Product information
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Verify product belongs to the specified company
+    if str(product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Product not found in this company")
+    
+    return product
+
+@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
+async def get_products(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    return await get_products_by_company(company_id)
+
 @app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
 async def create_product(
     company_id: UUID,
@@ -504,16 +556,6 @@ async def create_product(
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to process file")
-
-@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
-async def get_products(
-    company_id: UUID,
-    current_user: dict = Depends(get_current_user)
-):
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    return await get_products_by_company(company_id)
 
 @app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
 async def update_product(
@@ -871,8 +913,8 @@ async def start_call(
             script=script
         )
         
-        # Create call record in database with company_id
-        call = await create_call(lead_id, product_id, company_id)
+        # Create call record in database with company_id and script
+        call = await create_call(lead_id, product_id, company_id, script=script)
         
         # Update call with Bland call ID
         await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
@@ -1884,16 +1926,27 @@ async def run_call_campaign(campaign: dict, company: dict):
                 # Generate company insights
                 insights = await generate_company_insights(lead, perplexity_service)
                 if insights:
-                    #logger.info(f"Generated insights for lead: {lead['phone_number']}")
-                    #logger.info(f"{insights}")
-                    
                     # Generate personalized call script
                     call_script = await generate_call_script(lead, campaign, company, insights)
                     logger.info(f"Generated call script for lead: {lead['phone_number']}")
                     logger.info(f"Call Script: {call_script}")
 
-                    # Initiate call
-                    await initiate_call(campaign, lead, call_script)
+                    if call_script:
+                        # Create call record and initiate call
+                        call = await create_call(
+                            lead_id=lead['id'],
+                            product_id=campaign['product_id'],
+                            campaign_id=campaign['id'],
+                            script=call_script
+                        )
+                        
+                        if call:
+                            # Initiate call with Bland AI
+                            await initiate_call(campaign, lead, call_script)
+                        else:
+                            logger.error(f"Failed to create call record for lead: {lead['phone_number']}")
+                    else:
+                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 
         except Exception as e:
             logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
@@ -2452,3 +2505,96 @@ async def track_email(email_log_id: UUID):
             media_type='image/gif',
             headers=headers
         )
+
+@app.get("/api/leads/search", response_model=LeadSearchResponse)
+async def search_lead(
+    email: Optional[str] = Query(None, description="Email address to search for"),
+    phone: Optional[str] = Query(None, description="Phone number to search for"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Search for a lead by email or phone number and return complete lead details with communication history.
+    At least one of email or phone must be provided.
+    """
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Either email or phone number must be provided")
+
+    # Try to find lead by email first
+    lead = None
+    if email:
+        lead = await get_lead_by_email(email)
+
+    # If not found by email, try phone
+    if not lead and phone:
+        lead = await get_lead_by_phone(phone)
+
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Check if user has access to the lead's company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(lead["company_id"]) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this lead")
+
+    # Convert numeric fields to proper types if they're strings
+    if lead.get("financials"):
+        if isinstance(lead["financials"], str):
+            try:
+                lead["financials"] = json.loads(lead["financials"])
+            except json.JSONDecodeError:
+                lead["financials"] = {"value": lead["financials"]}
+        elif isinstance(lead["financials"], (int, float)):
+            lead["financials"] = {"value": str(lead["financials"])}
+        elif not isinstance(lead["financials"], dict):
+            lead["financials"] = {"value": str(lead["financials"])}
+    
+    if lead.get("industries"):
+        if isinstance(lead["industries"], str):
+            lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
+        elif not isinstance(lead["industries"], list):
+            lead["industries"] = [str(lead["industries"])]
+    
+    if lead.get("technologies"):
+        if isinstance(lead["technologies"], str):
+            lead["technologies"] = [tech.strip() for tech in lead["technologies"].split(",")]
+        elif not isinstance(lead["technologies"], list):
+            lead["technologies"] = [str(lead["technologies"])]
+    
+    if lead.get("hiring_positions"):
+        if isinstance(lead["hiring_positions"], str):
+            try:
+                lead["hiring_positions"] = json.loads(lead["hiring_positions"])
+            except json.JSONDecodeError:
+                lead["hiring_positions"] = []
+        elif not isinstance(lead["hiring_positions"], list):
+            lead["hiring_positions"] = []
+    
+    if lead.get("location_move"):
+        if isinstance(lead["location_move"], str):
+            try:
+                lead["location_move"] = json.loads(lead["location_move"])
+            except json.JSONDecodeError:
+                lead["location_move"] = None
+        elif not isinstance(lead["location_move"], dict):
+            lead["location_move"] = None
+    
+    if lead.get("job_change"):
+        if isinstance(lead["job_change"], str):
+            try:
+                lead["job_change"] = json.loads(lead["job_change"])
+            except json.JSONDecodeError:
+                lead["job_change"] = None
+        elif not isinstance(lead["job_change"], dict):
+            lead["job_change"] = None
+
+    # Get communication history
+    history = await get_lead_communication_history(lead["id"])
+
+    # Return success response with lead data and history
+    return {
+        "status": "success",
+        "data": {
+            "lead": lead,
+            "communication_history": history
+        }
+    }
