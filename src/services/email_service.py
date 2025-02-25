@@ -75,15 +75,30 @@ class EmailService:
         try:
             response = self.client.send.create(data=data)
             if response.status_code != 200:
+                error_message = "Failed to send email"
+                try:
+                    error_details = response.json()
+                    if isinstance(error_details, dict) and 'ErrorMessage' in error_details:
+                        error_message += f": {error_details['ErrorMessage']}"
+                    else:
+                        error_message += f": {str(error_details)}"
+                except:
+                    error_message += f" (Status code: {response.status_code})"
+                
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send email"
+                    detail=error_message
                 )
             return response.json()
+        except HTTPException:
+            # Re-raise HTTP exceptions as is
+            raise
         except Exception as e:
+            # For other exceptions, capture the full details
+            error_message = f"Failed to send email: {repr(e)}"
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send email: {str(e)}"
+                detail=error_message
             )
 
     async def send_password_reset_email(self, email: str, reset_token: str) -> Dict:
