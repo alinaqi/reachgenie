@@ -201,15 +201,16 @@ async def signup(user: UserCreate):
         await email_service.send_verification_email(user.email, token)
         logger.info(f"Verification email sent to {user.email}")
     except Exception as e:
-        # Log error and notify Bugsnag with context
-        logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
+        # Log error with full exception details 
+        logger.error(f"Failed to send verification email to {user.email}: {repr(e)} - {str(e)}")
         bugsnag.notify(
             e,
             context="signup_verification_email",
             metadata={
                 "user_email": user.email,
                 "user_id": created_user["id"],
-                "error": str(e)
+                "error": str(e),
+                "error_type": type(e).__name__
             }
         )
         # Don't fail signup, but let user know they need to request a new verification email
