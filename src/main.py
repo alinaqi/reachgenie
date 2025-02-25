@@ -80,7 +80,8 @@ from src.database import (
     get_lead_by_email,
     get_lead_by_phone,
     update_company_cronofy_tokens,
-    get_company_id_from_email_log
+    get_company_id_from_email_log,
+    soft_delete_product
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -578,6 +579,46 @@ async def update_product(
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
     return await update_product_details(product_id, product.product_name)
+
+@app.delete("/api/companies/{company_id}/products/{product_id}", response_model=dict)
+async def delete_product(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Soft delete a product by setting deleted = TRUE
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        Dict with success message
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company or product doesn't belong to company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Verify product exists and belongs to company
+    existing_product = await get_product_by_id(product_id)
+    if not existing_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if str(existing_product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    
+    # Soft delete the product
+    success = await soft_delete_product(product_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete product")
+    
+    return {"status": "success", "message": "Product deleted successfully"}
 
 @app.get("/api/companies", response_model=List[CompanyInDB])
 async def get_companies(

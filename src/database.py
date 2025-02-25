@@ -76,7 +76,7 @@ async def db_create_product(company_id: UUID, product_name: str, file_name: Opti
     return response.data[0]
 
 async def get_products_by_company(company_id: UUID):
-    response = supabase.table('products').select('*').eq('company_id', str(company_id)).execute()
+    response = supabase.table('products').select('*').eq('company_id', str(company_id)).eq('deleted', False).execute()
     return response.data
 
 async def create_lead(company_id: UUID, lead_data: dict):
@@ -156,7 +156,7 @@ async def delete_lead(lead_id: UUID) -> bool:
         return False
 
 async def get_product_by_id(product_id: UUID):
-    response = supabase.table('products').select('*').eq('id', str(product_id)).execute()
+    response = supabase.table('products').select('*').eq('id', str(product_id)).eq('deleted', False).execute()
     if not response.data:
         return None
     return response.data[0]
@@ -466,7 +466,24 @@ async def update_product_details(product_id: UUID, product_name: str):
     response = supabase.table('products').update(product_data).eq('id', str(product_id)).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Product not found")
-    return response.data[0] 
+    return response.data[0]
+
+async def soft_delete_product(product_id: UUID) -> bool:
+    """
+    Soft delete a product by setting deleted = TRUE
+    
+    Args:
+        product_id: UUID of the product to delete
+        
+    Returns:
+        bool: True if product was marked as deleted successfully, False otherwise
+    """
+    try:
+        response = supabase.table('products').update({'deleted': True}).eq('id', str(product_id)).execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error soft deleting product {product_id}: {str(e)}")
+        return False
 
 # Task management functions
 async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str):

@@ -67,10 +67,21 @@
   - Requires: Authentication
   - Returns: List of products
 
+- `GET /api/companies/{company_id}/products/{product_id}`
+  - Get product details
+  - Requires: Authentication
+  - Returns: Product details
+
 - `PUT /api/companies/{company_id}/products/{product_id}`
   - Update product details
   - Requires: Authentication
-  - Returns: Updated product
+  - Returns: Updated product details
+
+- `DELETE /api/companies/{company_id}/products/{product_id}`
+  - Soft delete a product
+  - Requires: Authentication
+  - Returns: Success message
+  - Note: This marks the product as deleted but preserves all related data
 
 ## Campaign Management
 

@@ -216,6 +216,8 @@ class ProductCreate(ProductBase):
 class ProductInDB(ProductBase):
     id: UUID
     company_id: UUID
+    created_at: Optional[datetime] = None
+    deleted: bool = False
 
 class LeadBase(BaseModel):
     name: str
