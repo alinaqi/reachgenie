@@ -2274,6 +2274,9 @@ async def update_voice_agent_settings(
         404: Company not found
         403: User doesn't have access to this company
     """
+    logger.info(f"Updating voice agent settings for company {company_id}")
+    logger.info(f"Received settings: {settings.model_dump()}")
+    
     # Verify user has access to the company
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
@@ -2287,18 +2290,29 @@ async def update_voice_agent_settings(
             detail="Only company administrators can update voice agent settings"
         )
 
+    # Get current company data for comparison
+    current_company = await get_company_by_id(company_id)
+    if current_company and current_company.get('voice_agent_settings'):
+        logger.info(f"Current voice_agent_settings: {current_company['voice_agent_settings']}")
+    
+    # Dump the model to a dictionary
+    settings_dict = settings.model_dump()
+    logger.info(f"Settings dict to be sent to database: {settings_dict}")
+    
     # Update voice agent settings
     updated_company = await update_company_voice_agent_settings(
         company_id=company_id,
-        settings=settings.model_dump()
+        settings=settings_dict
     )
     
     if not updated_company:
+        logger.error("Failed to update voice agent settings")
         raise HTTPException(
             status_code=500,
             detail="Failed to update voice agent settings"
         )
     
+    logger.info(f"Updated company: {updated_company}")
     return updated_company
 
 @app.post("/api/companies/{company_id}/invite", response_model=CompanyInviteResponse, tags=["Companies"])

@@ -69,7 +69,7 @@ class VoiceAgentSettings(BaseModel):
     prompt: str
     voice: VoiceType
     background_track: BackgroundTrackType
-    temperature: float = Field(ge=0.0, le=1.0)
+    temperature: float = Field(default=0.7, ge=0.0, le=1.0)
     language: LanguageCode
     transfer_phone_number: Optional[str] = None
     voice_settings: Optional[Dict[str, Any]] = None

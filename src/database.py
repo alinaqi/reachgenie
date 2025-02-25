@@ -723,13 +723,28 @@ async def update_company_voice_agent_settings(company_id: UUID, settings: dict) 
         Updated company record or None if company not found
     """
     try:
+        logger.info(f"Updating voice agent settings for company {company_id}")
+        logger.info(f"Settings to update: {settings}")
+        
+        # First, get the current settings to compare
+        current = supabase.table('companies').select('voice_agent_settings').eq('id', str(company_id)).execute()
+        if current.data:
+            logger.info(f"Current voice_agent_settings: {current.data[0].get('voice_agent_settings')}")
+        
         response = supabase.table('companies').update({
             'voice_agent_settings': settings
         }).eq('id', str(company_id)).execute()
-        return response.data[0] if response.data else None
+        
+        if response.data:
+            logger.info(f"Updated voice_agent_settings: {response.data[0].get('voice_agent_settings')}")
+            return response.data[0]
+        else:
+            logger.error(f"No data returned from update operation")
+            return None
     except Exception as e:
         logger.error(f"Error updating voice agent settings: {str(e)}")
-        return None 
+        logger.exception("Full exception details:")
+        return None
 
 async def get_email_logs_reminder(reminder_type: Optional[str] = None):
     """
@@ -951,7 +966,7 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
     # Build the select statement based on show_stats
     select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
     if show_stats:
-        select_fields += ', products!inner(id, product_name, deleted)'  # Include deleted column for filtering
+        select_fields += ', products(id, product_name, deleted)'  # Include deleted column for filtering
     select_fields += ')'
 
     response = supabase.table('user_company_profiles')\
