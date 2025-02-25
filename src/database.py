@@ -1,12 +1,14 @@
 from supabase import create_client, Client
 from src.config import get_settings
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Union, Tuple
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import logging
 import secrets
+import uuid
+import json
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -64,13 +66,23 @@ async def db_create_company(
     response = supabase.table('companies').insert(company_data).execute()
     return response.data[0]
 
-async def db_create_product(company_id: UUID, product_name: str, file_name: Optional[str] = None, original_filename: Optional[str] = None, description: Optional[str] = None):
+async def db_create_product(
+    company_id: UUID, 
+    product_name: str, 
+    file_name: Optional[str] = None, 
+    original_filename: Optional[str] = None, 
+    description: Optional[str] = None,
+    product_url: Optional[str] = None,
+    enriched_information: Optional[Dict] = None
+):
     product_data = {
         'company_id': str(company_id),
         'product_name': product_name,
         'file_name': file_name,
         'original_filename': original_filename,
-        'description': description
+        'description': description,
+        'product_url': product_url,
+        'enriched_information': enriched_information
     }
     response = supabase.table('products').insert(product_data).execute()
     return response.data[0]
@@ -459,10 +471,30 @@ async def get_company_id_from_email_log(email_log_id: UUID) -> Optional[UUID]:
         return UUID(response.data[0]['campaigns']['company_id'])
     return None 
 
-async def update_product_details(product_id: UUID, product_name: str):
+async def update_product_details(product_id: UUID, product_name: str, description: Optional[str] = None, product_url: Optional[str] = None):
+    """
+    Update product details including name, description, and URL.
+    
+    Args:
+        product_id: UUID of the product to update
+        product_name: New name for the product
+        description: Optional new description for the product
+        product_url: Optional new URL for the product
+        
+    Returns:
+        Updated product record
+    """
     product_data = {
         'product_name': product_name
     }
+    
+    # Add optional fields if provided
+    if description is not None:
+        product_data['description'] = description
+    
+    if product_url is not None:
+        product_data['product_url'] = product_url
+        
     response = supabase.table('products').update(product_data).eq('id', str(product_id)).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -919,7 +951,7 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
     # Build the select statement based on show_stats
     select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
     if show_stats:
-        select_fields += ', products(id, product_name)'  # Only include products in the main query
+        select_fields += ', products!inner(id, product_name, deleted)'  # Include deleted column for filtering
     select_fields += ')'
 
     response = supabase.table('user_company_profiles')\
@@ -951,6 +983,10 @@ async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
             if 'products' in company:
                 products = []
                 for product in company['products']:
+                    # Skip deleted products
+                    if product.get('deleted', False):
+                        continue
+                        
                     # Get campaign count for this product
                     campaigns_response = supabase.table('campaigns')\
                         .select('id', count='exact')\

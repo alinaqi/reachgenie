@@ -109,6 +109,7 @@ from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
 from src.utils.email_utils import add_tracking_pixel
 from bugsnag.handlers import BugsnagHandler
+from src.perplexity_enrichment import PerplexityEnricher
 
 # Configure logger
 logging.basicConfig(
@@ -489,7 +490,9 @@ async def get_products(
 async def create_product(
     company_id: UUID,
     product_name: str = Form(...),
-    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    product_url: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
     # Validate company access
@@ -497,67 +500,100 @@ async def create_product(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Validate file extension
-    allowed_extensions = {'.docx', '.pdf', '.txt'}
-    file_ext = os.path.splitext(file.filename)[1].lower()
+    # Get company details for enrichment
+    company = await get_company_by_id(company_id)
+    company_name = company.get("name", "")
     
-    if file_ext not in allowed_extensions:
-        bugsnag.notify(
-            Exception("Invalid file type uploaded"),
-            context="create_product_validation",
-            metadata={
-                "file_name": file.filename,
-                "file_extension": file_ext,
-                "allowed_extensions": list(allowed_extensions),
-                "company_id": str(company_id),
-                "user_id": current_user["id"]
-            }
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
-        )
+    file_name = None
+    original_filename = None
+    parsed_content = None
+    enriched_information = None
     
-    try:
-        # Generate unique filename
-        file_name = f"{uuid.uuid4()}{file_ext}"
-        original_filename = file.filename
+    # Process file if provided
+    if file:
+        # Validate file extension
+        allowed_extensions = {'.docx', '.pdf', '.txt'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
         
-        # Read and parse file content
-        file_content = await file.read()
+        if file_ext not in allowed_extensions:
+            bugsnag.notify(
+                Exception("Invalid file type uploaded"),
+                context="create_product_validation",
+                metadata={
+                    "file_name": file.filename,
+                    "file_extension": file_ext,
+                    "allowed_extensions": list(allowed_extensions),
+                    "company_id": str(company_id),
+                    "user_id": current_user["id"]
+                }
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
+            )
+        
         try:
-            parsed_content = FileParser.parse_file(file_content, file_ext)
-        except ValueError as e:
-            logger.error(f"Error parsing file: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
-        
-        # Initialize Supabase client with service role
-        settings = get_settings()
-        supabase: Client = create_client(
-            settings.supabase_url,
-            settings.SUPABASE_SERVICE_KEY
-        )
-        
-        # Upload file to Supabase storage
-        storage = supabase.storage.from_("product-files")
-        storage.upload(
-            path=file_name,
-            file=file_content,
-            file_options={"content-type": file.content_type}
-        )
-        
-        # Create product with parsed content as description
-        return await db_create_product(
-            company_id=company_id,
-            product_name=product_name,
-            file_name=file_name,
-            original_filename=original_filename,
-            description=parsed_content
-        )
-        
-    except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process file")
+            # Generate unique filename
+            file_name = f"{uuid.uuid4()}{file_ext}"
+            original_filename = file.filename
+            
+            # Read and parse file content
+            file_content = await file.read()
+            try:
+                parsed_content = FileParser.parse_file(file_content, file_ext)
+            except ValueError as e:
+                logger.error(f"Error parsing file: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+            
+            # Initialize Supabase client with service role
+            settings = get_settings()
+            supabase: Client = create_client(
+                settings.supabase_url,
+                settings.SUPABASE_SERVICE_KEY
+            )
+            
+            # Upload file to Supabase storage
+            storage = supabase.storage.from_("product-files")
+            storage.upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": file.content_type}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to process file")
+    
+    # If description is not provided but we have parsed content, use that
+    if not description and parsed_content:
+        description = parsed_content
+    
+    # Enrich product data using Perplexity if URL is provided
+    if product_url:
+        try:
+            settings = get_settings()
+            perplexity_api_key = settings.perplexity_api_key
+            
+            if perplexity_api_key:
+                perplexity_enricher = PerplexityEnricher(perplexity_api_key)
+                enriched_information = await perplexity_enricher.enrich_product_data(company_name, product_url)
+                logger.info(f"Enriched product information: {json.dumps(enriched_information, indent=2)}")
+            else:
+                logger.warning("Perplexity API key not found, skipping product enrichment")
+        except Exception as e:
+            logger.error(f"Error enriching product data: {str(e)}")
+            # Continue without enrichment if it fails
+    
+    # Create product with all available information
+    return await db_create_product(
+        company_id=company_id,
+        product_name=product_name,
+        file_name=file_name,
+        original_filename=original_filename,
+        description=description,
+        product_url=product_url,
+        enriched_information=enriched_information
+    )
 
 @app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
 async def update_product(
@@ -566,6 +602,22 @@ async def update_product(
     product: ProductCreate,
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Update a product's details including name, description, and URL.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to update
+        product: Updated product data
+        current_user: Current authenticated user
+        
+    Returns:
+        Updated product information
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company or product doesn't belong to company
+    """
     # Verify company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
@@ -578,7 +630,12 @@ async def update_product(
     if str(existing_product["company_id"]) != str(company_id):
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
-    return await update_product_details(product_id, product.product_name)
+    return await update_product_details(
+        product_id=product_id, 
+        product_name=product.product_name,
+        description=product.description,
+        product_url=product.product_url
+    )
 
 @app.delete("/api/companies/{company_id}/products/{product_id}", response_model=dict)
 async def delete_product(
@@ -2196,7 +2253,17 @@ async def update_voice_agent_settings(
     
     Args:
         company_id: UUID of the company
-        settings: Complete voice agent settings to replace existing settings
+        settings: Complete voice agent settings to replace existing settings, including:
+            - prompt: Script template for the agent
+            - voice: Voice type to use
+            - background_track: Background audio track
+            - temperature: AI temperature setting (0.0-1.0)
+            - language: Language code
+            - transfer_phone_number (optional): Phone number to transfer calls to
+            - voice_settings (optional): Additional voice configuration parameters
+            - noise_cancellations (optional): Whether to enable noise cancellation
+            - phone_number (optional): Custom phone number to use for outbound calls
+            - record (optional): Whether to record the call
         current_user: Current authenticated user
         
     Returns:
