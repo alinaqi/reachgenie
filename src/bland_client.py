@@ -61,6 +61,12 @@ class BlandClient:
         temperature = 0.7
         final_script = f"Your name is Alex, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
         
+        # Default values for new fields
+        transfer_phone_number = None
+        voice_settings = None
+        noise_cancellations = None
+        custom_phone_number = None
+        record = None
 
         if company and company.get('voice_agent_settings'):
             settings = company['voice_agent_settings']
@@ -68,6 +74,13 @@ class BlandClient:
             language = settings.get('language', language)
             background_track = settings.get('background_track', background_track)
             temperature = settings.get('temperature', temperature)
+            
+            # Get new optional fields
+            transfer_phone_number = settings.get('transfer_phone_number')
+            voice_settings = settings.get('voice_settings')
+            noise_cancellations = settings.get('noise_cancellations')
+            custom_phone_number = settings.get('phone_number')
+            record = settings.get('record')
             
             # Prepend the prompt if available
             if settings.get('prompt'):
@@ -77,29 +90,44 @@ class BlandClient:
         logger.info(f"Final script: {final_script}")
 
         async with httpx.AsyncClient() as client:
+            # Prepare the request payload
+            payload = {
+                "phone_number": phone_number,
+                "task": final_script,
+                "voice": voice,
+                "language": language,
+                "background_track": background_track,
+                "temperature": temperature,
+                "model": "enhanced",
+                "tools": [self.bland_tool_id],
+                "request_data": call_request_data,
+                "webhook": f"{self.webhook_base_url}/api/calls/webhook",
+                "analysis_prompt": analysis_prompt,
+                "analysis_schema": {
+                   "call_level": "integer",
+                   "sentiment": "string"
+                }
+            }
+            
+            # Add optional parameters if they exist
+            if transfer_phone_number:
+                payload["transfer_phone_number"] = transfer_phone_number
+            if voice_settings:
+                payload["voice_settings"] = voice_settings
+            if noise_cancellations is not None:
+                payload["noise_cancellations"] = noise_cancellations
+            if custom_phone_number:
+                payload["from_number"] = custom_phone_number
+            if record is not None:
+                payload["record"] = record
+                
             response = await client.post(
                 f"{self.base_url}/v1/calls",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "phone_number": phone_number,
-                    "task": final_script,
-                    "voice": voice,
-                    "language": language,
-                    "background_track": background_track,
-                    "temperature": temperature,
-                    "model": "enhanced",
-                    "tools": [self.bland_tool_id],
-                    "request_data": call_request_data,
-                    "webhook": f"{self.webhook_base_url}/api/calls/webhook",
-                    "analysis_prompt": analysis_prompt,
-                    "analysis_schema": {
-                       "call_level": "integer",
-                       "sentiment": "string"
-                    }
-                }
+                json=payload
             )
             
             if response.status_code != 200:

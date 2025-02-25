@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 import json
 import logging
-from enum import Enum
+from enum import Enum, auto
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,11 @@ class VoiceAgentSettings(BaseModel):
     background_track: BackgroundTrackType
     temperature: float = Field(ge=0.0, le=1.0)
     language: LanguageCode
+    transfer_phone_number: Optional[str] = None
+    voice_settings: Optional[Dict[str, Any]] = None
+    noise_cancellations: Optional[bool] = None
+    phone_number: Optional[str] = None
+    record: Optional[bool] = None
 
     class Config:
         json_schema_extra = {
@@ -79,7 +84,12 @@ class VoiceAgentSettings(BaseModel):
                 "voice": "florian",
                 "background_track": "office",
                 "temperature": 0.7,
-                "language": "en-US"
+                "language": "en-US",
+                "transfer_phone_number": "+15551234567",
+                "voice_settings": {"pitch": 1.0, "speed": 1.0},
+                "noise_cancellations": True,
+                "phone_number": "+15557654321",
+                "record": True
             }
         }
 
@@ -209,6 +219,8 @@ class ProductBase(BaseModel):
     file_name: Optional[str] = None
     original_filename: Optional[str] = None
     description: Optional[str] = None
+    product_url: Optional[str] = None
+    enriched_information: Optional[Dict[str, Any]] = None
 
 class ProductCreate(ProductBase):
     pass
