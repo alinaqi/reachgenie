@@ -199,6 +199,7 @@ async def process_emails(
         try:
             # Extract email_log_id from the 'To' field. Format of To field in case of our emails: prefix+email_log_id@domain
             # We do this inorder to find out only those emails which are sent by leads/customers back to our system, otherwise we have no track to identify such thing
+            # and ignoring all emails which are not related to our system.
             email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
             email_log_id = UUID(email_log_id_str)
             logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
@@ -211,6 +212,7 @@ async def process_emails(
         # Parse the email date string into a datetime object
         from email.utils import parsedate_to_datetime
         sent_at = parsedate_to_datetime(email_data['date'])
+        # sent_at will already have the correct timezone from the email header
 
         logger.info(f"Attempting to create email_log_detail with message_id: {email_data['message_id']}")
         await create_email_log_detail(
@@ -219,7 +221,7 @@ async def process_emails(
             email_subject=email_data['subject'],
             email_body=email_data['body'],
             sent_at=sent_at,
-            sender_type='user',
+            sender_type='user', # This is a user reply
             from_name=email_data['from_name'],
             from_email=email_data['from'],
             to_email=email_data['to']
@@ -278,7 +280,9 @@ async def process_emails(
                     subject=response_subject,
                     html_content=final_body, # Use the template with AI reply
                     from_name=company["name"],
-                    email_log_id=email_log_id
+                    email_log_id=email_log_id,
+                    in_reply_to=email_data['message_id'],
+                    references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
                 )
                 logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
