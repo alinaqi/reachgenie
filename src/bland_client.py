@@ -88,6 +88,7 @@ class BlandClient:
                     "task": final_script,
                     "voice": voice,
                     "language": language,
+                    "record": True,
                     "background_track": background_track,
                     "temperature": temperature,
                     "model": "enhanced",
