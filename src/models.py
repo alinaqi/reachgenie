@@ -253,6 +253,7 @@ class CallInDB(BaseModel):
     bland_call_id: Optional[str] = None
     has_meeting_booked: bool
     transcripts: Optional[list[dict]] = None
+    recording_url: Optional[str] = None
     script: Optional[str] = None
     created_at: datetime
     lead_name: Optional[str] = None
@@ -272,6 +273,7 @@ class BlandWebhookPayload(BaseModel):
     corrected_duration: str
     analysis: dict
     transcripts: list[dict]
+    recording_url: Optional[str] = None
 
 class CampaignType(str, Enum):
     EMAIL = 'email'
