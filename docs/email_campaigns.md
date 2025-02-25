@@ -11,6 +11,7 @@ This document outlines the complete flow of email campaigns in the ReachGenie sy
 5. [Database Storage](#database-storage)
 6. [Tracking and Analytics](#tracking-and-analytics)
 7. [System Architecture](#system-architecture)
+8. [Automated Follow-up System](#automated-follow-up-system)
 
 ## Campaign Creation
 
@@ -379,5 +380,130 @@ async def track_email(email_log_id: UUID):
 2. Password decryption happens only at the time of sending emails
 3. API endpoints are protected with authentication
 4. Background tasks run with proper error handling and logging
+
+## Automated Follow-up System
+
+The ReachGenie system includes a sophisticated automated follow-up mechanism that sends reminder emails to prospects who haven't replied to the initial campaign emails. This ensures continuous engagement with leads and increases the chances of conversion.
+
+### Reminder Types and Scheduling
+
+The system supports multiple reminder types, which are sent in sequence:
+- **First Reminder (r1)**: Sent 2 days after the initial email if no reply is received
+- **Second Reminder (r2)**: Sent 2 days after the first reminder if still no reply
+- **Third Reminder (r3)**: Sent 2 days after the second reminder (optional, configurable)
+
+### Reminder Content Generation
+
+For each reminder, the system generates personalized follow-up content using OpenAI:
+
+```python
+async def get_reminder_content(original_email_body: str, reminder_type: str) -> str:
+    """Generate reminder email content using OpenAI based on the original email"""
+    # Determine the ordinal based on reminder type
+    reminder_ordinal = {
+        None: "1st",
+        "r1": "2nd",
+        "r2": "3rd and final"
+    }.get(reminder_type, "1st")
+    
+    # Generate content using OpenAI with specific instructions
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.7,
+        max_tokens=500
+    )
+    
+    return response.choices[0].message.content.strip()
+```
+
+The system ensures each reminder:
+1. References the original email content
+2. Maintains a professional and courteous tone
+3. Expresses interest in following up
+4. Asks if the prospect had a chance to review the previous email
+5. Inquires about any questions or concerns
+
+### Database Tracking
+
+The system tracks reminder status in the database:
+
+```python
+async def update_reminder_sent_status(email_log_id: UUID, reminder_type: str, last_reminder_sent_at: datetime) -> bool:
+    """Update the last_reminder_sent field and timestamp for an email log"""
+    response = supabase.table('email_logs')\
+        .update({
+            'last_reminder_sent': reminder_type,
+            'last_reminder_sent_at': last_reminder_sent_at.isoformat()
+        })\
+        .eq('id', str(email_log_id))\
+        .execute()
+    return bool(response.data)
+```
+
+Each email log record contains:
+- `last_reminder_sent`: The type of the last reminder sent (r1, r2, etc.)
+- `last_reminder_sent_at`: Timestamp when the last reminder was sent
+- `has_replied`: Boolean indicating if the prospect has replied
+
+### Automated Execution
+
+The reminder system runs automatically via a cron job:
+
+```bash
+#!/bin/bash
+set -o errexit -o nounset -o pipefail
+cd /app
+cronlock python -m src.scripts.send_reminders
+```
+
+This script executes the reminder process, which:
+1. Fetches all email logs that need reminders based on timing and reply status
+2. Groups them by company for batch processing
+3. For each company, initializes an SMTP client with the company's credentials
+4. Generates and sends personalized reminder emails to each lead
+5. Updates the database with the new reminder status
+
+### Eligibility Criteria for Reminders
+
+The system determines which emails need reminders based on specific criteria:
+
+```python
+async def get_email_logs_reminder(reminder_type: Optional[str] = None):
+    """Fetch all email logs that need to be processed for reminders"""
+    # Calculate the date threshold (2 days ago from now)
+    two_days_ago = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    
+    # Build query with appropriate filters
+    if reminder_type is None:
+        # For first reminder: no reminder sent yet + initial email sent > 2 days ago
+        query = query\
+            .is_('last_reminder_sent', 'null')\
+            .lt('sent_at', two_days_ago)
+    else:
+        # For subsequent reminders: last reminder type matches + sent > 2 days ago
+        query = query\
+            .eq('last_reminder_sent', reminder_type)\
+            .lt('last_reminder_sent_at', two_days_ago)
+```
+
+This ensures that:
+1. Reminders are only sent if the prospect hasn't replied
+2. Sufficient time (2 days) has passed since the previous communication
+3. The company is still active (not deleted)
+4. The reminder sequence is followed correctly
+
+### Integration with Main Campaign Flow
+
+The reminder system complements the main campaign flow by:
+1. Using the same email tracking mechanisms (tracking pixels)
+2. Storing reminder emails in the same database tables
+3. Following the same security practices for email credentials
+4. Maintaining consistent branding and messaging
+
+This automated follow-up system significantly enhances the effectiveness of email campaigns by ensuring multiple touchpoints with prospects, increasing the likelihood of engagement and conversion.
 
 This document provides a comprehensive overview of the email campaign flow in the ReachGenie system. For more detailed information on specific components, please refer to the codebase or other documentation. 
