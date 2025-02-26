@@ -48,14 +48,34 @@ This document details the end-to-end workflows for creating and running email an
    - This enriched information is stored in the `enriched_information` JSON field of the product
    - The enrichment happens during product creation or update
 
-3. **Product Management**:
+3. **Ideal Customer Profile (ICP) Generation**:
+   - After creating a product, users can generate atomic ICPs for targeted outreach
+   - Endpoint: `POST /api/companies/{company_id}/products/{product_id}/icp`
+   - The system uses the Anthropic Claude AI to analyze product information and generate at least 3 distinct ICPs
+   - Each ICP is atomic, focusing on a single specific customer type (e.g., "VP of Sales at US Enterprise Software Companies")
+   - ICPs include detailed information about:
+     - Company attributes (industry, size, geography, maturity, funding)
+     - Contact attributes (job titles, departments, seniority, responsibilities)
+     - Business challenges that the product can solve
+     - Buying triggers that would motivate purchase
+     - Exclusion criteria for non-ideal customers
+   - ICPs are stored as JSON in the product's database record
+
+4. **ICP Management**:
+   - ICPs can be retrieved using `GET /api/companies/{company_id}/products/{product_id}/icp`
+   - Individual ICPs can be deleted using `DELETE /api/companies/{company_id}/products/{product_id}/icp/{icp_id}`
+   - All ICPs for a product can be deleted using `DELETE /api/companies/{company_id}/products/{product_id}/icp`
+   - ICPs can be regenerated any time using the POST endpoint
+   - Having clear, atomic ICPs helps improve targeting for email and call campaigns
+
+5. **Product Management**:
    - Products can be updated using `PUT /api/companies/{company_id}/products/{product_id}`
    - Products can be listed using `GET /api/companies/{company_id}/products`
    - Products can be deleted using `DELETE /api/companies/{company_id}/products/{product_id}`
    - Products belong to a specific company (one-to-many relationship)
    - When updating a product, enrichment will be re-triggered if the product URL is provided or changed
 
-4. **Product Deletion**:
+6. **Product Deletion**:
    - Endpoint: `DELETE /api/companies/{company_id}/products/{product_id}`
    - This is a soft delete operation - the product is marked as deleted but data is preserved
    - Requires authentication and proper company access permission
@@ -108,11 +128,13 @@ This document details the end-to-end workflows for creating and running email an
      - company_id: Which company owns the campaign
      - product_id: Which product the campaign is promoting
    - The system leverages enriched product data to create more effective messaging when available
+   - Product ICPs can guide targeting strategies and message customization
 
 2. **Campaign Management**:
    - Campaigns can be retrieved using `GET /api/companies/{company_id}/campaigns`
    - Campaigns link products, company, and type of outreach together
    - Enriched product data (overview, value proposition, etc.) is used to enhance campaign personalization
+   - ICPs help focus campaigns on specific customer segments with tailored messaging
 
 ### 6. Running Email Campaigns
 
@@ -178,10 +200,18 @@ This document details the end-to-end workflows for creating and running email an
 
 3. **Product Enrichment**: Products can be automatically enriched with detailed information when a product URL is provided. This enriched data is used to enhance the quality of campaigns and personalization, leading to more effective outreach.
 
-4. **Personalization Pipeline**: Both email and call campaigns use a similar personalization pipeline:
+4. **Ideal Customer Profiles**: The system generates atomic ICPs for each product, which help in:
+   - Identifying the most promising leads for targeting
+   - Tailoring messaging to specific customer segments
+   - Improving campaign effectiveness through better targeting
+   - Creating more personalized outreach content that addresses specific customer needs
+   - Guiding lead qualification and prioritization
+
+5. **Personalization Pipeline**: Both email and call campaigns use a similar personalization pipeline:
    - Company insights generation
    - Content generation (email body or call script)
    - Metadata tracking
    - Integration of product enrichment data to improve personalization
+   - Alignment with ICPs for better targeting and messaging
 
-5. **Background Processing**: Campaign execution happens asynchronously to prevent blocking API requests. 
+6. **Background Processing**: Campaign execution happens asynchronously to prevent blocking API requests. 
