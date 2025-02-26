@@ -221,6 +221,7 @@ class ProductBase(BaseModel):
     description: Optional[str] = None
     product_url: Optional[str] = None
     enriched_information: Optional[Dict[str, Any]] = None
+    ideal_icps: Optional[List[Dict[str, Any]]] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -230,6 +231,66 @@ class ProductInDB(ProductBase):
     company_id: UUID
     created_at: Optional[datetime] = None
     deleted: bool = False
+
+class CompanySize(BaseModel):
+    employees: Dict[str, Optional[int]]
+    revenue: Optional[Dict[str, Union[int, str]]] = None
+
+class ExclusionCriteria(BaseModel):
+    industries: Optional[List[str]] = None
+    companySize: Optional[CompanySize] = None
+
+class CompanyAttributes(BaseModel):
+    industries: List[str]
+    companySize: CompanySize
+    geographies: Dict[str, List[str]]
+    maturity: List[str]
+    funding: Optional[Dict[str, Any]] = None
+    technologies: Optional[List[str]] = None
+
+class ContactAttributes(BaseModel):
+    jobTitles: List[str]
+    departments: List[str]
+    seniority: List[str]
+    responsibilities: List[str]
+
+class IdealCustomerProfile(BaseModel):
+    idealCustomerProfile: Dict[str, Any] = Field(
+        ...,
+        example={
+            "companyAttributes": {
+                "industries": ["SaaS", "Technology"],
+                "companySize": {
+                    "employees": {"min": 50, "max": 1000},
+                    "revenue": {"min": 5000000, "max": 100000000, "currency": "USD"}
+                },
+                "geographies": {
+                    "countries": ["USA", "UK", "Canada"],
+                    "regions": ["North America", "Western Europe"]
+                },
+                "maturity": ["Growth Stage", "Established"],
+                "funding": {
+                    "hasReceivedFunding": True,
+                    "fundingRounds": ["Series A", "Series B"]
+                },
+                "technologies": ["CRM", "Marketing Automation"]
+            },
+            "contactAttributes": {
+                "jobTitles": ["Chief Revenue Officer", "VP of Sales"],
+                "departments": ["Sales", "Revenue Operations"],
+                "seniority": ["Director", "VP", "C-Level"],
+                "responsibilities": ["Revenue Growth", "Sales Strategy"]
+            },
+            "businessChallenges": ["Lead Generation", "Sales Efficiency"],
+            "buyingTriggers": ["Recent Leadership Change", "Funding Announcement"],
+            "exclusionCriteria": {
+                "industries": ["Education", "Government"],
+                "companySize": {
+                    "employees": {"min": 0, "max": 10}
+                }
+            }
+        }
+    )
 
 class LeadBase(BaseModel):
     name: str

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     encryption_salt: str
     cronofy_client_id: str
     cronofy_client_secret: str
+    anthropic_api_key: str
     
     # Bugsnag settings
     bugsnag_api_key: str

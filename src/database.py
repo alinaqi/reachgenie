@@ -518,6 +518,49 @@ async def soft_delete_product(product_id: UUID) -> bool:
         logger.error(f"Error soft deleting product {product_id}: {str(e)}")
         return False
 
+async def update_product_icps(product_id: UUID, ideal_icps: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Update the ideal customer profiles for a product.
+    
+    Args:
+        product_id: UUID of the product to update
+        ideal_icps: List of ideal customer profile dictionaries
+        
+    Returns:
+        Updated product record
+        
+    Raises:
+        HTTPException: If product not found or update fails
+    """
+    try:
+        response = supabase.table('products').update({'ideal_icps': ideal_icps}).eq('id', str(product_id)).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating product ICPs {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update product ICPs: {str(e)}")
+
+async def get_product_icps(product_id: UUID) -> List[Dict[str, Any]]:
+    """
+    Get the ideal customer profiles for a product.
+    
+    Args:
+        product_id: UUID of the product to get ICPs for
+        
+    Returns:
+        List of ideal customer profile dictionaries
+        
+    Raises:
+        HTTPException: If product not found
+    """
+    response = supabase.table('products').select('ideal_icps').eq('id', str(product_id)).eq('deleted', False).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Return the ideal_icps field, or an empty list if it's None
+    return response.data[0].get('ideal_icps') or []
+
 # Task management functions
 async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str):
     """Create a new upload task record"""
