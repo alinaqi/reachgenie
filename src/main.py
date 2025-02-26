@@ -739,6 +739,7 @@ async def get_product_icp(
 async def generate_and_set_icp(
     company_id: UUID,
     product_id: UUID,
+    icp_input: Optional[str] = Query(None, description="Optional user instructions to focus ICP generation"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -748,6 +749,7 @@ async def generate_and_set_icp(
     Args:
         company_id: UUID of the company
         product_id: UUID of the product
+        icp_input: Optional user instructions to focus ICP generation on specific criteria
         
     Returns:
         List of generated ideal customer profiles
@@ -777,6 +779,8 @@ async def generate_and_set_icp(
         # Print debug info
         logger.info(f"Product data: {product}")
         logger.info(f"Company data: {company}")
+        if icp_input:
+            logger.info(f"Custom ICP focus: {icp_input}")
         
         # Initialize Anthropic service
         anthropic_service = AnthropicService()
@@ -786,7 +790,8 @@ async def generate_and_set_icp(
             product_name=product.get('product_name', 'Unnamed Product'),
             product_description=product.get('description', '') or "",
             company_info=company,
-            enriched_information=product.get('enriched_information', {})
+            enriched_information=product.get('enriched_information', {}),
+            icp_input=icp_input  # Pass the optional user instructions
         )
         
         # Store the generated ICPs

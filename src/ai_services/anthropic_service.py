@@ -24,7 +24,8 @@ class AnthropicService:
         product_name: str, 
         product_description: str,
         company_info: Optional[Dict[str, Any]] = None,
-        enriched_information: Optional[Dict[str, Any]] = None
+        enriched_information: Optional[Dict[str, Any]] = None,
+        icp_input: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Generate multiple atomic ideal customer profiles for a product using Anthropic Claude.
@@ -35,6 +36,7 @@ class AnthropicService:
             product_description: Description of the product
             company_info: Optional information about the company
             enriched_information: Optional enriched information about the product
+            icp_input: Optional user instructions to focus ICP generation on specific criteria
             
         Returns:
             List of dictionaries containing the generated ideal customer profiles
@@ -65,17 +67,23 @@ class AnthropicService:
                 if 'marketInfo' in enriched_information:
                     context += f"Market Information: {enriched_information['marketInfo']}\n"
             
+            # Include user-provided focus instruction if provided
+            user_focus = ""
+            if icp_input and icp_input.strip():
+                user_focus = f"\nUser-Provided Focus:\n{icp_input}\n"
+            
             # Create the prompt for Anthropic Claude
             prompt = f"""Based on the following information about a product, generate at least 3 DISTINCT and ATOMIC ideal customer profiles (ICPs) in JSON format:
 
-{context}
+{context}{user_focus}
 
 IMPORTANT GUIDELINES:
 1. Each ICP must be ATOMIC - focusing on ONE SPECIFIC customer type (e.g., "VP of Sales at US Enterprise Software Companies" not "Sales Leaders in US, UK, and Germany")
 2. Each ICP should target a different segment, role, or use case
 3. Be specific with countries/regions - don't list multiple countries in one ICP
 4. Be specific with industries - don't list multiple unrelated industries in one ICP
-5. Generate at least 3 ICPs, each focusing on a different but realistic target customer
+5. Generate at least 3 ICPs, each focusing on a different but realistic target customer{' ' if not icp_input else ''}
+{f'6. Focus ICP generation on: {icp_input}' if icp_input else ''}
 
 The ideal customer profiles should follow this structure exactly:
 

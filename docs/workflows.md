@@ -51,6 +51,7 @@ This document details the end-to-end workflows for creating and running email an
 3. **Ideal Customer Profile (ICP) Generation**:
    - After creating a product, users can generate atomic ICPs for targeted outreach
    - Endpoint: `POST /api/companies/{company_id}/products/{product_id}/icp`
+   - Accepts an optional `icp_input` parameter that allows users to provide specific instructions for ICP generation
    - The system uses the Anthropic Claude AI to analyze product information and generate at least 3 distinct ICPs
    - Each ICP is atomic, focusing on a single specific customer type (e.g., "VP of Sales at US Enterprise Software Companies")
    - ICPs include detailed information about:
