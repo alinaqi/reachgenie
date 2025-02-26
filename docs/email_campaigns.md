@@ -12,6 +12,7 @@ This document outlines the complete flow of email campaigns in the ReachGenie sy
 6. [Tracking and Analytics](#tracking-and-analytics)
 7. [System Architecture](#system-architecture)
 8. [Automated Follow-up System](#automated-follow-up-system)
+9. [Product Enrichment](#product-enrichment)
 
 ## Campaign Creation
 
@@ -136,9 +137,44 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
     return insights
 ```
 
+### Product Enrichment Integration
+
+The system checks for and utilizes enriched product information when generating email content:
+
+```python
+# Prepare product information and check for enriched data
+product_info = product.get('description', 'Not available')
+enriched_info = product.get('enriched_information')
+enriched_data = ""
+
+if enriched_info:
+    logger.info(f"Using enriched product information for email generation")
+    
+    if enriched_info.get('overview'):
+        enriched_data += f"\nOverview: {enriched_info.get('overview')}"
+    
+    if enriched_info.get('key_value_proposition'):
+        enriched_data += f"\nKey Value Proposition: {enriched_info.get('key_value_proposition')}"
+    
+    if enriched_info.get('pricing'):
+        enriched_data += f"\nPricing: {enriched_info.get('pricing')}"
+    
+    if enriched_info.get('market_overview'):
+        enriched_data += f"\nMarket Overview: {enriched_info.get('market_overview')}"
+    
+    if enriched_info.get('competitors'):
+        enriched_data += f"\nCompetitors: {enriched_info.get('competitors')}"
+    
+    reviews = enriched_info.get('reviews', [])
+    if reviews and len(reviews) > 0:
+        enriched_data += "\nReviews:"
+        for review in reviews:
+            enriched_data += f"\n- {review}"
+```
+
 ### Email Content Generation
 
-The system uses OpenAI to generate personalized email content for each lead:
+The system uses OpenAI to generate personalized email content for each lead, leveraging enriched product data when available:
 
 ```python
 async def generate_email_content(lead: dict, campaign: dict, company: dict, insights: str) -> Optional[tuple[str, str]]:
@@ -148,6 +184,15 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
     
     # Get product details
     product = await get_product_by_id(campaign['product_id'])
+    
+    # Prepare product information and check for enriched data
+    product_info = product.get('description', 'Not available')
+    enriched_info = product.get('enriched_information')
+    enriched_data = ""
+    
+    if enriched_info:
+        # Process enriched information to include in the prompt
+        # (overview, key value proposition, pricing, market, competitors, reviews)
     
     # Construct the prompt with lead and campaign information
     prompt = f"""
@@ -160,7 +205,9 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
     - Analysis: {insights}
 
     Product Information:
-    {product.get('description', 'Not available')}
+    {product_info}
+    
+    {enriched_data if enriched_info else ""}
 
     Company Information (for signature):
     - Company Name: {company.get('name', '')}
@@ -169,6 +216,14 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
     Create two pieces of content:
     1. Email Subject: Compelling subject line mentioning our product and key benefits
     2. Email Content: Professional HTML email highlighting specific benefits for their business
+    
+    {f'''
+    - Use the detailed product information to craft a more compelling message
+    - Incorporate the key value propositions that align with the lead's needs
+    - If appropriate, highlight how the product stands out from competitors
+    - Use market insights to show understanding of the lead's industry challenges
+    - Reference positive reviews when useful to build credibility
+    ''' if enriched_info else ""}
     """
     
     # Generate content using OpenAI
@@ -358,7 +413,7 @@ async def track_email(email_log_id: UUID):
 2. **Background Tasks**: Processes campaign execution asynchronously
 3. **Supabase Database**: Stores campaign data, email logs, and tracking information
 4. **OpenAI Integration**: Generates personalized email content
-5. **Perplexity API**: Provides company insights for personalization
+5. **Perplexity API**: Provides company insights for personalization and product enrichment
 6. **SMTP Client**: Sends emails using the company's email credentials
 
 ### Data Flow
@@ -368,7 +423,8 @@ async def track_email(email_log_id: UUID):
 3. System processes the campaign in the background
 4. For each lead:
    - System generates company insights using Perplexity API
-   - System generates personalized email content using OpenAI
+   - System retrieves product information, including enriched data when available
+   - System generates personalized email content using OpenAI, leveraging product enrichment
    - System sends the email using the SMTP client
    - System logs the email in the database
 5. System tracks email opens and replies
@@ -505,5 +561,53 @@ The reminder system complements the main campaign flow by:
 4. Maintaining consistent branding and messaging
 
 This automated follow-up system significantly enhances the effectiveness of email campaigns by ensuring multiple touchpoints with prospects, increasing the likelihood of engagement and conversion.
+
+## Product Enrichment
+
+The system leverages enriched product information to create more personalized and effective email campaigns. When a product is created or updated with a product URL, the system automatically enriches the product with additional information.
+
+### Enrichment Data Types
+
+The enriched product information includes:
+- **Overview**: General description of the product
+- **Key Value Proposition**: Main selling points
+- **Pricing**: Pricing information if available
+- **Market Overview**: Information about the market
+- **Competitors**: List of competitors
+- **Reviews**: Up to 3 good reviews
+
+### Integration with Email Generation
+
+During email content generation, the system checks if enriched product information is available:
+
+```python
+enriched_info = product.get('enriched_information')
+if enriched_info:
+    logger.info(f"Using enriched product information for email generation")
+    
+    # Extract and format enriched information for the prompt
+    # Add special LLM instructions to leverage the enriched data
+```
+
+### Enhanced Personalization
+
+When enriched product data is available, the system:
+1. Provides detailed product information to the LLM
+2. Adds special instructions to the LLM to:
+   - Incorporate key value propositions aligned with lead's needs
+   - Highlight how the product stands out from competitors
+   - Use market insights to show understanding of industry challenges
+   - Reference positive reviews to build credibility
+
+### Benefits of Product Enrichment
+
+The product enrichment integration enables:
+1. **More compelling messaging**: Emails contain specific value propositions rather than generic descriptions
+2. **Competitive positioning**: Emails can highlight advantages over competitors
+3. **Industry relevance**: Content can reference market trends and challenges
+4. **Increased credibility**: Inclusion of reviews and actual pricing builds trust
+5. **Higher personalization**: AI can match specific product benefits to the lead's likely needs
+
+This feature significantly improves the quality and effectiveness of email campaigns by providing the AI with richer, more detailed product information to craft personalized messaging.
 
 This document provides a comprehensive overview of the email campaign flow in the ReachGenie system. For more detailed information on specific components, please refer to the codebase or other documentation. 
