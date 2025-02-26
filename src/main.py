@@ -8,7 +8,7 @@ import csv
 import io
 import logging
 import bugsnag
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from openai import AsyncOpenAI
 import json
@@ -58,6 +58,8 @@ from src.database import (
     create_upload_task,
     update_task_status,
     get_task_status,
+    update_product_icps, 
+    get_product_icps,
     update_company_account_credentials,
     update_user,
     get_company_email_logs,
@@ -83,6 +85,7 @@ from src.database import (
     get_company_id_from_email_log,
     soft_delete_product
 )
+from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
 from src.models import (
@@ -644,39 +647,207 @@ async def delete_product(
     product_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Soft delete a product by setting deleted = TRUE
-    
-    Args:
-        company_id: UUID of the company
-        product_id: UUID of the product to delete
-        current_user: Current authenticated user
-        
-    Returns:
-        Dict with success message
-        
-    Raises:
-        404: Product not found or company not found
-        403: User doesn't have access to this company or product doesn't belong to company
-    """
-    # Verify user has access to the company
+    # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Verify product exists and belongs to company
-    existing_product = await get_product_by_id(product_id)
-    if not existing_product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    if str(existing_product["company_id"]) != str(company_id):
-        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    # Get the product to ensure it exists and belongs to the company
+    product = await get_product_by_id(product_id)
+    if str(product['company_id']) != str(company_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="This product does not belong to the specified company"
+        )
     
     # Soft delete the product
-    success = await soft_delete_product(product_id)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete product")
+    await soft_delete_product(product_id)
     
-    return {"status": "success", "message": "Product deleted successfully"}
+    return {"message": "Product deleted successfully"}
+
+@app.get("/api/companies/{company_id}/products/{product_id}/icp", response_model=List[Dict[str, Any]], tags=["Products"])
+async def get_product_icp(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get the ideal customer profiles for a product.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product
+        
+    Returns:
+        List of ideal customer profiles
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product to ensure it exists and belongs to the company
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if str(product['company_id']) != str(company_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="This product does not belong to the specified company"
+        )
+    
+    try:
+        # Get the ICPs for the product
+        icps = await get_product_icps(product_id)
+        
+        # If no ICPs exist, return an empty list
+        if not icps:
+            return []
+            
+        # Ensure each ICP has an ID if missing (backward compatibility)
+        import uuid
+        for icp in icps:
+            if "id" not in icp:
+                icp["id"] = str(uuid.uuid4())
+            
+            # Ensure there's a name in the ICP (backward compatibility)
+            if "idealCustomerProfile" in icp and "name" not in icp["idealCustomerProfile"]:
+                # Generate a name based on company attributes if possible
+                try:
+                    industries = icp["idealCustomerProfile"]["companyAttributes"]["industries"]
+                    company_size = icp["idealCustomerProfile"]["companyAttributes"]["companySize"]["employees"]
+                    
+                    # Create a name like "Enterprise Software Companies" or "Small Healthcare Organizations"
+                    size_desc = "Enterprise" if company_size["max"] > 500 else "Mid-Market" if company_size["max"] > 100 else "Small"
+                    industry = industries[0] if industries else "Companies"
+                    
+                    icp["idealCustomerProfile"]["name"] = f"{size_desc} {industry}"
+                except:
+                    # Fallback name if we can't extract meaningful information
+                    icp["idealCustomerProfile"]["name"] = f"ICP #{icps.index(icp) + 1}"
+        
+        return icps
+    except Exception as e:
+        logger.error(f"Error retrieving product ICPs: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve ideal customer profiles: {str(e)}"
+        )
+
+@app.post("/api/companies/{company_id}/products/{product_id}/icp", response_model=List[Dict[str, Any]], tags=["Products"])
+async def generate_and_set_icp(
+    company_id: UUID,
+    product_id: UUID,
+    icp_input: Optional[str] = Query(None, description="Optional user instructions to focus ICP generation"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate and set ideal customer profiles for a product using Anthropic's Claude API.
+    Generates at least 3 atomic ICPs, each focusing on a single specific customer type.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product
+        icp_input: Optional user instructions to focus ICP generation on specific criteria
+        
+    Returns:
+        List of generated ideal customer profiles
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product to ensure it exists and belongs to the company
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if str(product['company_id']) != str(company_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="This product does not belong to the specified company"
+        )
+    
+    # Get the company information
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    try:
+        # Print debug info
+        logger.info(f"Product data: {product}")
+        logger.info(f"Company data: {company}")
+        if icp_input:
+            logger.info(f"Custom ICP focus: {icp_input}")
+        
+        # Initialize Anthropic service
+        anthropic_service = AnthropicService()
+        
+        # Generate ICPs using Claude - use product_name instead of name
+        generated_icps = await anthropic_service.generate_ideal_customer_profile(
+            product_name=product.get('product_name', 'Unnamed Product'),
+            product_description=product.get('description', '') or "",
+            company_info=company,
+            enriched_information=product.get('enriched_information', {}),
+            icp_input=icp_input  # Pass the optional user instructions
+        )
+        
+        # Store the generated ICPs
+        if generated_icps and len(generated_icps) > 0:
+            try:
+                # Get any existing ICPs
+                existing_icps = await get_product_icps(product_id)
+                
+                # Make sure existing_icps is a list
+                if existing_icps is None:
+                    existing_icps = []
+                
+                # Check for duplicate names and modify if needed
+                for icp in generated_icps:
+                    if "idealCustomerProfile" in icp and "name" in icp["idealCustomerProfile"]:
+                        icp_name = icp["idealCustomerProfile"]["name"]
+                        name_count = 1
+                        original_name = icp_name
+                        
+                        # Check if name already exists in any existing ICP
+                        while any(existing_icp.get("idealCustomerProfile", {}).get("name") == icp_name 
+                                for existing_icp in existing_icps):
+                            icp_name = f"{original_name} #{name_count}"
+                            name_count += 1
+                        
+                        # Update name if it was changed
+                        if icp_name != original_name:
+                            icp["idealCustomerProfile"]["name"] = icp_name
+                
+                # Add the new ICPs to the list
+                updated_icps = existing_icps + generated_icps
+                
+                # Log the number of generated ICPs
+                logger.info(f"Generated {len(generated_icps)} new ICPs for product {product_id}")
+                
+                # Update the product with the new ICPs
+                await update_product_icps(product_id, updated_icps)
+                
+                return updated_icps
+            except Exception as e:
+                logger.error(f"Error updating product ICPs: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save ideal customer profiles: {str(e)}"
+                )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate ideal customer profiles"
+            )
+    except Exception as e:
+        logger.error(f"Error generating ICPs: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate ideal customer profiles: {str(e)}"
+        )
 
 @app.get("/api/companies", response_model=List[CompanyInDB], tags=["Companies"])
 async def get_companies(
@@ -2789,3 +2960,117 @@ async def search_lead(
             "communication_history": history
         }
     }
+
+@app.delete("/api/companies/{company_id}/products/{product_id}/icp/{icp_id}", response_model=dict, tags=["Products"])
+async def delete_product_icp(
+    company_id: UUID,
+    product_id: UUID,
+    icp_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a specific ICP from a product by its ID.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product
+        icp_id: ID of the ICP to delete
+        
+    Returns:
+        Success message
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product to ensure it exists and belongs to the company
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if str(product['company_id']) != str(company_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="This product does not belong to the specified company"
+        )
+    
+    try:
+        # Get existing ICPs
+        existing_icps = await get_product_icps(product_id)
+        
+        # Look for the ICP with the specified ID
+        icp_found = False
+        updated_icps = []
+        
+        for icp in existing_icps:
+            if icp.get('id') != icp_id:
+                updated_icps.append(icp)
+            else:
+                icp_found = True
+        
+        if not icp_found:
+            raise HTTPException(
+                status_code=404,
+                detail="ICP not found for this product"
+            )
+        
+        # Update the product with the filtered list of ICPs
+        await update_product_icps(product_id, updated_icps)
+        
+        return {"message": "ICP deleted successfully"}
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting product ICP: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete ICP: {str(e)}"
+        )
+
+@app.delete("/api/companies/{company_id}/products/{product_id}/icp", response_model=dict, tags=["Products"])
+async def delete_all_product_icps(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete all ICPs from a product.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product
+        
+    Returns:
+        Success message
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get the product to ensure it exists and belongs to the company
+    product = await get_product_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if str(product['company_id']) != str(company_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="This product does not belong to the specified company"
+        )
+    
+    try:
+        # Update the product with an empty list of ICPs
+        await update_product_icps(product_id, [])
+        
+        return {"message": "All ICPs deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error deleting all product ICPs: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete ICPs: {str(e)}"
+        )
