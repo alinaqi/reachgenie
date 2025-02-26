@@ -23,21 +23,39 @@ This document details the end-to-end workflows for creating and running email an
 
 ### 2. Product Creation
 
-1. **Upload Product**:
+1. **Create Product**:
    - Endpoint: `POST /api/companies/{company_id}/products`
-   - File upload is required (supports .docx, .pdf, .txt)
-   - The system parses the file content to extract product description
+   - Supports the following fields:
+     - `product_name` (required): Name of the product
+     - `description` (optional): Detailed description of the product
+     - `product_url` (optional): URL to the product's website
+     - `file` (optional): Documentation file for the product (.docx, .pdf, .txt)
+   - When a product URL is provided, the system automatically enriches the product with additional information using Perplexity API
    - Files are stored in Supabase storage under "product-files" bucket
    - Product data is stored in the `products` table with references to company
-   - Key fields: product_name, file_name, description
+   - The enriched information includes:
+     - Overview: General description of the product
+     - Key Value Proposition: Main selling points
+     - Pricing: Pricing information if available
+     - Reviews: Up to 3 good reviews
+     - Market Overview: Information about the market
+     - Competitors: List of competitors
 
-2. **Product Management**:
+2. **Product Enrichment Process**:
+   - Triggered automatically when a product URL is provided
+   - The system makes a request to the Perplexity API with company name and product URL
+   - Perplexity API extracts detailed information about the product
+   - This enriched information is stored in the `enriched_information` JSON field of the product
+   - The enrichment happens during product creation or update
+
+3. **Product Management**:
    - Products can be updated using `PUT /api/companies/{company_id}/products/{product_id}`
    - Products can be listed using `GET /api/companies/{company_id}/products`
    - Products can be deleted using `DELETE /api/companies/{company_id}/products/{product_id}`
    - Products belong to a specific company (one-to-many relationship)
+   - When updating a product, enrichment will be re-triggered if the product URL is provided or changed
 
-3. **Product Deletion**:
+4. **Product Deletion**:
    - Endpoint: `DELETE /api/companies/{company_id}/products/{product_id}`
    - This is a soft delete operation - the product is marked as deleted but data is preserved
    - Requires authentication and proper company access permission
@@ -89,10 +107,12 @@ This document details the end-to-end workflows for creating and running email an
    - Campaigns are stored in the `campaigns` table with references to:
      - company_id: Which company owns the campaign
      - product_id: Which product the campaign is promoting
+   - The system leverages enriched product data to create more effective messaging when available
 
 2. **Campaign Management**:
    - Campaigns can be retrieved using `GET /api/companies/{company_id}/campaigns`
    - Campaigns link products, company, and type of outreach together
+   - Enriched product data (overview, value proposition, etc.) is used to enhance campaign personalization
 
 ### 6. Running Email Campaigns
 
@@ -105,7 +125,9 @@ This document details the end-to-end workflows for creating and running email an
    - Gets leads with email addresses from the company
    - For each lead:
      - Generates company insights using Perplexity service
-     - Generates personalized email content (subject, body) using insights
+     - Uses enriched product data when available for email content generation
+     - Leverages product enrichment to understand product features, value propositions, and market positioning
+     - Generates personalized email content (subject, body) using insights and enriched product data
      - Creates email log record in database
      - Adds tracking pixel to email for open tracking
      - Sends email via SMTP using company credentials
@@ -126,7 +148,9 @@ This document details the end-to-end workflows for creating and running email an
    - Gets leads with phone numbers from the company
    - For each lead:
      - Generates company insights using Perplexity service
-     - Generates personalized call script using OpenAI
+     - Uses enriched product data when available for call script generation
+     - Leverages product enrichment data for detailed product features, value proposition, and competitive advantages
+     - Generates personalized call script using OpenAI with both company insights and product enrichment data
      - Creates call record in database
      - Initiates call using Bland AI service with generated script
      - Updates call record with Bland call ID and details
@@ -139,6 +163,7 @@ This document details the end-to-end workflows for creating and running email an
 ## Key Relationships and Data Flow
 
 - **Company → Products**: One-to-many (a company can have multiple products)
+- **Products → Enriched Information**: One-to-one (a product can be enriched with additional information from Perplexity API)
 - **Company → Leads**: One-to-many (leads belong to a company, not specific products)
 - **Company → Campaigns**: One-to-many (company owns multiple campaigns)
 - **Product → Campaigns**: One-to-many (a product can be promoted in multiple campaigns)
@@ -151,9 +176,12 @@ This document details the end-to-end workflows for creating and running email an
 
 2. **Campaign Structure**: Campaigns connect products with communication methods. Each campaign focuses on one product but can target many leads.
 
-3. **Personalization Pipeline**: Both email and call campaigns use a similar personalization pipeline:
+3. **Product Enrichment**: Products can be automatically enriched with detailed information when a product URL is provided. This enriched data is used to enhance the quality of campaigns and personalization, leading to more effective outreach.
+
+4. **Personalization Pipeline**: Both email and call campaigns use a similar personalization pipeline:
    - Company insights generation
    - Content generation (email body or call script)
    - Metadata tracking
+   - Integration of product enrichment data to improve personalization
 
-4. **Background Processing**: Campaign execution happens asynchronously to prevent blocking API requests. 
+5. **Background Processing**: Campaign execution happens asynchronously to prevent blocking API requests. 

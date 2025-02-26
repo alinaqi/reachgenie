@@ -1814,6 +1814,35 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
         
+        # Prepare product information and check for enriched data
+        product_info = product.get('description', 'Not available')
+        enriched_info = product.get('enriched_information')
+        enriched_data = ""
+        
+        if enriched_info:
+            logger.info(f"Using enriched product information for email generation")
+            
+            if enriched_info.get('overview'):
+                enriched_data += f"\nOverview: {enriched_info.get('overview')}"
+            
+            if enriched_info.get('key_value_proposition'):
+                enriched_data += f"\nKey Value Proposition: {enriched_info.get('key_value_proposition')}"
+            
+            if enriched_info.get('pricing'):
+                enriched_data += f"\nPricing: {enriched_info.get('pricing')}"
+            
+            if enriched_info.get('market_overview'):
+                enriched_data += f"\nMarket Overview: {enriched_info.get('market_overview')}"
+            
+            if enriched_info.get('competitors'):
+                enriched_data += f"\nCompetitors: {enriched_info.get('competitors')}"
+            
+            reviews = enriched_info.get('reviews', [])
+            if reviews and len(reviews) > 0:
+                enriched_data += "\nReviews:"
+                for review in reviews:
+                    enriched_data += f"\n- {review}"
+        
         # Construct the prompt with lead and campaign information
         prompt = f"""
         You are an expert sales representative who have capabilities to pitch the leads about the product.
@@ -1825,7 +1854,9 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Analysis: {insights}
 
         Product Information:
-        {product.get('description', 'Not available')}
+        {product_info}
+        
+        {enriched_data if enriched_info else ""}
 
         Company Information (for signature):
         - Company Name: {company.get('name', '')}
@@ -1845,6 +1876,13 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Format the signature as:
           Best regards,
           [Company Name]
+        {f'''
+        - Use the detailed product information to craft a more compelling message
+        - Incorporate the key value propositions that align with the lead's needs
+        - If appropriate, highlight how the product stands out from competitors
+        - Use market insights to show understanding of the lead's industry challenges
+        - Reference positive reviews when useful to build credibility
+        ''' if enriched_info else ""}
 
         Return the response in the following JSON format:
         {{
@@ -2075,6 +2113,35 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
 
+        # Prepare product information and check for enriched data
+        product_info = product.get('description', 'Not available')
+        enriched_info = product.get('enriched_information')
+        enriched_data = ""
+        
+        if enriched_info:
+            logger.info(f"Using enriched product information for call script generation")
+            
+            if enriched_info.get('overview'):
+                enriched_data += f"\nOverview: {enriched_info.get('overview')}"
+            
+            if enriched_info.get('key_value_proposition'):
+                enriched_data += f"\nKey Value Proposition: {enriched_info.get('key_value_proposition')}"
+            
+            if enriched_info.get('pricing'):
+                enriched_data += f"\nPricing: {enriched_info.get('pricing')}"
+            
+            if enriched_info.get('market_overview'):
+                enriched_data += f"\nMarket Overview: {enriched_info.get('market_overview')}"
+            
+            if enriched_info.get('competitors'):
+                enriched_data += f"\nCompetitors: {enriched_info.get('competitors')}"
+            
+            reviews = enriched_info.get('reviews', [])
+            if reviews and len(reviews) > 0:
+                enriched_data += "\nReviews:"
+                for review in reviews:
+                    enriched_data += f"\n- {review}"
+
         # Default agent name
         agent_name = "Alex"
 
@@ -2113,7 +2180,9 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Analysis: {insights}
 
         Product Information:
-        {product.get('description', 'Not available')}
+        {product_info}
+        
+        {enriched_data if enriched_info else ""}
 
         Company Information (for signature):
         - Company Name: {company.get('name')}.
@@ -2131,6 +2200,13 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Show how to handle common objections
         - End with clear next steps
         - Use the company insights and analysis to make the conversation specific to their business
+        {f'''
+        - Use the detailed product information to make your pitch more specific
+        - Incorporate the key value propositions in your conversation
+        - If appropriate, mention how the product compares to competitors
+        - Use market insights to show industry knowledge
+        - Reference positive reviews when useful to build credibility
+        ''' if enriched_info else ""}
 
         Format the conversation as:
         {agent_name}: [what {agent_name} says]
