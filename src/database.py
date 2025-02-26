@@ -184,7 +184,7 @@ async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
 
-async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict]):
+async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict], recording_url: Optional[str] = None):
     """
     Update call record with webhook data from Bland AI
     
@@ -202,7 +202,8 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
             'duration': int(float(duration)),
             'sentiment': sentiment,
             'summary': summary,
-            'transcripts': transcripts
+            'transcripts': transcripts,
+            'recording_url': recording_url
         }
         response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
         return response.data[0] if response.data else None
@@ -251,7 +252,7 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,created_at,campaign_id,leads(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided

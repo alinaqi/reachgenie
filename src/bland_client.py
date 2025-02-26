@@ -66,7 +66,7 @@ class BlandClient:
         voice_settings = None
         noise_cancellations = None
         custom_phone_number = None
-        record = None
+        record = True  # Default to True as per main branch
 
         if company and company.get('voice_agent_settings'):
             settings = company['voice_agent_settings']
@@ -80,7 +80,7 @@ class BlandClient:
             voice_settings = settings.get('voice_settings')
             noise_cancellations = settings.get('noise_cancellations')
             custom_phone_number = settings.get('phone_number')
-            record = settings.get('record')
+            record = settings.get('record', True)  # Default to True if not specified
             
             # Prepend the prompt if available
             if settings.get('prompt'):
@@ -106,7 +106,8 @@ class BlandClient:
                 "analysis_schema": {
                    "call_level": "integer",
                    "sentiment": "string"
-                }
+                },
+                "record": record  # Include record parameter with default value True
             }
             
             # Add optional parameters if they exist
@@ -118,8 +119,6 @@ class BlandClient:
                 payload["noise_cancellations"] = noise_cancellations
             if custom_phone_number:
                 payload["from_number"] = custom_phone_number
-            if record is not None:
-                payload["record"] = record
                 
             response = await client.post(
                 f"{self.base_url}/v1/calls",
