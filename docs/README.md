@@ -7,10 +7,30 @@ This API provides functionality for automated SDR (Sales Development Representat
 - User Authentication & Management
 - Company & Product Management
 - Lead Management & Enrichment
+- Lead-Product Personalized Enrichment (Coming Soon)
 - Email Campaign Automation
 - AI-Powered Calling Integration
 - Calendar Integration
 - Task Management
+
+## Documentation Sections
+
+### Development Guides
+- [Installation Guide](installation.md)
+- [Development Guide](development.md)
+- [Architecture Overview](architecture.md)
+
+### Workflow Documentation
+- [Campaign Workflows](workflows.md)
+
+### API Reference
+- [API Endpoints](api/endpoints.md)
+
+### Frontend Implementation
+- [Product Management](frontend/product-management.md)
+
+### Database
+- [Database Schema](database/schema.md)
 
 ## System Architecture
 

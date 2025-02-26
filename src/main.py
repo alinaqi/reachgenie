@@ -80,7 +80,8 @@ from src.database import (
     get_lead_by_email,
     get_lead_by_phone,
     update_company_cronofy_tokens,
-    get_company_id_from_email_log
+    get_company_id_from_email_log,
+    soft_delete_product
 )
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
@@ -108,6 +109,7 @@ from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
 from src.utils.email_utils import add_tracking_pixel
 from bugsnag.handlers import BugsnagHandler
+from src.perplexity_enrichment import PerplexityEnricher
 
 # Configure logger
 logging.basicConfig(
@@ -179,7 +181,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 # Authentication endpoints
-@app.post("/api/auth/signup", response_model=dict)
+@app.post("/api/auth/signup", response_model=dict, tags=["Authentication"])
 async def signup(user: UserCreate):
     db_user = await get_user_by_email(user.email)
     if db_user:
@@ -220,7 +222,7 @@ async def signup(user: UserCreate):
     
     return {"message": "Account created successfully. Please check your email to verify your account."}
 
-@app.post("/api/auth/verify", response_model=EmailVerificationResponse)
+@app.post("/api/auth/verify", response_model=EmailVerificationResponse, tags=["Authentication"])
 async def verify_email(request: EmailVerificationRequest):
     token_data = await get_valid_verification_token(request.token)
     if not token_data:
@@ -254,7 +256,7 @@ async def verify_email(request: EmailVerificationRequest):
     
     return {"message": "Email verified successfully"}
 
-@app.post("/api/auth/resend-verification", response_model=dict)
+@app.post("/api/auth/resend-verification", response_model=dict, tags=["Authentication"])
 async def resend_verification(request: ResendVerificationRequest):
     user = await get_user_by_email(request.email)
     if not user:
@@ -283,7 +285,7 @@ async def resend_verification(request: ResendVerificationRequest):
     
     return {"message": "Verification email sent"}
 
-@app.post("/api/auth/login", response_model=Token)
+@app.post("/api/auth/login", response_model=Token, tags=["Authentication"])
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await get_user_by_email(form_data.username)
     if not user or not verify_password(form_data.password, user["password_hash"]):
@@ -359,7 +361,7 @@ async def update_user_details(
     
     return updated_user
 
-@app.get("/api/users/me", response_model=UserInDB)
+@app.get("/api/users/me", response_model=UserInDB, tags=["Users"])
 async def get_current_user_details(current_user: dict = Depends(get_current_user)):
     """
     Get details of the currently authenticated user
@@ -380,7 +382,8 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
 # Company Management endpoints
 @app.post(
     "/api/companies", 
-    response_model=CompanyInDB
+    response_model=CompanyInDB,
+    tags=["Companies"]
 )
 async def create_company(
     company: CompanyCreate,
@@ -437,7 +440,7 @@ async def create_company(
 
     return created_company
 
-@app.get("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
+@app.get("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB, tags=["Products"])
 async def get_product(
     company_id: UUID,
     product_id: UUID,
@@ -474,7 +477,7 @@ async def get_product(
     
     return product
 
-@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB])
+@app.get("/api/companies/{company_id}/products", response_model=List[ProductInDB], tags=["Products"])
 async def get_products(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -484,11 +487,13 @@ async def get_products(
         raise HTTPException(status_code=404, detail="Company not found")
     return await get_products_by_company(company_id)
 
-@app.post("/api/companies/{company_id}/products", response_model=ProductInDB)
+@app.post("/api/companies/{company_id}/products", response_model=ProductInDB, tags=["Products"])
 async def create_product(
     company_id: UUID,
     product_name: str = Form(...),
-    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    product_url: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
     # Validate company access
@@ -496,75 +501,124 @@ async def create_product(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Validate file extension
-    allowed_extensions = {'.docx', '.pdf', '.txt'}
-    file_ext = os.path.splitext(file.filename)[1].lower()
+    # Get company details for enrichment
+    company = await get_company_by_id(company_id)
+    company_name = company.get("name", "")
     
-    if file_ext not in allowed_extensions:
-        bugsnag.notify(
-            Exception("Invalid file type uploaded"),
-            context="create_product_validation",
-            metadata={
-                "file_name": file.filename,
-                "file_extension": file_ext,
-                "allowed_extensions": list(allowed_extensions),
-                "company_id": str(company_id),
-                "user_id": current_user["id"]
-            }
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
-        )
+    file_name = None
+    original_filename = None
+    parsed_content = None
+    enriched_information = None
     
-    try:
-        # Generate unique filename
-        file_name = f"{uuid.uuid4()}{file_ext}"
-        original_filename = file.filename
+    # Process file if provided
+    if file:
+        # Validate file extension
+        allowed_extensions = {'.docx', '.pdf', '.txt'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
         
-        # Read and parse file content
-        file_content = await file.read()
+        if file_ext not in allowed_extensions:
+            bugsnag.notify(
+                Exception("Invalid file type uploaded"),
+                context="create_product_validation",
+                metadata={
+                    "file_name": file.filename,
+                    "file_extension": file_ext,
+                    "allowed_extensions": list(allowed_extensions),
+                    "company_id": str(company_id),
+                    "user_id": current_user["id"]
+                }
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
+            )
+        
         try:
-            parsed_content = FileParser.parse_file(file_content, file_ext)
-        except ValueError as e:
-            logger.error(f"Error parsing file: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
-        
-        # Initialize Supabase client with service role
-        settings = get_settings()
-        supabase: Client = create_client(
-            settings.supabase_url,
-            settings.SUPABASE_SERVICE_KEY
-        )
-        
-        # Upload file to Supabase storage
-        storage = supabase.storage.from_("product-files")
-        storage.upload(
-            path=file_name,
-            file=file_content,
-            file_options={"content-type": file.content_type}
-        )
-        
-        # Create product with parsed content as description
-        return await db_create_product(
-            company_id=company_id,
-            product_name=product_name,
-            file_name=file_name,
-            original_filename=original_filename,
-            description=parsed_content
-        )
-        
-    except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process file")
+            # Generate unique filename
+            file_name = f"{uuid.uuid4()}{file_ext}"
+            original_filename = file.filename
+            
+            # Read and parse file content
+            file_content = await file.read()
+            try:
+                parsed_content = FileParser.parse_file(file_content, file_ext)
+            except ValueError as e:
+                logger.error(f"Error parsing file: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+            
+            # Initialize Supabase client with service role
+            settings = get_settings()
+            supabase: Client = create_client(
+                settings.supabase_url,
+                settings.SUPABASE_SERVICE_KEY
+            )
+            
+            # Upload file to Supabase storage
+            storage = supabase.storage.from_("product-files")
+            storage.upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": file.content_type}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to process file")
+    
+    # If description is not provided but we have parsed content, use that
+    if not description and parsed_content:
+        description = parsed_content
+    
+    # Enrich product data using Perplexity if URL is provided
+    if product_url:
+        try:
+            settings = get_settings()
+            perplexity_api_key = settings.perplexity_api_key
+            
+            if perplexity_api_key:
+                perplexity_enricher = PerplexityEnricher(perplexity_api_key)
+                enriched_information = await perplexity_enricher.enrich_product_data(company_name, product_url)
+                logger.info(f"Enriched product information: {json.dumps(enriched_information, indent=2)}")
+            else:
+                logger.warning("Perplexity API key not found, skipping product enrichment")
+        except Exception as e:
+            logger.error(f"Error enriching product data: {str(e)}")
+            # Continue without enrichment if it fails
+    
+    # Create product with all available information
+    return await db_create_product(
+        company_id=company_id,
+        product_name=product_name,
+        file_name=file_name,
+        original_filename=original_filename,
+        description=description,
+        product_url=product_url,
+        enriched_information=enriched_information
+    )
 
-@app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB)
+@app.put("/api/companies/{company_id}/products/{product_id}", response_model=ProductInDB, tags=["Products"])
 async def update_product(
     company_id: UUID,
     product_id: UUID,
     product: ProductCreate,
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Update a product's details including name, description, and URL.
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to update
+        product: Updated product data
+        current_user: Current authenticated user
+        
+    Returns:
+        Updated product information
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company or product doesn't belong to company
+    """
     # Verify company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
@@ -577,9 +631,54 @@ async def update_product(
     if str(existing_product["company_id"]) != str(company_id):
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
-    return await update_product_details(product_id, product.product_name)
+    return await update_product_details(
+        product_id=product_id, 
+        product_name=product.product_name,
+        description=product.description,
+        product_url=product.product_url
+    )
 
-@app.get("/api/companies", response_model=List[CompanyInDB])
+@app.delete("/api/companies/{company_id}/products/{product_id}", response_model=dict, tags=["Products"])
+async def delete_product(
+    company_id: UUID,
+    product_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Soft delete a product by setting deleted = TRUE
+    
+    Args:
+        company_id: UUID of the company
+        product_id: UUID of the product to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        Dict with success message
+        
+    Raises:
+        404: Product not found or company not found
+        403: User doesn't have access to this company or product doesn't belong to company
+    """
+    # Verify user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Verify product exists and belongs to company
+    existing_product = await get_product_by_id(product_id)
+    if not existing_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if str(existing_product["company_id"]) != str(company_id):
+        raise HTTPException(status_code=403, detail="Product does not belong to this company")
+    
+    # Soft delete the product
+    success = await soft_delete_product(product_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete product")
+    
+    return {"status": "success", "message": "Product deleted successfully"}
+
+@app.get("/api/companies", response_model=List[CompanyInDB], tags=["Companies"])
 async def get_companies(
     show_stats: bool = Query(False, description="Include products in the response"),
     current_user: dict = Depends(get_current_user)
@@ -593,7 +692,7 @@ async def get_companies(
     except Exception as e:
         logger.error(f"Error in get_companies: {str(e)}") 
 
-@app.get("/api/companies/{company_id}", response_model=CompanyInDB)
+@app.get("/api/companies/{company_id}", response_model=CompanyInDB, tags=["Companies"])
 async def get_company(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -608,7 +707,7 @@ async def get_company(
     
     return company
 
-@app.delete("/api/companies/{company_id}", response_model=dict)
+@app.delete("/api/companies/{company_id}", response_model=dict, tags=["Companies"])
 async def delete_company(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -649,7 +748,7 @@ async def delete_company(
     return {"status": "success", "message": "Company deleted successfully"}
 
 # Lead Management endpoints
-@app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse)
+@app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse, tags=["Leads"])
 async def upload_leads(
     background_tasks: BackgroundTasks,
     company_id: UUID,
@@ -723,7 +822,7 @@ async def upload_leads(
         logger.error(f"Error starting leads upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB])
+@app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB], tags=["Leads"])
 async def get_leads(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -733,7 +832,7 @@ async def get_leads(
         raise HTTPException(status_code=404, detail="Company not found")
     return await get_leads_by_company(company_id)
 
-@app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse)
+@app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
 async def get_lead(
     company_id: UUID,
     lead_id: UUID,
@@ -824,7 +923,7 @@ async def get_lead(
         "data": lead
     }
 
-@app.delete("/api/companies/{company_id}/leads/{lead_id}", response_model=dict)
+@app.delete("/api/companies/{company_id}/leads/{lead_id}", response_model=dict, tags=["Leads"])
 async def delete_lead_endpoint(
     company_id: UUID,
     lead_id: UUID,
@@ -867,7 +966,7 @@ async def delete_lead_endpoint(
     return {"status": "success", "message": "Lead deleted successfully"}
 
 # Calling functionality endpoints
-@app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB)
+@app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB, tags=["Calls"])
 async def start_call(
     company_id: UUID,
     lead_id: UUID,
@@ -928,7 +1027,7 @@ async def start_call(
             detail=f"Failed to initiate call: {str(e)}"
         )
 
-@app.get("/api/calls/{call_id}", response_model=CallInDB)
+@app.get("/api/calls/{call_id}", response_model=CallInDB, tags=["Calls"])
 async def get_call_details(
     call_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -938,7 +1037,7 @@ async def get_call_details(
         raise HTTPException(status_code=404, detail="Call not found")
     return call 
 
-@app.post("/api/calls/webhook")
+@app.post("/api/calls/webhook", tags=["Calls"])
 async def handle_bland_webhook(payload: BlandWebhookPayload):
     try:
         # Extract required fields from the payload
@@ -973,7 +1072,7 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             detail=f"Failed to process webhook: {str(e)}"
         ) 
 
-@app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB])
+@app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB], tags=["Calls"])
 async def get_company_calls(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
@@ -995,7 +1094,7 @@ async def get_company_calls(
     
     return await get_calls_by_company_id(company_id, campaign_id)
 
-@app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB)
+@app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
     company_id: UUID,
     campaign: EmailCampaignCreate,
@@ -1022,7 +1121,7 @@ async def create_company_campaign(
         template=campaign.template
     )
 
-@app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB])
+@app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB], tags=["Campaigns & Emails"])
 async def get_company_campaigns(
     company_id: UUID,
     type: str = Query('all', description="Filter campaigns by type: 'email', 'call', or 'all'"),
@@ -1042,7 +1141,7 @@ async def get_company_campaigns(
     
     return await get_campaigns_by_company(company_id, type)
 
-@app.get("/api/companies/{company_id}/emails", response_model=List[EmailLogResponse])
+@app.get("/api/companies/{company_id}/emails", response_model=List[EmailLogResponse], tags=["Campaigns & Emails"])
 async def get_company_emails(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
@@ -1079,7 +1178,7 @@ async def get_company_emails(
     
     return transformed_logs
 
-@app.get("/api/campaigns/{campaign_id}", response_model=EmailCampaignInDB)
+@app.get("/api/campaigns/{campaign_id}", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def get_campaign(
     campaign_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -1096,7 +1195,7 @@ async def get_campaign(
     
     return campaign
 
-@app.post("/api/campaigns/{campaign_id}/run")
+@app.post("/api/campaigns/{campaign_id}/run", tags=["Campaigns & Emails"])
 async def run_campaign(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
@@ -1139,7 +1238,7 @@ async def run_campaign(
     
     return {"message": "Campaign request initiated successfully"} 
 
-@app.post("/api/generate-campaign", response_model=CampaignGenerationResponse)
+@app.post("/api/generate-campaign", response_model=CampaignGenerationResponse, tags=["Campaigns & Emails"])
 async def generate_campaign(
     request: CampaignGenerationRequest,
     current_user: dict = Depends(get_current_user)
@@ -1210,7 +1309,7 @@ async def generate_campaign(
             detail="Failed to generate campaign content"
         ) 
 
-@app.get("/api/companies/{company_id}/cronofy-auth", response_model=CronofyAuthResponse)
+@app.get("/api/companies/{company_id}/cronofy-auth", response_model=CronofyAuthResponse, tags=["Calendar"])
 async def cronofy_auth(
     company_id: UUID,
     code: str = Query(..., description="Authorization code from Cronofy"),
@@ -1276,7 +1375,7 @@ async def cronofy_auth(
     
     return CronofyAuthResponse(message="Successfully connected to Cronofy") 
 
-@app.delete("/api/companies/{company_id}/calendar", response_model=CronofyAuthResponse)
+@app.delete("/api/companies/{company_id}/calendar", response_model=CronofyAuthResponse, tags=["Calendar"])
 async def disconnect_calendar(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -1593,7 +1692,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         await update_task_status(task_id, "failed", str(e))
 
 # Task status endpoint
-@app.get("/api/tasks/{task_id}")
+@app.get("/api/tasks/{task_id}", tags=["Tasks"])
 async def get_task_status(
     task_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -1610,7 +1709,7 @@ async def get_task_status(
         
     return task 
 
-@app.post("/api/companies/{company_id}/account-credentials", response_model=CompanyInDB)
+@app.post("/api/companies/{company_id}/account-credentials", response_model=CompanyInDB, tags=["Companies"])
 async def update_account_credentials(
     company_id: UUID,
     credentials: AccountCredentialsUpdate,
@@ -1659,12 +1758,12 @@ async def update_account_credentials(
     
     return updated_company 
 
-@app.post("/api/auth/forgot-password", response_model=ResetPasswordResponse)
+@app.post("/api/auth/forgot-password", response_model=ResetPasswordResponse, tags=["Authentication"])
 async def forgot_password(request: ForgotPasswordRequest):
     """Request a password reset link"""
     return await request_password_reset(request.email)
 
-@app.post("/api/auth/reset-password", response_model=ResetPasswordResponse)
+@app.post("/api/auth/reset-password", response_model=ResetPasswordResponse, tags=["Authentication"])
 async def reset_password_endpoint(request: ResetPasswordRequest):
     """Reset password using the reset token"""
     return await reset_password(reset_token=request.token, new_password=request.new_password) 
@@ -1717,6 +1816,35 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
         
+        # Prepare product information and check for enriched data
+        product_info = product.get('description', 'Not available')
+        enriched_info = product.get('enriched_information')
+        enriched_data = ""
+        
+        if enriched_info:
+            logger.info(f"Using enriched product information for email generation")
+            
+            if enriched_info.get('overview'):
+                enriched_data += f"\nOverview: {enriched_info.get('overview')}"
+            
+            if enriched_info.get('key_value_proposition'):
+                enriched_data += f"\nKey Value Proposition: {enriched_info.get('key_value_proposition')}"
+            
+            if enriched_info.get('pricing'):
+                enriched_data += f"\nPricing: {enriched_info.get('pricing')}"
+            
+            if enriched_info.get('market_overview'):
+                enriched_data += f"\nMarket Overview: {enriched_info.get('market_overview')}"
+            
+            if enriched_info.get('competitors'):
+                enriched_data += f"\nCompetitors: {enriched_info.get('competitors')}"
+            
+            reviews = enriched_info.get('reviews', [])
+            if reviews and len(reviews) > 0:
+                enriched_data += "\nReviews:"
+                for review in reviews:
+                    enriched_data += f"\n- {review}"
+        
         # Construct the prompt with lead and campaign information
         prompt = f"""
         You are an expert sales representative who have capabilities to pitch the leads about the product.
@@ -1728,7 +1856,9 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Analysis: {insights}
 
         Product Information:
-        {product.get('description', 'Not available')}
+        {product_info}
+        
+        {enriched_data if enriched_info else ""}
 
         Company Information (for signature):
         - Company Name: {company.get('name', '')}
@@ -1748,6 +1878,13 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Format the signature as:
           Best regards,
           [Company Name]
+        {f'''
+        - Use the detailed product information to craft a more compelling message
+        - Incorporate the key value propositions that align with the lead's needs
+        - If appropriate, highlight how the product stands out from competitors
+        - Use market insights to show understanding of the lead's industry challenges
+        - Reference positive reviews when useful to build credibility
+        ''' if enriched_info else ""}
 
         Return the response in the following JSON format:
         {{
@@ -1978,6 +2115,35 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
             logger.error(f"Product not found for campaign: {campaign['id']}")
             return None
 
+        # Prepare product information and check for enriched data
+        product_info = product.get('description', 'Not available')
+        enriched_info = product.get('enriched_information')
+        enriched_data = ""
+        
+        if enriched_info:
+            logger.info(f"Using enriched product information for call script generation")
+            
+            if enriched_info.get('overview'):
+                enriched_data += f"\nOverview: {enriched_info.get('overview')}"
+            
+            if enriched_info.get('key_value_proposition'):
+                enriched_data += f"\nKey Value Proposition: {enriched_info.get('key_value_proposition')}"
+            
+            if enriched_info.get('pricing'):
+                enriched_data += f"\nPricing: {enriched_info.get('pricing')}"
+            
+            if enriched_info.get('market_overview'):
+                enriched_data += f"\nMarket Overview: {enriched_info.get('market_overview')}"
+            
+            if enriched_info.get('competitors'):
+                enriched_data += f"\nCompetitors: {enriched_info.get('competitors')}"
+            
+            reviews = enriched_info.get('reviews', [])
+            if reviews and len(reviews) > 0:
+                enriched_data += "\nReviews:"
+                for review in reviews:
+                    enriched_data += f"\n- {review}"
+
         # Default agent name
         agent_name = "Alex"
 
@@ -2016,7 +2182,9 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Analysis: {insights}
 
         Product Information:
-        {product.get('description', 'Not available')}
+        {product_info}
+        
+        {enriched_data if enriched_info else ""}
 
         Company Information (for signature):
         - Company Name: {company.get('name')}.
@@ -2034,6 +2202,13 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         - Show how to handle common objections
         - End with clear next steps
         - Use the company insights and analysis to make the conversation specific to their business
+        {f'''
+        - Use the detailed product information to make your pitch more specific
+        - Incorporate the key value propositions in your conversation
+        - If appropriate, mention how the product compares to competitors
+        - Use market insights to show industry knowledge
+        - Reference positive reviews when useful to build credibility
+        ''' if enriched_info else ""}
 
         Format the conversation as:
         {agent_name}: [what {agent_name} says]
@@ -2079,7 +2254,7 @@ async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends
     if token != settings.bland_secret_key:
         raise HTTPException(status_code=401, detail="Invalid secret token")
 
-@app.post("/api/calls/book-appointment")
+@app.post("/api/calls/book-appointment", tags=["Calls"])
 async def book_appointment(
     request: BookAppointmentRequest,
     _: None = Depends(verify_bland_token)
@@ -2102,7 +2277,7 @@ async def book_appointment(
         logger.error(f"Failed to book appointment: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.get("/register-bland-tool")
+@app.get("/register-bland-tool", tags=["System"])
 async def register_tool():
     settings = get_settings()
     bland_client = BlandClient(
@@ -2116,7 +2291,7 @@ async def register_tool():
     tool = await bland_client.create_book_appointment_tool()
     logger.info(f"Tool registered: {tool}")
 
-@app.get("/api/companies/{company_id}/emails/{email_log_id}", response_model=List[EmailLogDetailResponse])
+@app.get("/api/companies/{company_id}/emails/{email_log_id}", response_model=List[EmailLogDetailResponse], tags=["Campaigns & Emails"])
 async def get_email_log_details(
     company_id: UUID,
     email_log_id: UUID,
@@ -2146,7 +2321,7 @@ async def get_email_log_details(
     
     return email_details
 
-@app.put("/api/companies/{company_id}/voice_agent_settings", response_model=CompanyInDB)
+@app.put("/api/companies/{company_id}/voice_agent_settings", response_model=CompanyInDB, tags=["Voice Agent"])
 async def update_voice_agent_settings(
     company_id: UUID,
     settings: VoiceAgentSettings,
@@ -2157,7 +2332,17 @@ async def update_voice_agent_settings(
     
     Args:
         company_id: UUID of the company
-        settings: Complete voice agent settings to replace existing settings
+        settings: Complete voice agent settings to replace existing settings, including:
+            - prompt: Script template for the agent
+            - voice: Voice type to use
+            - background_track: Background audio track
+            - temperature: AI temperature setting (0.0-1.0)
+            - language: Language code
+            - transfer_phone_number (optional): Phone number to transfer calls to
+            - voice_settings (optional): Additional voice configuration parameters
+            - noise_cancellations (optional): Whether to enable noise cancellation
+            - phone_number (optional): Custom phone number to use for outbound calls
+            - record (optional): Whether to record the call
         current_user: Current authenticated user
         
     Returns:
@@ -2167,6 +2352,9 @@ async def update_voice_agent_settings(
         404: Company not found
         403: User doesn't have access to this company
     """
+    logger.info(f"Updating voice agent settings for company {company_id}")
+    logger.info(f"Received settings: {settings.model_dump()}")
+    
     # Verify user has access to the company
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
@@ -2180,21 +2368,32 @@ async def update_voice_agent_settings(
             detail="Only company administrators can update voice agent settings"
         )
 
+    # Get current company data for comparison
+    current_company = await get_company_by_id(company_id)
+    if current_company and current_company.get('voice_agent_settings'):
+        logger.info(f"Current voice_agent_settings: {current_company['voice_agent_settings']}")
+    
+    # Dump the model to a dictionary
+    settings_dict = settings.model_dump()
+    logger.info(f"Settings dict to be sent to database: {settings_dict}")
+    
     # Update voice agent settings
     updated_company = await update_company_voice_agent_settings(
         company_id=company_id,
-        settings=settings.model_dump()
+        settings=settings_dict
     )
     
     if not updated_company:
+        logger.error("Failed to update voice agent settings")
         raise HTTPException(
             status_code=500,
             detail="Failed to update voice agent settings"
         )
     
+    logger.info(f"Updated company: {updated_company}")
     return updated_company
 
-@app.post("/api/companies/{company_id}/invite", response_model=CompanyInviteResponse)
+@app.post("/api/companies/{company_id}/invite", response_model=CompanyInviteResponse, tags=["Companies"])
 async def invite_users_to_company(
     company_id: UUID,
     invite_request: CompanyInviteRequest,
@@ -2335,7 +2534,7 @@ async def invite_users_to_company(
         "results": results
     }
 
-@app.post("/api/auth/invite-password", response_model=dict)
+@app.post("/api/auth/invite-password", response_model=dict, tags=["Authentication"])
 async def set_invite_password(request: InvitePasswordRequest):
     """
     Set password for a user invited to join a company.
@@ -2375,7 +2574,7 @@ async def set_invite_password(request: InvitePasswordRequest):
     
     return {"message": "Password set successfully. You can now log in."}
 
-@app.get("/api/auth/invite-token/{token}", response_model=InviteTokenResponse)
+@app.get("/api/auth/invite-token/{token}", response_model=InviteTokenResponse, tags=["Authentication"])
 async def get_invite_token_info(token: str):
     """
     Get user email associated with an invite token.
@@ -2407,7 +2606,7 @@ async def get_invite_token_info(token: str):
     
     return {"email": user["email"]}
 
-@app.get("/api/companies/{company_id}/users", response_model=List[CompanyUserResponse])
+@app.get("/api/companies/{company_id}/users", response_model=List[CompanyUserResponse], tags=["Companies"])
 async def get_company_users_endpoint(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -2434,7 +2633,7 @@ async def get_company_users_endpoint(
     users = await get_company_users(company_id)
     return users
 
-@app.delete("/api/user_company_profile/{user_company_profile_id}", response_model=dict)
+@app.delete("/api/user_company_profile/{user_company_profile_id}", response_model=dict, tags=["Users"])
 async def delete_user_company_profile_endpoint(
     user_company_profile_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -2478,7 +2677,7 @@ async def delete_user_company_profile_endpoint(
     
     return {"message": "User profile deleted successfully"}
 
-@app.get("/api/track-email/{email_log_id}")
+@app.get("/api/track-email/{email_log_id}", tags=["Campaigns & Emails"])
 async def track_email(email_log_id: UUID):
     try:
         # Update the email_log has_opened status using the database function
@@ -2509,7 +2708,7 @@ async def track_email(email_log_id: UUID):
             headers=headers
         )
 
-@app.get("/api/leads/search", response_model=LeadSearchResponse)
+@app.get("/api/leads/search", response_model=LeadSearchResponse, tags=["Leads"])
 async def search_lead(
     email: Optional[str] = Query(None, description="Email address to search for"),
     phone: Optional[str] = Query(None, description="Phone number to search for"),

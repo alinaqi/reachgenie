@@ -66,7 +66,7 @@ class BlandClient:
         voice_settings = None
         noise_cancellations = None
         custom_phone_number = None
-        record = True  # Default to True as per main branch
+        record = True  # Default to True (from main branch)
 
         if company and company.get('voice_agent_settings'):
             settings = company['voice_agent_settings']
@@ -107,7 +107,7 @@ class BlandClient:
                    "call_level": "integer",
                    "sentiment": "string"
                 },
-                "record": record  # Include record parameter with default value True
+                "record": record  # Include record parameter from main branch
             }
             
             # Add optional parameters if they exist
