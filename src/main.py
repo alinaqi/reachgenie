@@ -2072,19 +2072,8 @@ async def run_call_campaign(campaign: dict, company: dict):
                     logger.info(f"Call Script: {call_script}")
 
                     if call_script:
-                        # Create call record and initiate call
-                        call = await create_call(
-                            lead_id=lead['id'],
-                            product_id=campaign['product_id'],
-                            campaign_id=campaign['id'],
-                            script=call_script
-                        )
-                        
-                        if call:
-                            # Initiate call with Bland AI
-                            await initiate_call(campaign, lead, call_script)
-                        else:
-                            logger.error(f"Failed to create call record for lead: {lead['phone_number']}")
+                        # Initiate call with Bland AI
+                        await initiate_call(campaign, lead, call_script)
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 

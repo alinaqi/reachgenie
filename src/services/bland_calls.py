@@ -32,7 +32,8 @@ async def initiate_call(
         if not company:
             raise Exception("Company not found")
 
-        call = await create_call(lead['id'], campaign['product_id'], campaign['id'])
+        # Create call record in database with script
+        call = await create_call(lead['id'], campaign['product_id'], campaign['id'], script=call_script)
 
         # Prepare request data for the call
         request_data = {
@@ -51,11 +52,8 @@ async def initiate_call(
         
         logger.info(f"Bland Call ID: {bland_response['call_id']}")
 
-        # Update call record in database
+        # Update call record in database with bland_call_id
         await update_call_details(call['id'], bland_response['call_id'])
-
-        # Create call record in database
-        #call = await create_call(lead['id'], campaign['product_id'], campaign['id'], bland_response['call_id'])
         
         return call
         
