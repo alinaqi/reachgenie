@@ -369,7 +369,15 @@ class EmailCampaignInDB(EmailCampaignBase):
     company_id: UUID
     created_at: datetime
 
-# Campaign generation models
+class CampaignRunResponse(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    run_at: datetime
+    leads_total: int
+    leads_processed: int
+    status: str
+    created_at: datetime
+
 class CampaignGenerationRequest(BaseModel):
     achievement_text: str
 

@@ -86,7 +86,8 @@ from src.database import (
     soft_delete_product,
     create_campaign_run,
     update_campaign_run_status,
-    update_campaign_run_progress
+    update_campaign_run_progress,
+    get_campaign_runs
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -104,7 +105,7 @@ from src.models import (
     EmailLogDetailResponse, VoiceAgentSettings,
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
-    CompanyUserResponse, LeadSearchResponse
+    CompanyUserResponse, LeadSearchResponse, CampaignRunResponse
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -3141,3 +3142,40 @@ async def delete_all_product_icps(
             status_code=500,
             detail=f"Failed to delete ICPs: {str(e)}"
         )
+
+@app.get("/api/companies/{company_id}/campaign-runs", response_model=List[CampaignRunResponse], tags=["Campaigns & Emails"])
+async def get_company_campaign_runs(
+    company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter runs by campaign ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all campaign runs for a company, optionally filtered by campaign ID.
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # If campaign_id is provided, validate it belongs to the company
+    if campaign_id:
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign or str(campaign["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get campaign runs for the specific campaign
+        campaign_runs = await get_campaign_runs(campaign_id)
+    else:
+        # Get all campaigns for the company
+        campaigns = await get_campaigns_by_company(company_id)
+        
+        # Get runs for all campaigns
+        campaign_runs = []
+        for campaign in campaigns:
+            runs = await get_campaign_runs(UUID(campaign['id']))
+            campaign_runs.extend(runs)
+            
+        # Sort by run_at in descending order
+        campaign_runs.sort(key=lambda x: x['run_at'], reverse=True)
+    
+    return campaign_runs

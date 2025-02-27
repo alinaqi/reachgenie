@@ -1489,24 +1489,3 @@ async def update_campaign_run_progress(campaign_run_id: UUID, leads_processed: i
     except Exception as e:
         logger.error(f"Error updating campaign run progress: {str(e)}")
         return None
-
-async def get_campaign_run(campaign_run_id: UUID):
-    """
-    Get a campaign run by ID
-    
-    Args:
-        campaign_run_id: UUID of the campaign run
-        
-    Returns:
-        Dict containing the campaign run record or None if not found
-    """
-    try:
-        response = supabase.table('campaign_runs').select('*').eq('id', str(campaign_run_id)).execute()
-        
-        if not response.data:
-            return None
-            
-        return response.data[0]
-    except Exception as e:
-        logger.error(f"Error getting campaign run: {str(e)}")
-        return None
