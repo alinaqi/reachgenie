@@ -173,3 +173,19 @@ CREATE TABLE IF NOT EXISTS user_company_profiles (
 
 -- Add unique composite index on user_id, company_id, and role
 CREATE UNIQUE INDEX IF NOT EXISTS user_company_profiles_unique_idx ON user_company_profiles (user_id, company_id, role);
+
+-- Campaign Runs table
+CREATE TABLE IF NOT EXISTS campaign_runs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    campaign_id UUID REFERENCES campaigns(id) NOT NULL,
+    run_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    leads_total INTEGER NOT NULL DEFAULT 0,
+    leads_processed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'completed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add comments to explain the columns
+COMMENT ON COLUMN campaign_runs.leads_total IS 'Number of call/email leads that were available when this run was executed';
+COMMENT ON COLUMN campaign_runs.leads_processed IS 'Number of leads processed so far in this run';
+COMMENT ON COLUMN campaign_runs.status IS 'Status of the campaign run: idle (default), running, or completed';
