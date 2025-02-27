@@ -2267,13 +2267,20 @@ async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
         logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
         return
 
-async def run_call_campaign(campaign: dict, company: dict):
+async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle call campaign processing"""
     
     # Get all leads having phone number
     leads = await get_leads_with_phone(company['id'])
     logger.info(f"Found {len(leads)} leads with phone number")
 
+    # Update campaign run with status running
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="running"
+    )
+
+    leads_processed = 0
     for lead in leads:
         try:
             if lead.get('phone_number'):  # Only send if lead has phone number, just a safety check here as well
@@ -2289,13 +2296,26 @@ async def run_call_campaign(campaign: dict, company: dict):
 
                     if call_script:
                         # Initiate call with Bland AI
-                        await initiate_call(campaign, lead, call_script)
+                        await initiate_call(campaign, lead, call_script, campaign_run_id)
+
+                        # Update campaign run progress
+                        await update_campaign_run_progress(
+                            campaign_run_id=campaign_run_id,
+                            leads_processed=leads_processed + 1
+                        )
+                        leads_processed += 1
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 
         except Exception as e:
             logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
             continue
+    
+    # Update campaign run with status completed
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="completed"
+    )
 
 async def generate_call_script(lead: dict, campaign: dict, company: dict, insights: str) -> str:
     """

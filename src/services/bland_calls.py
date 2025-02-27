@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 async def initiate_call(
     campaign: dict,
     lead: dict,
-    call_script: str
+    call_script: str,
+    campaign_run_id: UUID
 ):  
     # Initialize Bland client and start the call
     settings = get_settings()
@@ -33,7 +34,7 @@ async def initiate_call(
             raise Exception("Company not found")
 
         # Create call record in database with script
-        call = await create_call(lead['id'], campaign['product_id'], campaign['id'], script=call_script)
+        call = await create_call(lead['id'], campaign['product_id'], campaign['id'], script=call_script, campaign_run_id=campaign_run_id)
 
         # Prepare request data for the call
         request_data = {
