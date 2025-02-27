@@ -1505,12 +1505,12 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
         if campaign_id:
             # If campaign_id is provided, directly filter campaign_runs and join with campaigns for the name
             query = supabase.table('campaign_runs').select(
-                '*,campaigns!inner(name)'
+                '*,campaigns!inner(name,type)'
             ).eq('campaign_id', str(campaign_id))
         else:
             # If only company_id is provided, join with campaigns to get all runs for the company
             query = supabase.table('campaign_runs').select(
-                '*,campaigns!inner(name,company_id)'
+                '*,campaigns!inner(name,type,company_id)'
             ).eq('campaigns.company_id', str(company_id))
             
         # Execute query and sort by run_at in descending order
