@@ -711,7 +711,7 @@ async def get_user_by_id(user_id: UUID):
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None):
     """
     Get email logs for a company, optionally filtered by campaign_id and/or lead_id
     
@@ -736,6 +736,9 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     
     if lead_id:
         query = query.eq('lead_id', str(lead_id))
+    
+    if campaign_run_id:
+        query = query.eq('campaign_run_id', str(campaign_run_id))
     
     response = query.execute()
     return response.data

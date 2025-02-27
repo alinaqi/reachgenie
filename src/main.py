@@ -1320,6 +1320,7 @@ async def get_company_emails(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter emails by lead ID"),
+    campaign_run_id: Optional[UUID] = Query(None, description="Filter emails by campaign run ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1331,7 +1332,7 @@ async def get_company_emails(
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Get email logs
-    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id)
+    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id, campaign_run_id)
     
     # Transform the response to match EmailLogResponse model
     transformed_logs = []
