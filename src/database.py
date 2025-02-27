@@ -1499,20 +1499,23 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
         campaign_id: Optional UUID of the campaign to filter runs by
         
     Returns:
-        List of campaign run records
+        List of campaign run records including campaign name
     """
     try:
         if campaign_id:
-            # If campaign_id is provided, directly filter campaign_runs
-            query = supabase.table('campaign_runs').select('*').eq('campaign_id', str(campaign_id))
+            # If campaign_id is provided, directly filter campaign_runs and join with campaigns for the name
+            query = supabase.table('campaign_runs').select(
+                '*,campaigns!inner(name)'
+            ).eq('campaign_id', str(campaign_id))
         else:
             # If only company_id is provided, join with campaigns to get all runs for the company
             query = supabase.table('campaign_runs').select(
-                '*,campaigns!inner(company_id)'
+                '*,campaigns!inner(name,company_id)'
             ).eq('campaigns.company_id', str(company_id))
             
         # Execute query and sort by run_at in descending order
         response = query.order('run_at', desc=True).execute()
+        logger.info(f"Campaign runs: {response.data}")
         return response.data if response.data else []
         
     except Exception as e:
