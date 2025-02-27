@@ -1427,7 +1427,7 @@ async def run_campaign(
     
     logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
     # Add campaign execution to background tasks
-    background_tasks.add_task(run_company_campaign, campaign_id)
+    background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
     
     return {"message": "Campaign request initiated successfully"} 
 
@@ -2116,7 +2116,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         logger.error(f"Failed to generate email content: {str(e)}")
         return None
 
-async def run_email_campaign(campaign: dict, company: dict):
+async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle email campaign processing"""
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
@@ -2217,7 +2217,7 @@ async def run_email_campaign(campaign: dict, company: dict):
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
 
-async def run_company_campaign(campaign_id: UUID):
+async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""
     logger.info(f"Starting to run campaign_id: {campaign_id}")
     
@@ -2236,9 +2236,9 @@ async def run_company_campaign(campaign_id: UUID):
         
         # Process campaign based on type
         if campaign['type'] == 'email':
-            await run_email_campaign(campaign, company)
+            await run_email_campaign(campaign, company, campaign_run_id)
         elif campaign['type'] == 'call':
-            await run_call_campaign(campaign, company)
+            await run_call_campaign(campaign, company, campaign_run_id)
             
     except Exception as e:
         logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
