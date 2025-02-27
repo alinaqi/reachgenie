@@ -1489,3 +1489,32 @@ async def update_campaign_run_progress(campaign_run_id: UUID, leads_processed: i
     except Exception as e:
         logger.error(f"Error updating campaign run progress: {str(e)}")
         return None
+
+async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+    """
+    Get campaign runs for a company, optionally filtered by campaign_id.
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter runs by
+        
+    Returns:
+        List of campaign run records
+    """
+    try:
+        if campaign_id:
+            # If campaign_id is provided, directly filter campaign_runs
+            query = supabase.table('campaign_runs').select('*').eq('campaign_id', str(campaign_id))
+        else:
+            # If only company_id is provided, join with campaigns to get all runs for the company
+            query = supabase.table('campaign_runs').select(
+                '*,campaigns!inner(company_id)'
+            ).eq('campaigns.company_id', str(company_id))
+            
+        # Execute query and sort by run_at in descending order
+        response = query.order('run_at', desc=True).execute()
+        return response.data if response.data else []
+        
+    except Exception as e:
+        logger.error(f"Error fetching campaign runs: {str(e)}")
+        return []

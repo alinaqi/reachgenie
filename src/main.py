@@ -3164,18 +3164,9 @@ async def get_company_campaign_runs(
             raise HTTPException(status_code=404, detail="Campaign not found")
         
         # Get campaign runs for the specific campaign
-        campaign_runs = await get_campaign_runs(campaign_id)
+        campaign_runs = await get_campaign_runs(company_id, campaign_id)
     else:
         # Get all campaigns for the company
-        campaigns = await get_campaigns_by_company(company_id)
-        
-        # Get runs for all campaigns
-        campaign_runs = []
-        for campaign in campaigns:
-            runs = await get_campaign_runs(UUID(campaign['id']))
-            campaign_runs.extend(runs)
-            
-        # Sort by run_at in descending order
-        campaign_runs.sort(key=lambda x: x['run_at'], reverse=True)
+        campaign_runs = await get_campaign_runs(company_id)
     
     return campaign_runs
