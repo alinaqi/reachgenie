@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS calls (
     lead_id UUID REFERENCES leads(id),
     product_id UUID REFERENCES products(id),
     campaign_id UUID REFERENCES campaigns(id),
+    campaign_run_id UUID REFERENCES campaign_runs(id),
     duration INTEGER,
     sentiment TEXT,
     summary TEXT,
@@ -107,6 +108,7 @@ COMMENT ON COLUMN campaigns.template IS 'Template content for the campaign';
 CREATE TABLE IF NOT EXISTS email_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     campaign_id UUID REFERENCES campaigns(id),
+    campaign_run_id UUID REFERENCES campaign_runs(id),
     lead_id UUID REFERENCES leads(id),
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     has_replied BOOLEAN DEFAULT FALSE,
