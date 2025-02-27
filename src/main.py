@@ -84,7 +84,9 @@ from src.database import (
     update_company_cronofy_tokens,
     get_company_id_from_email_log,
     soft_delete_product,
-    create_campaign_run
+    create_campaign_run,
+    update_campaign_run_status,
+    update_campaign_run_progress
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -2153,6 +2155,13 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         leads = await get_leads_with_email(campaign['id'])
         logger.info(f"Found {len(leads)} leads with emails")
 
+        # Update campaign run with status running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+
+        leads_processed = 0
         for lead in leads:
             try:
                 if lead.get('email'):  # Only send if lead has email
@@ -2179,7 +2188,8 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                             email_log = await create_email_log(
                                 campaign_id=campaign['id'],
                                 lead_id=lead['id'],
-                                sent_at=datetime.now(timezone.utc)
+                                sent_at=datetime.now(timezone.utc),
+                                campaign_run_id=campaign_run_id
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
@@ -2210,12 +2220,25 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                     to_email=lead['email']
                                 )
                                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=leads_processed + 1
+                            )
+                            leads_processed += 1
                         except Exception as e:
                             logger.error(f"Error creating email logs: {str(e)}")
                             continue
             except Exception as e:
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
+        
+        # Update campaign run with status completed
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="completed"
+        )
 
 async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""

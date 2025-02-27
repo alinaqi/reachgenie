@@ -307,11 +307,12 @@ async def get_campaign_by_id(campaign_id: UUID):
     response = supabase.table('campaigns').select('*').eq('id', str(campaign_id)).execute()
     return response.data[0] if response.data else None
 
-async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
+async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, campaign_run_id: UUID):
     log_data = {
         'campaign_id': str(campaign_id),
         'lead_id': str(lead_id),
-        'sent_at': sent_at.isoformat()
+        'sent_at': sent_at.isoformat(),
+        'campaign_run_id': str(campaign_run_id)
     }
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
