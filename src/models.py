@@ -377,6 +377,7 @@ class CampaignRunResponse(BaseModel):
     leads_processed: int
     status: str
     created_at: datetime
+    campaigns: Dict[str, Any]  # This will contain the campaign details including name
 
 class CampaignGenerationRequest(BaseModel):
     achievement_text: str
