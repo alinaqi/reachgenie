@@ -1393,3 +1393,111 @@ async def get_lead_communication_history(lead_id: UUID):
         'email_history': email_history,
         'call_history': call_history
     }
+
+async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0, leads_processed: int = 0):
+    """
+    Create a new campaign run record
+    
+    Args:
+        campaign_id: UUID of the campaign
+        status: Status of the run ('idle', 'running', 'completed')
+        leads_total: Total number of leads available for this run
+        leads_processed: Number of leads processed so far (defaults to 0)
+        
+    Returns:
+        Dict containing the created campaign run record
+    """
+    try:
+        campaign_run_data = {
+            'campaign_id': str(campaign_id),
+            'status': status,
+            'leads_total': leads_total,
+            'leads_processed': leads_processed,
+            'run_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        response = supabase.table('campaign_runs').insert(campaign_run_data).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to create campaign run for campaign {campaign_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating campaign run: {str(e)}")
+        return None
+
+async def update_campaign_run_status(campaign_run_id: UUID, status: str):
+    """
+    Update the status of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        status: New status ('idle', 'running', 'completed')
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        if status not in ['idle', 'running', 'completed']:
+            logger.error(f"Invalid campaign run status: {status}")
+            return None
+            
+        response = supabase.table('campaign_runs').update({
+            'status': status
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update status for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run status: {str(e)}")
+        return None
+
+async def update_campaign_run_progress(campaign_run_id: UUID, leads_processed: int):
+    """
+    Update the progress (leads_processed) of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        leads_processed: Number of leads processed so far
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        response = supabase.table('campaign_runs').update({
+            'leads_processed': leads_processed
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update progress for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run progress: {str(e)}")
+        return None
+
+async def get_campaign_run(campaign_run_id: UUID):
+    """
+    Get a campaign run by ID
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        Dict containing the campaign run record or None if not found
+    """
+    try:
+        response = supabase.table('campaign_runs').select('*').eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error getting campaign run: {str(e)}")
+        return None

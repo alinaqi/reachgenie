@@ -83,7 +83,8 @@ from src.database import (
     get_lead_by_phone,
     update_company_cronofy_tokens,
     get_company_id_from_email_log,
-    soft_delete_product
+    soft_delete_product,
+    create_campaign_run
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1403,7 +1404,28 @@ async def run_campaign(
                 status_code=400,
                 detail="Email provider type not configured. Please set up email provider type first."
             )
+    # Get total leads count based on campaign type
+    if campaign['type'] == 'email':
+        leads = await get_leads_with_email(campaign['id'])
+    elif campaign['type'] == 'call':
+        leads = await get_leads_with_phone(company['id'])
+    else:
+        leads = []
+
+    # Create a new campaign run record
+    campaign_run = await create_campaign_run(
+        campaign_id=campaign_id,
+        status="idle",
+        leads_total=len(leads)
+    )
     
+    if not campaign_run:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create campaign run record"
+        )
+    
+    logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
     # Add campaign execution to background tasks
     background_tasks.add_task(run_company_campaign, campaign_id)
     
