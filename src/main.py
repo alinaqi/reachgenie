@@ -83,7 +83,11 @@ from src.database import (
     get_lead_by_phone,
     update_company_cronofy_tokens,
     get_company_id_from_email_log,
-    soft_delete_product
+    soft_delete_product,
+    create_campaign_run,
+    update_campaign_run_status,
+    update_campaign_run_progress,
+    get_campaign_runs
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -101,7 +105,7 @@ from src.models import (
     EmailLogDetailResponse, VoiceAgentSettings,
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
-    CompanyUserResponse, LeadSearchResponse
+    CompanyUserResponse, LeadSearchResponse, CampaignRunResponse
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -1247,6 +1251,7 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 async def get_company_calls(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
+    campaign_run_id: Optional[UUID] = Query(None, description="Filter calls by campaign run ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1263,7 +1268,7 @@ async def get_company_calls(
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return await get_calls_by_company_id(company_id, campaign_id)
+    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id)
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
@@ -1317,6 +1322,7 @@ async def get_company_emails(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter emails by lead ID"),
+    campaign_run_id: Optional[UUID] = Query(None, description="Filter emails by campaign run ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1328,7 +1334,7 @@ async def get_company_emails(
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Get email logs
-    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id)
+    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id, campaign_run_id)
     
     # Transform the response to match EmailLogResponse model
     transformed_logs = []
@@ -1403,9 +1409,30 @@ async def run_campaign(
                 status_code=400,
                 detail="Email provider type not configured. Please set up email provider type first."
             )
+    # Get total leads count based on campaign type
+    if campaign['type'] == 'email':
+        leads = await get_leads_with_email(campaign['id'])
+    elif campaign['type'] == 'call':
+        leads = await get_leads_with_phone(company['id'])
+    else:
+        leads = []
+
+    # Create a new campaign run record
+    campaign_run = await create_campaign_run(
+        campaign_id=campaign_id,
+        status="idle",
+        leads_total=len(leads)
+    )
     
+    if not campaign_run:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create campaign run record"
+        )
+    
+    logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
     # Add campaign execution to background tasks
-    background_tasks.add_task(run_company_campaign, campaign_id)
+    background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
     
     return {"message": "Campaign request initiated successfully"} 
 
@@ -2094,7 +2121,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         logger.error(f"Failed to generate email content: {str(e)}")
         return None
 
-async def run_email_campaign(campaign: dict, company: dict):
+async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle email campaign processing"""
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
@@ -2131,6 +2158,13 @@ async def run_email_campaign(campaign: dict, company: dict):
         leads = await get_leads_with_email(campaign['id'])
         logger.info(f"Found {len(leads)} leads with emails")
 
+        # Update campaign run with status running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+
+        leads_processed = 0
         for lead in leads:
             try:
                 if lead.get('email'):  # Only send if lead has email
@@ -2157,7 +2191,8 @@ async def run_email_campaign(campaign: dict, company: dict):
                             email_log = await create_email_log(
                                 campaign_id=campaign['id'],
                                 lead_id=lead['id'],
-                                sent_at=datetime.now(timezone.utc)
+                                sent_at=datetime.now(timezone.utc),
+                                campaign_run_id=campaign_run_id
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
@@ -2188,14 +2223,27 @@ async def run_email_campaign(campaign: dict, company: dict):
                                     to_email=lead['email']
                                 )
                                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=leads_processed + 1
+                            )
+                            leads_processed += 1
                         except Exception as e:
                             logger.error(f"Error creating email logs: {str(e)}")
                             continue
             except Exception as e:
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
+        
+        # Update campaign run with status completed
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="completed"
+        )
 
-async def run_company_campaign(campaign_id: UUID):
+async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""
     logger.info(f"Starting to run campaign_id: {campaign_id}")
     
@@ -2214,21 +2262,28 @@ async def run_company_campaign(campaign_id: UUID):
         
         # Process campaign based on type
         if campaign['type'] == 'email':
-            await run_email_campaign(campaign, company)
+            await run_email_campaign(campaign, company, campaign_run_id)
         elif campaign['type'] == 'call':
-            await run_call_campaign(campaign, company)
+            await run_call_campaign(campaign, company, campaign_run_id)
             
     except Exception as e:
         logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
         return
 
-async def run_call_campaign(campaign: dict, company: dict):
+async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle call campaign processing"""
     
     # Get all leads having phone number
     leads = await get_leads_with_phone(company['id'])
     logger.info(f"Found {len(leads)} leads with phone number")
 
+    # Update campaign run with status running
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="running"
+    )
+
+    leads_processed = 0
     for lead in leads:
         try:
             if lead.get('phone_number'):  # Only send if lead has phone number, just a safety check here as well
@@ -2244,13 +2299,26 @@ async def run_call_campaign(campaign: dict, company: dict):
 
                     if call_script:
                         # Initiate call with Bland AI
-                        await initiate_call(campaign, lead, call_script)
+                        await initiate_call(campaign, lead, call_script, campaign_run_id)
+
+                        # Update campaign run progress
+                        await update_campaign_run_progress(
+                            campaign_run_id=campaign_run_id,
+                            leads_processed=leads_processed + 1
+                        )
+                        leads_processed += 1
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 
         except Exception as e:
             logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
             continue
+    
+    # Update campaign run with status completed
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="completed"
+    )
 
 async def generate_call_script(lead: dict, campaign: dict, company: dict, insights: str) -> str:
     """
@@ -3074,3 +3142,31 @@ async def delete_all_product_icps(
             status_code=500,
             detail=f"Failed to delete ICPs: {str(e)}"
         )
+
+@app.get("/api/companies/{company_id}/campaign-runs", response_model=List[CampaignRunResponse], tags=["Campaigns & Emails"])
+async def get_company_campaign_runs(
+    company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter runs by campaign ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all campaign runs for a company, optionally filtered by campaign ID.
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # If campaign_id is provided, validate it belongs to the company
+    if campaign_id:
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign or str(campaign["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get campaign runs for the specific campaign
+        campaign_runs = await get_campaign_runs(company_id, campaign_id)
+    else:
+        # Get all campaigns for the company
+        campaign_runs = await get_campaign_runs(company_id)
+    
+    return campaign_runs

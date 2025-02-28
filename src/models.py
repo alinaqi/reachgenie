@@ -369,7 +369,35 @@ class EmailCampaignInDB(EmailCampaignBase):
     company_id: UUID
     created_at: datetime
 
-# Campaign generation models
+class CampaignRunResponse(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    run_at: datetime
+    leads_total: int
+    leads_processed: int
+    status: str
+    created_at: datetime
+    campaigns: Dict[str, Any] = Field(
+        description="Campaign details including name and type. Example: {'name': 'Q4 Sales Campaign', 'type': 'email'}"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "campaign_id": "123e4567-e89b-12d3-a456-426614174001",
+                "run_at": "2024-03-15T00:00:00Z",
+                "leads_total": 100,
+                "leads_processed": 50,
+                "status": "running",
+                "created_at": "2024-03-15T00:00:00Z",
+                "campaigns": {
+                    "name": "Q4 Sales Campaign",
+                    "type": "email"
+                }
+            }
+        }
+
 class CampaignGenerationRequest(BaseModel):
     achievement_text: str
 
