@@ -104,9 +104,37 @@ async def create_lead(company_id: UUID, lead_data: dict):
         print(f"\nError in create_lead: {str(e)}")
         raise e
 
-async def get_leads_by_company(company_id: UUID):
-    response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
-    return response.data
+async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: int = 20, search_term: Optional[str] = None):
+    # Build base query
+    base_query = supabase.table('leads').select('*', count='exact').eq('company_id', str(company_id))
+    
+    # Add search filter if search_term is provided
+    if search_term:
+        pattern = f"%{search_term}%"
+        base_query = base_query.or_(
+            f"name.ilike.{pattern},"
+            f"email.ilike.{pattern},"
+            f"company.ilike.{pattern},"
+            f"job_title.ilike.{pattern}"
+        )
+    
+    # Get total count with search filter
+    count_response = base_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data with the same filters
+    response = base_query.range(offset, offset + limit - 1).execute()
+    
+    return {
+        'items': response.data,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }
 
 async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None, campaign_run_id: Optional[UUID] = None):
     call_data = {
