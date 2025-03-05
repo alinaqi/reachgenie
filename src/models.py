@@ -310,6 +310,13 @@ class LeadInDB(LeadBase):
     id: UUID
     company_id: UUID
 
+class PaginatedLeadResponse(BaseModel):
+    items: List[LeadInDB]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
 class CallBase(BaseModel):
     lead_id: UUID
     product_id: UUID

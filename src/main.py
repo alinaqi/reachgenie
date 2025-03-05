@@ -105,7 +105,8 @@ from src.models import (
     EmailLogDetailResponse, VoiceAgentSettings,
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
-    CompanyUserResponse, LeadSearchResponse, CampaignRunResponse
+    CompanyUserResponse, LeadSearchResponse, CampaignRunResponse,
+    PaginatedLeadResponse
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -997,15 +998,17 @@ async def upload_leads(
         logger.error(f"Error starting leads upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB], tags=["Leads"])
+@app.get("/api/companies/{company_id}/leads", response_model=PaginatedLeadResponse, tags=["Leads"])
 async def get_leads(
     company_id: UUID,
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
     current_user: dict = Depends(get_current_user)
 ):
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await get_leads_by_company(company_id)
+    return await get_leads_by_company(company_id, page_number=page_number, limit=limit)
 
 @app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
 async def get_lead(
