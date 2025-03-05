@@ -1003,12 +1003,13 @@ async def get_leads(
     company_id: UUID,
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    search_term: Optional[str] = Query(default=None, description="Search term to filter leads by name, email, company or job title"),
     current_user: dict = Depends(get_current_user)
 ):
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await get_leads_by_company(company_id, page_number=page_number, limit=limit)
+    return await get_leads_by_company(company_id, page_number=page_number, limit=limit, search_term=search_term)
 
 @app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
 async def get_lead(
