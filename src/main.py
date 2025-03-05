@@ -1256,6 +1256,7 @@ async def get_company_calls(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
     campaign_run_id: Optional[UUID] = Query(None, description="Filter calls by campaign run ID"),
+    lead_id: Optional[UUID] = Query(None, description="Filter calls by lead ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1272,7 +1273,7 @@ async def get_company_calls(
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id)
+    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id, lead_id)
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
