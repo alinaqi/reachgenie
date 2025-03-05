@@ -1657,15 +1657,34 @@ async def process_leads_upload(
         # Initialize OpenAI client
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         
+        # Check if we have numbered columns (1,2,3...) or regular headers
+        is_numbered_columns = all(str(i) == header for i, header in enumerate(headers, 1))
+        
+        if is_numbered_columns:
+            # For numbered columns, get the first row which contains the actual headers
+            headers_row = next(csv_data)
+            # Create a mapping from numbered columns to actual header names
+            column_to_header = {str(i): headers_row[str(i)] for i in range(1, len(headers_row) + 1)}
+            actual_headers = list(column_to_header.values())
+            print("\nDetected numbered columns. Column to header mapping:")
+            print(column_to_header)
+        else:
+            # For regular headers, use them directly
+            actual_headers = headers
+            column_to_header = {header: header for header in headers}
+            print("\nDetected regular headers:")
+            print(actual_headers)
+        
         # Create a prompt to map headers
         prompt = f"""Map the following CSV headers to our database fields. Return a JSON object where keys are the CSV headers and values are the corresponding database field names.
+The mapping should be case-insensitive and handle special characters (like accents, hyphens).
 
-CSV Headers: {', '.join(headers)}
+CSV Headers: {', '.join(actual_headers)}
 
 Database fields and their types:
 - name (text, required) - Should be constructed from First Name and Last Name if available
-- first_name (text, required) - should be first name if available. 
-- last_name (text, required) - should be last name if available
+- first_name (text, required) - should map from "First Name", "FirstName", "FIRST NAME" etc
+- last_name (text, required) - should map from "Last Name", "LastName", "LAST NAME" etc
 - email (text, required)
 - company (text) - Map from Company Name
 - phone_number (text, required) - Should map from phone_number, mobile, direct_phone, or office_phone
@@ -1707,14 +1726,16 @@ Database fields and their types:
 - seniority (text)
 
 Special handling instructions:
-1. Map "First Name" and "Last Name" to first_name and last_name respectively
-2. Map "Company Name" to company
-3. Map "phone_number" directly to phone_number field
-4. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
-5. Map "Industries" to industries (will be converted to array)
-6. Map "Technologies" to technologies (will be converted to array)
-7. Map "Company Founded Year" to company_founded_year (will be converted to integer)
-8. Map "Headcount" to headcount (will be converted to integer)
+1. Map "First Name", "FirstName", "FIRST NAME" etc to first_name
+2. Map "Last Name", "LastName", "LAST NAME" etc to last_name
+3. Map "Company Name", "CompanyName", "COMPANY NAME" etc to company
+4. Map "phone_number", "Phone Number", "PHONE NUMBER" etc directly to phone_number field
+5. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
+6. Map "Industries" to industries (will be converted to array)
+7. Map "Technologies" to technologies (will be converted to array)
+8. Map "Company Founded Year" to company_founded_year (will be converted to integer)
+9. Map "Headcount" to headcount (will be converted to integer)
+10. The mapping should be case-insensitive and handle special characters
 
 Return ONLY a valid JSON object mapping CSV headers to database field names. If a header doesn't map to any field, map it to null.
 Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_number": "phone_number", "Unmatched Header": null}}"""
@@ -1731,6 +1752,20 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         
         try:
             header_mapping = json.loads(response.choices[0].message.content.strip())
+            print("\nHeader mapping results:")
+            print(header_mapping)
+            
+            if is_numbered_columns:
+                # For numbered columns, map from number to db field via header
+                column_to_db_field = {col: header_mapping.get(header, None) 
+                                    for col, header in column_to_header.items()}
+            else:
+                # For regular headers, map directly
+                column_to_db_field = header_mapping
+                
+            print("\nColumn to database field mapping:")
+            print(column_to_db_field)
+            
         except json.JSONDecodeError:
             await update_task_status(task_id, "failed", "Failed to parse header mapping")
             return
@@ -1739,11 +1774,16 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         for row in csv_data:
             lead_data = {}
             
-            # Map CSV data to database fields using the header mapping
-            for csv_header, db_field in header_mapping.items():
-                if db_field and csv_header in row:
-                    value = row[csv_header].strip() if row[csv_header] else None
+            # Debug print raw row data
+            print("\nProcessing row:")
+            print(row)
+            
+            # Map CSV data to database fields using the column mapping
+            for col, db_field in column_to_db_field.items():
+                if db_field and col in row:
+                    value = row[col].strip() if row[col] else None
                     if value:
+                        print(f"Mapping column {col} ({column_to_header[col]}) -> {db_field}: {value}")
                         # Handle special cases
                         if db_field == "industries":
                             lead_data[db_field] = [ind.strip() for ind in value.split(",")]
