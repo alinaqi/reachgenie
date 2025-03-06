@@ -19,6 +19,7 @@ from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from src.services.campaigns import run_test_email_campaign
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password
@@ -106,7 +107,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
     CompanyUserResponse, LeadSearchResponse, CampaignRunResponse,
-    PaginatedLeadResponse
+    PaginatedLeadResponse, TestRunCampaignRequest
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -3215,3 +3216,78 @@ async def get_company_campaign_runs(
         campaign_runs = await get_campaign_runs(company_id)
     
     return campaign_runs
+
+@app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"])
+async def run_test_campaign(
+    campaign_id: UUID,
+    campaign: TestRunCampaignRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    logger.info(f"Running test campaign {campaign_id}")
+    
+    lead_contact = campaign.lead_contact
+    if not lead_contact:
+        raise HTTPException(status_code=400, detail="Lead contact is required")
+    
+    # Get the campaign
+    campaign = await get_campaign_by_id(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Get company details and validate email credentials
+    company = await get_company_by_id(campaign["company_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Only validate email credentials if campaign type is email
+    if campaign['type'] == 'email':
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
+            raise HTTPException(
+                status_code=400,
+                detail="Company email credentials not configured. Please set up email account credentials first."
+            )
+            
+        if not company.get("account_type"):
+            raise HTTPException(
+                status_code=400,
+                detail="Email provider type not configured. Please set up email provider type first."
+            )
+    
+    # Add campaign test run execution to background tasks
+    background_tasks.add_task(run_company_test_campaign, campaign_id, lead_contact)
+    
+    return {"message": "Campaign test run request initiated successfully"}
+
+async def run_company_test_campaign(campaign_id: UUID, lead_contact: str):
+    """Background task to run test campaign of the company"""
+    logger.info(f"Starting to run test campaign_id: {campaign_id}")
+    
+    try:
+        # Get campaign details
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            logger.error(f"Campaign not found: {campaign_id}")
+            return
+        
+        # Get company details
+        company = await get_company_by_id(campaign["company_id"])
+        if not company:
+            logger.error(f"Company not found for campaign: {campaign_id}")
+            return
+        
+        # Process campaign based on type
+        if campaign['type'] == 'email':
+            await run_test_email_campaign(campaign, company, lead_contact)
+        elif campaign['type'] == 'call':
+            await run_call_campaign(campaign, company, campaign_run_id)
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in run_company_test_campaign: {str(e)}")
+        return

@@ -368,6 +368,8 @@ class EmailCampaignBase(BaseModel):
     product_id: UUID
     template: Optional[str] = None
 
+class TestRunCampaignRequest(BaseModel):
+    lead_contact: str
 class EmailCampaignCreate(EmailCampaignBase):
     pass
 
