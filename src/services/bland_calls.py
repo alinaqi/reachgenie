@@ -2,7 +2,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details
+from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,8 @@ async def initiate_call(
         
     except Exception as e:
         logger.error(f"Failed to initiate call: {str(e)}")
+        if 'call' in locals():  # Check if call was created before the error
+            await update_call_failure_reason(call['id'], str(e))
         raise Exception(f"Failed to initiate call: {str(e)}")
 
 async def initiate_test_call(

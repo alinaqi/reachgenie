@@ -209,6 +209,26 @@ async def update_call_details(call_id: UUID, bland_call_id: str):
     response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
     return response.data[0]
 
+async def update_call_failure_reason(call_id: UUID, failure_reason: str):
+    """
+    Update the failure reason for a call
+    
+    Args:
+        call_id: UUID of the call to update
+        failure_reason: The reason why the call failed
+        
+    Returns:
+        Updated call record or None if update fails
+    """
+    try:
+        response = supabase.table('calls').update({
+            'failure_reason': failure_reason
+        }).eq('id', str(call_id)).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating call failure reason for call {call_id}: {str(e)}")
+        return None
+
 async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
