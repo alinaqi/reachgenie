@@ -61,3 +61,49 @@ async def initiate_call(
     except Exception as e:
         logger.error(f"Failed to initiate call: {str(e)}")
         raise Exception(f"Failed to initiate call: {str(e)}")
+
+async def initiate_test_call(
+    campaign: dict,
+    lead: dict,
+    call_script: str,
+    lead_contact: str
+):  
+    # Initialize Bland client and start the call
+    settings = get_settings()
+    bland_client = BlandClient(
+        api_key=settings.bland_api_key,
+        base_url=settings.bland_api_url,
+        webhook_base_url=settings.webhook_base_url,
+        bland_tool_id=settings.bland_tool_id,
+        bland_secret_key=settings.bland_secret_key
+    )
+    
+    try:
+        # Get product details for email subject
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            raise Exception("Product not found")
+
+        # Get company details
+        company = await get_company_by_id(campaign['company_id'])
+        if not company:
+            raise Exception("Company not found")
+
+        # Prepare request data for the call
+        request_data = {
+            "company_uuid": str(campaign['company_id']),
+            "email_subject": f"'{product['product_name']}' Discovery Call – Exclusive Insights for You!"
+        }
+
+        bland_response = await bland_client.start_call(
+            phone_number=lead_contact,
+            script=call_script,
+            request_data=request_data,
+            company=company
+        )
+        
+        logger.info(f"Bland Call ID: {bland_response['call_id']}")
+        
+    except Exception as e:
+        logger.error(f"Failed to initiate test call: {str(e)}")
+        raise Exception(f"Failed to initiate test call: {str(e)}")
