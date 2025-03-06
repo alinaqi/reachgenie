@@ -1,7 +1,7 @@
 from src.utils.encryption import decrypt_password
 from src.utils.smtp_client import SMTPClient
 from uuid import UUID
-from main import generate_company_insights, generate_email_content
+from src.services.email_generation import generate_company_insights, generate_email_content
 from src.services.perplexity_service import perplexity_service
 
 import logging
