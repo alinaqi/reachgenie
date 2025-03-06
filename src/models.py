@@ -341,7 +341,7 @@ class CallInDB(BaseModel):
     lead_name: Optional[str] = None
     lead_phone_number: Optional[str] = None
     campaign_name: Optional[str] = None
-
+    failure_reason: Optional[str] = None
 class Token(BaseModel):
     access_token: str
     token_type: str

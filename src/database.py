@@ -301,7 +301,7 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,created_at,campaign_id,leads(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,failure_reason,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided
