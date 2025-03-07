@@ -1814,36 +1814,37 @@ async def update_queue_item_status(
 
 async def get_email_throttle_settings(company_id: UUID) -> dict:
     """
-    Get the email throttle settings for a company
+    Get email throttle settings for a company
     
     Args:
         company_id: UUID of the company
         
     Returns:
-        Throttle settings for the company
+        Throttle settings dict with fields:
+        - max_emails_per_hour (default: 500)
+        - max_emails_per_day (default: 500)
+        - enabled (default: True)
     """
     try:
         response = supabase.table('email_throttle_settings')\
             .select('*')\
             .eq('company_id', str(company_id))\
             .execute()
-            
-        if response.data:
-            return response.data[0]
         
-        # Return default settings if none exist
-        return {
-            'company_id': str(company_id),
-            'max_emails_per_hour': 50,
-            'max_emails_per_day': 500,
-            'enabled': True
-        }
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        else:
+            # Return default settings
+            return {
+                'max_emails_per_hour': 500,
+                'max_emails_per_day': 500,
+                'enabled': True
+            }
     except Exception as e:
         logger.error(f"Error getting email throttle settings: {str(e)}")
         # Return default settings on error
         return {
-            'company_id': str(company_id),
-            'max_emails_per_hour': 50,
+            'max_emails_per_hour': 500,
             'max_emails_per_day': 500,
             'enabled': True
         }

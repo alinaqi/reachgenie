@@ -776,14 +776,14 @@ class EmailScriptResponse(BaseModel):
         }
 
 class EmailThrottleSettings(BaseModel):
-    max_emails_per_hour: int = Field(50, ge=1, le=1000, description="Maximum number of emails to send per hour")
+    max_emails_per_hour: int = Field(500, ge=1, le=1000, description="Maximum number of emails to send per hour")
     max_emails_per_day: int = Field(500, ge=1, le=10000, description="Maximum number of emails to send per day")
     enabled: bool = Field(True, description="Whether throttling is enabled")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "max_emails_per_hour": 50,
+                "max_emails_per_hour": 500,
                 "max_emails_per_day": 500,
                 "enabled": True
             }

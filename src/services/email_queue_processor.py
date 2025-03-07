@@ -77,7 +77,7 @@ async def process_company_email_queue(company_id: UUID):
         hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         emails_sent_last_hour = await get_emails_sent_count(company_id, hour_ago)
         
-        hourly_limit = throttle_settings.get('max_emails_per_hour', 50)
+        hourly_limit = throttle_settings.get('max_emails_per_hour', 500)
         if emails_sent_last_hour >= hourly_limit:
             logger.info(f"Company {company_id} reached hourly limit ({emails_sent_last_hour}/{hourly_limit})")
             return
@@ -294,6 +294,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     to_email=lead['email'],
                     subject=subject,
                     html_content=final_body_with_tracking,
+                    from_name=company["name"],
                     email_log_id=email_log['id']
                 )
                 logger.info(f"Successfully sent email to {lead['email']}")
@@ -306,7 +307,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     email_body=body_without_tracking_pixel,
                     sender_type='assistant',
                     sent_at=datetime.now(timezone.utc),
-                    from_name=None,  # Let the database handle default value
+                    from_name=company['name'],
                     from_email=company['account_email'],
                     to_email=lead['email']
                 )

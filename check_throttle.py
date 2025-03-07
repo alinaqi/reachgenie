@@ -7,7 +7,7 @@ async def check_throttle():
     settings = await get_email_throttle_settings(company_id)
     
     print('Current throttle settings:')
-    print(f'Max emails per hour: {settings.get("max_emails_per_hour", 50)}')
+    print(f'Max emails per hour: {settings.get("max_emails_per_hour", 500)}')
     print(f'Max emails per day: {settings.get("max_emails_per_day", 500)}')
     print(f'Throttling enabled: {settings.get("enabled", True)}')
 
