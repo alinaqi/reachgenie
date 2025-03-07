@@ -263,6 +263,26 @@ async def update_call_details(call_id: UUID, bland_call_id: str):
         logger.exception("Full exception traceback:")
         return None
 
+async def update_call_failure_reason(call_id: UUID, failure_reason: str):
+    """
+    Update the failure reason for a call
+    
+    Args:
+        call_id: UUID of the call to update
+        failure_reason: The reason why the call failed
+        
+    Returns:
+        Updated call record or None if update fails
+    """
+    try:
+        response = supabase.table('calls').update({
+            'failure_reason': failure_reason
+        }).eq('id', str(call_id)).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating call failure reason for call {call_id}: {str(e)}")
+        return None
+
 async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
@@ -335,7 +355,7 @@ async def get_calls_by_companies(company_ids: List[str]):
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
-        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,created_at,campaign_id,leads(*),campaigns!inner(*)'
+        'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,failure_reason,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided

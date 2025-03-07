@@ -2,7 +2,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details
+from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +116,52 @@ async def initiate_call(
         
     except Exception as e:
         logger.error(f"Failed to initiate call: {str(e)}")
-        logger.exception("Full exception traceback:")
-        
-        # Check if we've already created a call record that we can return
-        if 'call' in locals() and call:
-            logger.info(f"Returning existing call record despite error: {call['id']}")
-            # The call might have been successfully initiated even though we had an error
-            return call
-            
-        # If no call record exists, raise the exception
+        if 'call' in locals():  # Check if call was created before the error
+            await update_call_failure_reason(call['id'], str(e))
         raise Exception(f"Failed to initiate call: {str(e)}")
+
+async def initiate_test_call(
+    campaign: dict,
+    lead: dict,
+    call_script: str,
+    lead_contact: str
+):  
+    # Initialize Bland client and start the call
+    settings = get_settings()
+    bland_client = BlandClient(
+        api_key=settings.bland_api_key,
+        base_url=settings.bland_api_url,
+        webhook_base_url=settings.webhook_base_url,
+        bland_tool_id=settings.bland_tool_id,
+        bland_secret_key=settings.bland_secret_key
+    )
+    
+    try:
+        # Get product details for email subject
+        product = await get_product_by_id(campaign['product_id'])
+        if not product:
+            raise Exception("Product not found")
+
+        # Get company details
+        company = await get_company_by_id(campaign['company_id'])
+        if not company:
+            raise Exception("Company not found")
+
+        # Prepare request data for the call
+        request_data = {
+            "company_uuid": str(campaign['company_id']),
+            "email_subject": f"'{product['product_name']}' Discovery Call – Exclusive Insights for You!"
+        }
+
+        bland_response = await bland_client.start_call(
+            phone_number=lead_contact,
+            script=call_script,
+            request_data=request_data,
+            company=company
+        )
+        
+        logger.info(f"Bland Call ID: {bland_response['call_id']}")
+        
+    except Exception as e:
+        logger.error(f"Failed to initiate test call: {str(e)}")
+        raise Exception(f"Failed to initiate test call: {str(e)}")

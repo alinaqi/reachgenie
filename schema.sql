@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS calls (
     transcripts JSONB,
     script TEXT,
     recording_url TEXT,
+    failure_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -86,6 +87,9 @@ COMMENT ON COLUMN calls.script IS 'The generated call script used for this call'
 
 -- Add comment to explain the recording_url column
 COMMENT ON COLUMN calls.recording_url IS 'URL to the recorded call audio file';
+
+-- Add comment to explain the failure_reason column
+COMMENT ON COLUMN calls.failure_reason IS 'Reason for call failure if the call was unsuccessful';
 
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
