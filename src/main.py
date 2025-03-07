@@ -81,7 +81,8 @@ from src.database import (
     update_email_log_has_replied,
     update_email_log_has_opened,
     update_lead_enrichment, update_campaign_run_status,get_leads_with_email,get_leads_with_phone,create_campaign_run, get_campaign_by_id,
-    get_user_company_profile
+    get_user_company_profile,
+    update_company_account_credentials
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
