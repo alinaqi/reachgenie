@@ -105,8 +105,8 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         {enriched_data if enriched_info else ""}
 
         Company Information (for signature):
-        - Company Name: {company.get('name', '')}
-        - Email: {company.get('account_email', '')}
+        - Company URL: {company.get('website', '')}
+        - Company Contact Person: {company.get('account_email').split('@')[0]}
 
         Create two pieces of content:
         1. Email Subject: Compelling subject line mentioning our product and key benefits
@@ -116,12 +116,13 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Use a professional tone
         - Focus on value proposition
         - Include a clear call to action
-        - End with a professional signature using the company information provided above
+        - End with a professional signature using the company url and contact person as provided above
         - DO NOT use placeholders like 'Your Name' or 'Your Position'
-        - Use the company name in the signature
+        - Use the Company Contact Person and Company URL in the signature
         - Format the signature as:
           Best regards,
-          [Company Name]
+          [Company Contact Person]
+          [Company URL]
         {f'''
         - Use the detailed product information to craft a more compelling message
         - Incorporate the key value propositions that align with the lead's needs
