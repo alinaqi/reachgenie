@@ -1571,26 +1571,55 @@ async def update_campaign_run_status(campaign_run_id: UUID, status: str):
         logger.error(f"Error updating campaign run status: {str(e)}")
         return None
 
-async def update_campaign_run_progress(campaign_run_id: UUID, leads_processed: int):
+async def update_campaign_run_progress(
+    campaign_run_id: UUID, 
+    leads_processed: int,
+    leads_total: Optional[int] = None,
+    increment: bool = False
+):
     """
-    Update the progress (leads_processed) of a campaign run
+    Update the progress of a campaign run
     
     Args:
         campaign_run_id: UUID of the campaign run
         leads_processed: Number of leads processed so far
+        leads_total: Optional total number of leads for the campaign run
+        increment: If True, increment the leads_processed count instead of setting it
         
     Returns:
         Dict containing the updated campaign run record or None if update failed
     """
     try:
-        response = supabase.table('campaign_runs').update({
-            'leads_processed': leads_processed
-        }).eq('id', str(campaign_run_id)).execute()
+        # Prepare update data
+        update_data = {}
+        
+        if increment:
+            # Get current progress first
+            current = supabase.table('campaign_runs').select('leads_processed').eq('id', str(campaign_run_id)).execute()
+            if current.data and len(current.data) > 0:
+                current_count = current.data[0].get('leads_processed', 0) or 0
+                update_data['leads_processed'] = current_count + leads_processed
+            else:
+                # Fallback to setting value directly if we can't get current value
+                update_data['leads_processed'] = leads_processed
+        else:
+            update_data['leads_processed'] = leads_processed
+            
+        # Set total leads if provided
+        if leads_total is not None:
+            update_data['leads_total'] = leads_total
+            
+        response = supabase.table('campaign_runs').update(update_data).eq('id', str(campaign_run_id)).execute()
         
         if not response.data:
             logger.error(f"Failed to update progress for campaign run {campaign_run_id}")
             return None
             
+        # Check if leads_processed equals leads_total and update status if needed
+        if not increment and leads_total is not None and leads_processed >= leads_total:
+            # All leads have been processed, mark as completed
+            await update_campaign_run_status(campaign_run_id, "completed")
+        
         return response.data[0]
     except Exception as e:
         logger.error(f"Error updating campaign run progress: {str(e)}")
@@ -1630,26 +1659,319 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
 
 async def update_lead_enrichment(lead_id: UUID, enriched_data: dict) -> Dict:
     """
-    Update a lead's enriched_data field with company insights from Perplexity API.
+    Update the enriched data for a lead
     
     Args:
         lead_id: UUID of the lead to update
-        enriched_data: JSON-compatible dictionary with enrichment data
+        enriched_data: Dictionary containing enriched data
         
     Returns:
-        Updated lead data or None if the update fails
+        Updated lead record
+        
+    Raises:
+        HTTPException: If lead not found or update fails
+    """
+    # Convert to JSON string if it's a dict
+    enriched_data_str = json.dumps(enriched_data) if isinstance(enriched_data, dict) else enriched_data
+    
+    try:
+        response = supabase.table("leads")\
+            .update({"enriched_data": enriched_data_str})\
+            .eq("id", str(lead_id))\
+            .execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update lead {lead_id} enrichment")
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating lead enrichment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Email Queue Database Functions
+
+async def add_email_to_queue(
+    company_id: UUID, 
+    campaign_id: UUID, 
+    campaign_run_id: UUID, 
+    lead_id: UUID, 
+    priority: int = 1, 
+    scheduled_for: Optional[datetime] = None
+) -> dict:
+    """
+    Add an email to the processing queue
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        priority: Priority of the email (higher number = higher priority)
+        scheduled_for: When to process this email (defaults to now)
+        
+    Returns:
+        The created queue item
+    """
+    if scheduled_for is None:
+        scheduled_for = datetime.now(timezone.utc)
+        
+    queue_data = {
+        'company_id': str(company_id),
+        'campaign_id': str(campaign_id),
+        'campaign_run_id': str(campaign_run_id),
+        'lead_id': str(lead_id),
+        'status': 'pending',
+        'priority': priority,
+        'scheduled_for': scheduled_for.isoformat(),
+        'retry_count': 0,
+        'max_retries': 3
+    }
+    
+    try:
+        response = supabase.table('email_queue').insert(queue_data).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error adding email to queue: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add email to queue: {str(e)}")
+
+
+async def get_next_emails_to_process(company_id: UUID, limit: int) -> List[dict]:
+    """
+    Get the next batch of emails to process for a company based on throttle settings
+    
+    Args:
+        company_id: UUID of the company
+        limit: Maximum number of emails to retrieve
+        
+    Returns:
+        List of email queue items to process
+    """
+    # Get the current time
+    now = datetime.now(timezone.utc)
+    
+    try:
+        # Get pending emails that are scheduled for now or earlier, ordered by priority and creation time
+        response = supabase.table('email_queue')\
+            .select('*')\
+            .eq('company_id', str(company_id))\
+            .eq('status', 'pending')\
+            .lte('scheduled_for', now.isoformat())\
+            .order('priority', desc=True)\
+            .order('created_at')\
+            .limit(limit)\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        logger.error(f"Error getting next emails to process: {str(e)}")
+        return []
+
+
+async def update_queue_item_status(
+    queue_id: UUID, 
+    status: str, 
+    processed_at: Optional[datetime] = None, 
+    error_message: Optional[str] = None
+) -> dict:
+    """
+    Update the status of a queue item
+    
+    Args:
+        queue_id: UUID of the queue item
+        status: New status (pending, processing, sent, failed)
+        processed_at: When the item was processed
+        error_message: Error message if any
+        
+    Returns:
+        Updated queue item
+    """
+    update_data = {'status': status}
+    
+    if processed_at:
+        update_data['processed_at'] = processed_at.isoformat()
+        
+    if error_message:
+        update_data['error_message'] = error_message
+    
+    try:    
+        response = supabase.table('email_queue')\
+            .update(update_data)\
+            .eq('id', str(queue_id))\
+            .execute()
+            
+        if not response.data:
+            logger.error(f"Failed to update queue item {queue_id}")
+            raise HTTPException(status_code=404, detail="Queue item not found")
+            
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating queue item status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update queue item: {str(e)}")
+
+
+async def get_email_throttle_settings(company_id: UUID) -> dict:
+    """
+    Get the email throttle settings for a company
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        Throttle settings for the company
     """
     try:
-        response = supabase.table('leads').update({
-            'enriched_data': enriched_data
-        }).eq('id', str(lead_id)).execute()
-        
-        if response.data and len(response.data) > 0:
+        response = supabase.table('email_throttle_settings')\
+            .select('*')\
+            .eq('company_id', str(company_id))\
+            .execute()
+            
+        if response.data:
             return response.data[0]
-        else:
-            logger.error(f"No data returned when updating lead enrichment for lead {lead_id}")
-            return None
+        
+        # Return default settings if none exist
+        return {
+            'company_id': str(company_id),
+            'max_emails_per_hour': 50,
+            'max_emails_per_day': 500,
+            'enabled': True
+        }
     except Exception as e:
-        logger.error(f"Error updating lead enrichment for lead {lead_id}: {str(e)}")
-        logger.exception("Full traceback:")
-        return None
+        logger.error(f"Error getting email throttle settings: {str(e)}")
+        # Return default settings on error
+        return {
+            'company_id': str(company_id),
+            'max_emails_per_hour': 50,
+            'max_emails_per_day': 500,
+            'enabled': True
+        }
+
+
+async def update_email_throttle_settings(
+    company_id: UUID, 
+    max_emails_per_hour: int, 
+    max_emails_per_day: int, 
+    enabled: bool = True
+) -> dict:
+    """
+    Update email throttle settings for a company
+    
+    Args:
+        company_id: UUID of the company
+        max_emails_per_hour: Maximum emails per hour
+        max_emails_per_day: Maximum emails per day
+        enabled: Whether throttling is enabled
+        
+    Returns:
+        Updated throttle settings
+    """
+    now = datetime.now(timezone.utc)
+    
+    settings_data = {
+        'company_id': str(company_id),
+        'max_emails_per_hour': max_emails_per_hour,
+        'max_emails_per_day': max_emails_per_day,
+        'enabled': enabled,
+        'updated_at': now.isoformat()
+    }
+    
+    try:
+        # Check if settings already exist
+        existing = await get_email_throttle_settings(company_id)
+        
+        if existing and 'id' in existing:
+            # Update existing settings
+            response = supabase.table('email_throttle_settings')\
+                .update(settings_data)\
+                .eq('company_id', str(company_id))\
+                .execute()
+        else:
+            # Create new settings
+            settings_data['created_at'] = now.isoformat()
+            response = supabase.table('email_throttle_settings')\
+                .insert(settings_data)\
+                .execute()
+                
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update throttle settings")
+        
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating email throttle settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update throttle settings: {str(e)}")
+
+
+async def get_emails_sent_count(company_id: UUID, start_time: datetime) -> int:
+    """
+    Get the count of emails sent for a company since the start time
+    
+    Args:
+        company_id: UUID of the company
+        start_time: Datetime to count from
+        
+    Returns:
+        Number of emails sent
+    """
+    try:
+        response = supabase.table('email_queue')\
+            .select('id', count='exact')\
+            .eq('company_id', str(company_id))\
+            .eq('status', 'sent')\
+            .gte('processed_at', start_time.isoformat())\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting emails sent count: {str(e)}")
+        return 0
+
+
+async def get_pending_emails_count(campaign_run_id: UUID) -> int:
+    """
+    Get the count of pending emails for a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        Number of pending emails
+    """
+    try:
+        response = supabase.table('email_queue')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .in_('status', ['pending', 'processing'])\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting pending emails count: {str(e)}")
+        return 0
+
+
+async def get_running_campaign_runs(company_id: UUID) -> List[dict]:
+    """
+    Get all campaign runs with status 'running' for a company
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        List of running campaign runs
+    """
+    try:
+        # Join campaign_runs with campaigns to filter by company_id
+        response = supabase.table('campaign_runs')\
+            .select('*, campaigns!inner(company_id)')\
+            .eq('campaigns.company_id', str(company_id))\
+            .eq('status', 'running')\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        logger.error(f"Error getting running campaign runs: {str(e)}")
+        return []
