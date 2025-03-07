@@ -50,6 +50,8 @@ class BlandClient:
         call_request_data = {
             "bland_secret_key": self.bland_secret_key
         }
+
+        logger.info(f"bland key: {call_request_data}")
         # Update with additional request data if provided
         if request_data:
             call_request_data.update(request_data)

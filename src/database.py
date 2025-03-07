@@ -1,21 +1,25 @@
-from supabase import create_client, Client
-from src.config import get_settings
-from typing import Optional, List, Dict, Any, Union, Tuple
+import os
+import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Optional, Any, Tuple
+import uuid
+import logging
+
+# Set up logger
+logger = logging.getLogger(__name__)
+
+from supabase import create_client, Client
+from src.config import get_settings
 from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
-import logging
 import secrets
-import uuid
 import json
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-logger = logging.getLogger(__name__)
 
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
@@ -137,15 +141,28 @@ async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: in
     }
 
 async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None, campaign_run_id: Optional[UUID] = None):
-    call_data = {
-        'lead_id': str(lead_id),
-        'product_id': str(product_id),
-        'campaign_id': str(campaign_id),
-        'script': script,
-        'campaign_run_id': str(campaign_run_id)
-    }
-    response = supabase.table('calls').insert(call_data).execute()
-    return response.data[0]
+    """
+    Create a call record in the database
+    """
+    try:
+        # Prepare call data
+        call_data = {
+            'lead_id': str(lead_id),
+            'product_id': str(product_id),
+            'campaign_id': str(campaign_id),
+            'script': script
+        }
+        
+        # Only add campaign_run_id if it exists
+        if campaign_run_id is not None:
+            call_data['campaign_run_id'] = str(campaign_run_id)
+        
+        # Insert the record
+        response = supabase.table('calls').insert(call_data).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating call: {str(e)}")
+        raise
 
 async def update_call_summary(call_id: UUID, duration: int, sentiment: str, summary: str):
     call_data = {
@@ -203,11 +220,48 @@ async def get_product_by_id(product_id: UUID):
     return response.data[0]
 
 async def update_call_details(call_id: UUID, bland_call_id: str):
-    call_data = {
-        'bland_call_id': bland_call_id
-    }
-    response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
-    return response.data[0]
+    """
+    Update call record with Bland call ID
+    
+    Args:
+        call_id: UUID of the call record
+        bland_call_id: Bland AI call ID
+    
+    Returns:
+        Updated call record or None if update fails
+    """
+    try:
+        # Validate inputs
+        if not call_id:
+            logger.error("Cannot update call details: call_id is None or empty")
+            return None
+            
+        if not bland_call_id or bland_call_id == "None":
+            logger.error(f"Cannot update call details: bland_call_id is None or empty")
+            return None
+            
+        logger.info(f"Updating call {call_id} with bland_call_id {bland_call_id}")
+        
+        call_data = {
+            'bland_call_id': bland_call_id
+        }
+        
+        # Log the request data
+        logger.info(f"Supabase update request: table('calls').update({call_data}).eq('id', {str(call_id)})")
+        
+        response = supabase.table('calls').update(call_data).eq('id', str(call_id)).execute()
+        
+        if not response.data:
+            logger.warning(f"No data returned from update operation for call_id {call_id}")
+            return None
+            
+        logger.info(f"Successfully updated call_id {call_id} with bland_call_id {bland_call_id}")
+        return response.data[0]
+        
+    except Exception as e:
+        logger.error(f"Error updating call_id {call_id} with bland_call_id {bland_call_id}: {str(e)}")
+        logger.exception("Full exception traceback:")
+        return None
 
 async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
@@ -1553,3 +1607,29 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
     except Exception as e:
         logger.error(f"Error fetching campaign runs: {str(e)}")
         return []
+
+async def update_lead_enrichment(lead_id: UUID, enriched_data: dict) -> Dict:
+    """
+    Update a lead's enriched_data field with company insights from Perplexity API.
+    
+    Args:
+        lead_id: UUID of the lead to update
+        enriched_data: JSON-compatible dictionary with enrichment data
+        
+    Returns:
+        Updated lead data or None if the update fails
+    """
+    try:
+        response = supabase.table('leads').update({
+            'enriched_data': enriched_data
+        }).eq('id', str(lead_id)).execute()
+        
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        else:
+            logger.error(f"No data returned when updating lead enrichment for lead {lead_id}")
+            return None
+    except Exception as e:
+        logger.error(f"Error updating lead enrichment for lead {lead_id}: {str(e)}")
+        logger.exception("Full traceback:")
+        return None

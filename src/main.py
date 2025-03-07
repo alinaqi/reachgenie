@@ -47,47 +47,13 @@ from src.database import (
     get_calls_by_company_id,
     create_campaign,
     get_campaigns_by_company,
-    get_campaign_by_id,
-    get_leads_with_email,
-    get_leads_with_phone,
-    create_email_log,
-    create_email_log_detail,
-    update_company_cronofy_profile,
-    clear_company_cronofy_data,
-    update_product_details,
-    create_upload_task,
     update_task_status,
+    create_upload_task,
     get_task_status,
-    update_product_icps, 
-    get_product_icps,
-    update_company_account_credentials,
-    update_user,
-    get_company_email_logs,
     delete_lead,
-    soft_delete_company,
-    get_email_conversation_history,
-    update_company_voice_agent_settings,
-    get_user_company_profile,
-    create_user_company_profile,
-    create_invite_token,
-    create_unverified_user,
-    get_valid_invite_token,
-    mark_invite_token_used,
-    get_company_users,
-    get_user_company_profile_by_id,
-    delete_user_company_profile,
-    get_user_company_roles,
+    update_email_log_has_replied,
     update_email_log_has_opened,
-    get_lead_communication_history,
-    get_lead_by_email,
-    get_lead_by_phone,
-    update_company_cronofy_tokens,
-    get_company_id_from_email_log,
-    soft_delete_product,
-    create_campaign_run,
-    update_campaign_run_status,
-    update_campaign_run_progress,
-    get_campaign_runs
+    update_lead_enrichment,
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1205,6 +1171,44 @@ async def create_lead_endpoint(
         # Get the created lead with all details
         lead = await get_lead_by_id(created_lead['id'])
         
+        # Enrich the lead with company insights and update in background
+        try:
+            # Generate insights using Perplexity API
+            insights = await generate_company_insights(lead, perplexity_service)
+            
+            if insights:
+                # Parse the insights JSON if it's a string
+                enriched_data = {}
+                try:
+                    if isinstance(insights, str):
+                        # Try to extract JSON from the string response
+                        insights_str = insights.strip()
+                        # Check if the response is already in JSON format
+                        try:
+                            enriched_data = json.loads(insights_str)
+                        except json.JSONDecodeError:
+                            # If not, look for JSON within the string (common with LLM responses)
+                            import re
+                            json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                            if json_match:
+                                potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                                enriched_data = json.loads(potential_json)
+                            else:
+                                # If we can't extract structured JSON, store as raw text
+                                enriched_data = {"raw_insights": insights_str}
+                    else:
+                        enriched_data = insights
+                        
+                    # Update the lead with enriched data
+                    updated_lead = await update_lead_enrichment(created_lead['id'], enriched_data)
+                    if updated_lead:
+                        lead = updated_lead
+                except Exception as e:
+                    logger.error(f"Error parsing or storing insights during lead creation: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error enriching lead during creation: {str(e)}")
+            # Continue with the created lead even if enrichment fails
+        
         # Process fields for response
         if lead.get("industries") and isinstance(lead["industries"], str):
             lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
@@ -1259,6 +1263,38 @@ async def start_call(
     
     # Get company details
     company = await get_company_by_id(company_id)
+    
+    # Get or create a default campaign for direct calls
+    try:
+        # Check if there's already a default campaign for direct calls
+        campaigns = await get_campaigns_by_company(company_id)
+        default_campaign = None
+        
+        # Look for an existing "Direct Calls" campaign
+        for campaign in campaigns:
+            if campaign.get("name") == "Direct Calls":
+                default_campaign = campaign
+                break
+                
+        # If no default campaign exists, create one
+        if not default_campaign:
+            logger.info(f"Creating default 'Direct Calls' campaign for company {company_id}")
+            default_campaign = await create_campaign(
+                company_id=company_id,
+                name="Direct Calls",
+                description="Campaign for direct calls initiated from the UI",
+                product_id=product_id,
+                type="call"
+            )
+            
+        campaign_id = default_campaign["id"]
+        logger.info(f"Using campaign ID {campaign_id} for direct call")
+    except Exception as campaign_error:
+        logger.error(f"Error creating or finding default campaign: {str(campaign_error)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error preparing campaign for call: {str(campaign_error)}"
+        )
         
     # Generate the script based on product details
     script = f"""You are Alex, an AI sales representative at {company['name']} for {product['product_name']} 
@@ -1274,27 +1310,58 @@ async def start_call(
     bland_client = BlandClient(
         api_key=settings.bland_api_key,
         base_url=settings.bland_api_url,
-        webhook_base_url=settings.webhook_base_url
+        webhook_base_url=settings.webhook_base_url,
+        bland_tool_id=settings.bland_tool_id,
+        bland_secret_key=settings.bland_secret_key
     )
     
     try:
-        bland_response = await bland_client.start_call(
-            phone_number=lead['phone_number'],
-            script=script
-        )
-        
         # Create call record in database with company_id and script
-        call = await create_call(lead_id, product_id, company_id, script=script)
+        try:
+            call = await create_call(lead_id, product_id, campaign_id, script=script)
+            logger.info(f"Created call record with ID: {call['id']}")
+        except Exception as db_error:
+            logger.error(f"Error creating call record in database: {str(db_error)}")
+            logger.exception("Database error traceback:")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create call record in database: {str(db_error)}"
+            )
         
-        # Update call with Bland call ID
-        await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
-        
-        return call
+        # Make the call to Bland API
+        try:
+            bland_response = await bland_client.start_call(
+                phone_number=lead['phone_number'],
+                script=script,
+                request_data={"company_uuid": str(company_id), "call_log_id": str(call['id'])},
+                company=company
+            )
+            
+            # Update call with Bland call ID if the call was successfully initiated
+            if bland_response and bland_response.get('call_id'):
+                try:
+                    await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
+                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']}")
+                except Exception as update_error:
+                    # If database update fails, just log the error
+                    logger.error(f"Failed to update call record with Bland call ID: {str(update_error)}")
+                    # But still return the call record
+            
+            logger.info(f"Call successfully initiated with Bland API: {bland_response.get('call_id', 'Unknown ID')}")
+            return call
+            
+        except Exception as call_error:
+            logger.error(f"Error making call to Bland API but call record was created: {str(call_error)}")
+            logger.exception("API error traceback:")
+            # Return the call record anyway, since we've already created it
+            return call
         
     except Exception as e:
+        logger.error(f"Unexpected error in start_call endpoint: {str(e)}")
+        logger.exception("Full exception traceback:")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to initiate call: {str(e)}"
+            detail=f"Unexpected error initiating call: {str(e)}"
         )
 
 @app.get("/api/calls/{call_id}", response_model=CallInDB, tags=["Calls"])
@@ -2004,6 +2071,46 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 print("\nCreated lead response:")
                 print(created_lead)
                 lead_count += 1
+                
+                # Enrich the lead with company insights in the background
+                try:
+                    # Get complete lead data
+                    lead = await get_lead_by_id(created_lead['id'])
+                    
+                    # Generate insights using Perplexity API
+                    insights = await generate_company_insights(lead, perplexity_service)
+                    
+                    if insights:
+                        # Parse the insights JSON if it's a string
+                        enriched_data = {}
+                        try:
+                            if isinstance(insights, str):
+                                # Try to extract JSON from the string response
+                                insights_str = insights.strip()
+                                # Check if the response is already in JSON format
+                                try:
+                                    enriched_data = json.loads(insights_str)
+                                except json.JSONDecodeError:
+                                    # If not, look for JSON within the string (common with LLM responses)
+                                    import re
+                                    json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                                    if json_match:
+                                        potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                                        enriched_data = json.loads(potential_json)
+                                    else:
+                                        # If we can't extract structured JSON, store as raw text
+                                        enriched_data = {"raw_insights": insights_str}
+                            else:
+                                enriched_data = insights
+                                
+                            # Update the lead with enriched data
+                            await update_lead_enrichment(created_lead['id'], enriched_data)
+                        except Exception as e:
+                            logger.error(f"Error parsing or storing insights during CSV upload: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Error enriching lead during CSV upload: {str(e)}")
+                    # Continue processing other leads even if enrichment fails
+                    
             except Exception as e:
                 logger.error(f"Error creating lead: {str(e)}")
                 logger.error(f"Lead data that failed: {lead_data}")
@@ -2108,6 +2215,8 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
         company_name = lead.get('company', '')
         company_website = lead.get('website', '')
         company_description = lead.get('company_description', '')
+        lead_title = lead.get('job_title', '')
+        lead_department = lead.get('department', '')
         
         if not company_name and not company_website:
             logger.warning(f"Insufficient company data for lead {lead.get('id')}")
@@ -2116,11 +2225,13 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
         insights = await perplexity_service.get_company_insights(
             company_name=company_name,
             company_website=company_website,
-            company_description=company_description
+            company_description=company_description,
+            lead_title=lead_title,
+            lead_department=lead_department
         )
         
         if insights:
-            logger.info(f"Generated insights for company: {company_name}")
+            logger.info(f"Generated insights for company: {company_name} for lead with title: {lead_title}")
         return insights
         
     except Exception as e:
@@ -3306,3 +3417,77 @@ async def get_company_campaign_runs(
         campaign_runs = await get_campaign_runs(company_id)
     
     return campaign_runs
+
+@app.post("/api/companies/{company_id}/leads/{lead_id}/enrich", response_model=dict, tags=["Leads"])
+async def enrich_lead(
+    company_id: UUID,
+    lead_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Enrich a lead with company insights from Perplexity API and save the data.
+    
+    Args:
+        company_id: UUID of the company
+        lead_id: UUID of the lead to enrich
+        current_user: Current authenticated user
+        
+    Returns:
+        Updated lead data with enrichment information
+        
+    Raises:
+        404: Lead not found
+        403: User doesn't have access to this lead
+    """
+    # Get lead data
+    lead = await get_lead_by_id(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check if lead belongs to the specified company
+    if str(lead["company_id"]) != str(company_id):
+        raise HTTPException(status_code=404, detail="Lead not found in this company")
+    
+    # Check if user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this company")
+    
+    # Generate insights using Perplexity API
+    insights = await generate_company_insights(lead, perplexity_service)
+    
+    if not insights:
+        raise HTTPException(status_code=500, detail="Failed to generate company insights")
+    
+    # Parse the insights JSON if it's a string
+    enriched_data = {}
+    try:
+        if isinstance(insights, str):
+            # Try to extract JSON from the string response
+            insights_str = insights.strip()
+            # Check if the response is already in JSON format
+            try:
+                enriched_data = json.loads(insights_str)
+            except json.JSONDecodeError:
+                # If not, look for JSON within the string (common with LLM responses)
+                import re
+                json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                if json_match:
+                    potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                    enriched_data = json.loads(potential_json)
+                else:
+                    # If we can't extract structured JSON, store as raw text
+                    enriched_data = {"raw_insights": insights_str}
+        else:
+            enriched_data = insights
+    except Exception as e:
+        logger.error(f"Error parsing insights: {str(e)}")
+        enriched_data = {"raw_insights": insights if isinstance(insights, str) else str(insights)}
+    
+    # Update the lead with enriched data
+    updated_lead = await update_lead_enrichment(lead_id, enriched_data)
+    
+    if not updated_lead:
+        raise HTTPException(status_code=500, detail="Failed to update lead with enrichment data")
+    
+    return {"status": "success", "data": updated_lead}
