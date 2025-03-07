@@ -137,15 +137,15 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     # Create subject line for reminder
                     subject = f"Re: {original_email['email_subject']}" if not original_email['email_subject'].startswith('Re:') else original_email['email_subject']
                     
-                    # Create email log detail for the reminder
+                    # Create email log detail
                     await create_email_log_detail(
                         email_logs_id=email_log_id,
-                        message_id=None,  # New message, no ID yet
+                        message_id=None,
                         email_subject=subject,
                         email_body=reminder_content,
                         sender_type='assistant',
                         sent_at=datetime.now(timezone.utc),
-                        from_name=company['name'],
+                        from_name=None,  # Let the database handle default value
                         from_email=company['account_email'],
                         to_email=log['lead_email'],  # Using lead's email address
                         reminder_type=next_reminder_type
@@ -159,7 +159,6 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         to_email=log['lead_email'],  # Using lead's email address
                         subject=subject,
                         html_content=reminder_content, # add tracking pixel to the email body
-                        from_name=company['name'],
                         email_log_id=email_log_id
                     )
                     

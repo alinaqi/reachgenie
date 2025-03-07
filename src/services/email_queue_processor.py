@@ -294,7 +294,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                     to_email=lead['email'],
                     subject=subject,
                     html_content=final_body_with_tracking,
-                    from_name=company["name"],
                     email_log_id=email_log['id']
                 )
                 logger.info(f"Successfully sent email to {lead['email']}")
@@ -307,7 +306,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     email_body=body_without_tracking_pixel,
                     sender_type='assistant',
                     sent_at=datetime.now(timezone.utc),
-                    from_name=company['name'],
+                    from_name=None,  # Let the database handle default value
                     from_email=company['account_email'],
                     to_email=lead['email']
                 )

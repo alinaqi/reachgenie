@@ -83,8 +83,7 @@ async def run_test_email_campaign(campaign: dict, company: dict, lead_contact: s
                             await smtp_client.send_email(
                                 to_email=lead['email'],
                                 subject=subject,  # Use generated subject
-                                html_content=final_body,
-                                from_name=company["name"]
+                                html_content=final_body
                             )
                             logger.info(f"Successfully sent test email to {lead['email']}")
 
