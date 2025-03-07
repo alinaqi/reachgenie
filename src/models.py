@@ -743,4 +743,33 @@ class CompanyUserResponse(BaseModel):
                 "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000"
             }
         }
+
+class CallScriptResponse(BaseModel):
+    status: str
+    data: dict
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "data": {
+                    "script": "Alex: Hello this is Alex, I am calling on behalf of Acme Inc. Do you have a bit of time?\nProspect: Yes, what is this about?\nAlex: Great to hear from you! I'm reaching out because..."
+                }
+            }
+        }
+
+class EmailScriptResponse(BaseModel):
+    status: str
+    data: dict
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "data": {
+                    "subject": "Exclusive offer from Acme Inc just for your business",
+                    "body": "<p>Dear John,</p><p>I recently came across your company and...</p>"
+                }
+            }
+        }
  
