@@ -352,8 +352,8 @@ class TokenData(BaseModel):
 class BlandWebhookPayload(BaseModel):
     call_id: str
     summary: Optional[str] = None
-    corrected_duration: str
-    analysis: dict
+    corrected_duration: Optional[str] = None
+    analysis: Optional[dict] = None
     transcripts: list[dict]
     recording_url: Optional[str] = None
 
