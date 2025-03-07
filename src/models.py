@@ -535,6 +535,7 @@ class LeadDetail(BaseModel):
     hiring_positions: Optional[List[HiringPosition]]
     location_move: Optional[LocationMove]
     job_change: Optional[JobChange]
+    enriched_data: Optional[Dict[str, Any]] = None
 
     @field_validator('financials')
     def validate_financials(cls, v):
@@ -581,11 +582,11 @@ class LeadResponse(BaseModel):
                     "office_phone": "+1234567892",
                     "hq_location": "San Francisco, CA",
                     "website": "https://example.com",
-                    "headcount": 1500,
+                    "headcount": 3500,
                     "industries": ["Technology", "Software"],
                     "department": "Engineering",
                     "sic_code": "7371",
-                    "isic_code": "6201",
+                    "isic_code": "J6201",
                     "naics_code": "541511",
                     "company_address": "123 Main St",
                     "company_city": "San Francisco",
@@ -599,43 +600,16 @@ class LeadResponse(BaseModel):
                     "company_hq_country": "United States",
                     "company_linkedin_url": "https://linkedin.com/company/example",
                     "company_type": "Public",
-                    "company_description": "Leading software company",
-                    "technologies": ["Python", "React", "AWS"],
-                    "financials": {
-                        "revenue": "$100M-$500M",
-                        "funding": "$50M Series C"
-                    },
-                    "company_founded_year": 2010,
+                    "company_description": "Leading provider of software solutions",
+                    "technologies": ["React", "Python", "AWS"],
+                    "financials": {"revenue": "$500M", "funding": "$50M"},
+                    "company_founded_year": 2005,
                     "seniority": "Executive",
-                    "hiring_positions": [
-                        {
-                            "title": "Senior Engineer",
-                            "url": "https://example.com/jobs/123",
-                            "location": "San Francisco, CA",
-                            "date": "2024-01-01"
-                        }
-                    ],
-                    "location_move": {
-                        "from": {
-                            "country": "Canada",
-                            "state": "ON"
-                        },
-                        "to": {
-                            "country": "United States",
-                            "state": "CA"
-                        },
-                        "date": "2023-12-01"
-                    },
-                    "job_change": {
-                        "previous": {
-                            "company": "Previous Corp",
-                            "title": "Engineering Manager"
-                        },
-                        "new": {
-                            "company": "Example Corp",
-                            "title": "CTO"
-                        },
-                        "date": "2024-01-01"
+                    "enriched_data": {
+                        "pain_points": ["Legacy system migration", "Security compliance", "Scaling challenges"],
+                        "needs": ["Cloud migration", "DevOps automation", "Security enhancement"],
+                        "motivations": ["Increasing developer productivity", "Reducing operational costs", "Improving security posture"],
+                        "decision_factors": ["Performance", "Reliability", "Cost", "Ease of implementation"]
                     }
                 }
             }
