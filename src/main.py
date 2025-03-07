@@ -53,6 +53,7 @@ from src.database import (
     create_user_company_profile,
     soft_delete_company,
     get_product_icps,
+    update_product_icps,
     get_user_by_id,
     create_verification_token,
     get_valid_verification_token,
