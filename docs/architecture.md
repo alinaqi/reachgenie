@@ -212,8 +212,12 @@ graph TB
         I[Meeting Confirmations]
     end
     
-    Cron Jobs --> Tasks
-    Tasks --> Monitoring
+    A --> D
+    B --> E
+    C --> F
+    D --> G
+    E --> H
+    F --> I
 ```
 
 ## Security Flow
