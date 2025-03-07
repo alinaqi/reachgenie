@@ -83,7 +83,11 @@ from src.database import (
     get_lead_by_phone,
     update_company_cronofy_tokens,
     get_company_id_from_email_log,
-    soft_delete_product
+    soft_delete_product,
+    create_campaign_run,
+    update_campaign_run_status,
+    update_campaign_run_progress,
+    get_campaign_runs
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -101,7 +105,8 @@ from src.models import (
     EmailLogDetailResponse, VoiceAgentSettings,
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
-    CompanyUserResponse, LeadSearchResponse
+    CompanyUserResponse, LeadSearchResponse, CampaignRunResponse,
+    PaginatedLeadResponse
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -993,15 +998,18 @@ async def upload_leads(
         logger.error(f"Error starting leads upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/companies/{company_id}/leads", response_model=List[LeadInDB], tags=["Leads"])
+@app.get("/api/companies/{company_id}/leads", response_model=PaginatedLeadResponse, tags=["Leads"])
 async def get_leads(
     company_id: UUID,
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    search_term: Optional[str] = Query(default=None, description="Search term to filter leads by name, email, company or job title"),
     current_user: dict = Depends(get_current_user)
 ):
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
-    return await get_leads_by_company(company_id)
+    return await get_leads_by_company(company_id, page_number=page_number, limit=limit, search_term=search_term)
 
 @app.get("/api/companies/{company_id}/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
 async def get_lead(
@@ -1247,6 +1255,8 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 async def get_company_calls(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
+    campaign_run_id: Optional[UUID] = Query(None, description="Filter calls by campaign run ID"),
+    lead_id: Optional[UUID] = Query(None, description="Filter calls by lead ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1263,7 +1273,7 @@ async def get_company_calls(
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return await get_calls_by_company_id(company_id, campaign_id)
+    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id, lead_id)
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
@@ -1317,6 +1327,7 @@ async def get_company_emails(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter emails by lead ID"),
+    campaign_run_id: Optional[UUID] = Query(None, description="Filter emails by campaign run ID"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -1328,7 +1339,7 @@ async def get_company_emails(
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Get email logs
-    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id)
+    email_logs = await get_company_email_logs(company_id, campaign_id, lead_id, campaign_run_id)
     
     # Transform the response to match EmailLogResponse model
     transformed_logs = []
@@ -1403,9 +1414,30 @@ async def run_campaign(
                 status_code=400,
                 detail="Email provider type not configured. Please set up email provider type first."
             )
+    # Get total leads count based on campaign type
+    if campaign['type'] == 'email':
+        leads = await get_leads_with_email(campaign['id'])
+    elif campaign['type'] == 'call':
+        leads = await get_leads_with_phone(company['id'])
+    else:
+        leads = []
+
+    # Create a new campaign run record
+    campaign_run = await create_campaign_run(
+        campaign_id=campaign_id,
+        status="idle",
+        leads_total=len(leads)
+    )
     
+    if not campaign_run:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create campaign run record"
+        )
+    
+    logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
     # Add campaign execution to background tasks
-    background_tasks.add_task(run_company_campaign, campaign_id)
+    background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
     
     return {"message": "Campaign request initiated successfully"} 
 
@@ -1630,15 +1662,34 @@ async def process_leads_upload(
         # Initialize OpenAI client
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         
+        # Check if we have numbered columns (1,2,3...) or regular headers
+        is_numbered_columns = all(str(i) == header for i, header in enumerate(headers, 1))
+        
+        if is_numbered_columns:
+            # For numbered columns, get the first row which contains the actual headers
+            headers_row = next(csv_data)
+            # Create a mapping from numbered columns to actual header names
+            column_to_header = {str(i): headers_row[str(i)] for i in range(1, len(headers_row) + 1)}
+            actual_headers = list(column_to_header.values())
+            print("\nDetected numbered columns. Column to header mapping:")
+            print(column_to_header)
+        else:
+            # For regular headers, use them directly
+            actual_headers = headers
+            column_to_header = {header: header for header in headers}
+            print("\nDetected regular headers:")
+            print(actual_headers)
+        
         # Create a prompt to map headers
         prompt = f"""Map the following CSV headers to our database fields. Return a JSON object where keys are the CSV headers and values are the corresponding database field names.
+The mapping should be case-insensitive and handle special characters (like accents, hyphens).
 
-CSV Headers: {', '.join(headers)}
+CSV Headers: {', '.join(actual_headers)}
 
 Database fields and their types:
 - name (text, required) - Should be constructed from First Name and Last Name if available
-- first_name (text, required) - should be first name if available. 
-- last_name (text, required) - should be last name if available
+- first_name (text, required) - should map from "First Name", "FirstName", "FIRST NAME" etc
+- last_name (text, required) - should map from "Last Name", "LastName", "LAST NAME" etc
 - email (text, required)
 - company (text) - Map from Company Name
 - phone_number (text, required) - Should map from phone_number, mobile, direct_phone, or office_phone
@@ -1680,14 +1731,16 @@ Database fields and their types:
 - seniority (text)
 
 Special handling instructions:
-1. Map "First Name" and "Last Name" to first_name and last_name respectively
-2. Map "Company Name" to company
-3. Map "phone_number" directly to phone_number field
-4. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
-5. Map "Industries" to industries (will be converted to array)
-6. Map "Technologies" to technologies (will be converted to array)
-7. Map "Company Founded Year" to company_founded_year (will be converted to integer)
-8. Map "Headcount" to headcount (will be converted to integer)
+1. Map "First Name", "FirstName", "FIRST NAME" etc to first_name
+2. Map "Last Name", "LastName", "LAST NAME" etc to last_name
+3. Map "Company Name", "CompanyName", "COMPANY NAME" etc to company
+4. Map "phone_number", "Phone Number", "PHONE NUMBER" etc directly to phone_number field
+5. Map "Mobile", "Direct", and "Office" to mobile, direct_phone, and office_phone respectively
+6. Map "Industries" to industries (will be converted to array)
+7. Map "Technologies" to technologies (will be converted to array)
+8. Map "Company Founded Year" to company_founded_year (will be converted to integer)
+9. Map "Headcount" to headcount (will be converted to integer)
+10. The mapping should be case-insensitive and handle special characters
 
 Return ONLY a valid JSON object mapping CSV headers to database field names. If a header doesn't map to any field, map it to null.
 Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_number": "phone_number", "Unmatched Header": null}}"""
@@ -1704,6 +1757,20 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         
         try:
             header_mapping = json.loads(response.choices[0].message.content.strip())
+            print("\nHeader mapping results:")
+            print(header_mapping)
+            
+            if is_numbered_columns:
+                # For numbered columns, map from number to db field via header
+                column_to_db_field = {col: header_mapping.get(header, None) 
+                                    for col, header in column_to_header.items()}
+            else:
+                # For regular headers, map directly
+                column_to_db_field = header_mapping
+                
+            print("\nColumn to database field mapping:")
+            print(column_to_db_field)
+            
         except json.JSONDecodeError:
             await update_task_status(task_id, "failed", "Failed to parse header mapping")
             return
@@ -1712,11 +1779,16 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         for row in csv_data:
             lead_data = {}
             
-            # Map CSV data to database fields using the header mapping
-            for csv_header, db_field in header_mapping.items():
-                if db_field and csv_header in row:
-                    value = row[csv_header].strip() if row[csv_header] else None
+            # Debug print raw row data
+            print("\nProcessing row:")
+            print(row)
+            
+            # Map CSV data to database fields using the column mapping
+            for col, db_field in column_to_db_field.items():
+                if db_field and col in row:
+                    value = row[col].strip() if row[col] else None
                     if value:
+                        print(f"Mapping column {col} ({column_to_header[col]}) -> {db_field}: {value}")
                         # Handle special cases
                         if db_field == "industries":
                             lead_data[db_field] = [ind.strip() for ind in value.split(",")]
@@ -2094,7 +2166,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         logger.error(f"Failed to generate email content: {str(e)}")
         return None
 
-async def run_email_campaign(campaign: dict, company: dict):
+async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle email campaign processing"""
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
@@ -2131,6 +2203,13 @@ async def run_email_campaign(campaign: dict, company: dict):
         leads = await get_leads_with_email(campaign['id'])
         logger.info(f"Found {len(leads)} leads with emails")
 
+        # Update campaign run with status running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+
+        leads_processed = 0
         for lead in leads:
             try:
                 if lead.get('email'):  # Only send if lead has email
@@ -2157,7 +2236,8 @@ async def run_email_campaign(campaign: dict, company: dict):
                             email_log = await create_email_log(
                                 campaign_id=campaign['id'],
                                 lead_id=lead['id'],
-                                sent_at=datetime.now(timezone.utc)
+                                sent_at=datetime.now(timezone.utc),
+                                campaign_run_id=campaign_run_id
                             )
                             logger.info(f"Created email_log with id: {email_log['id']}")
 
@@ -2188,14 +2268,27 @@ async def run_email_campaign(campaign: dict, company: dict):
                                     to_email=lead['email']
                                 )
                                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=leads_processed + 1
+                            )
+                            leads_processed += 1
                         except Exception as e:
                             logger.error(f"Error creating email logs: {str(e)}")
                             continue
             except Exception as e:
                 logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
                 continue
+        
+        # Update campaign run with status completed
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="completed"
+        )
 
-async def run_company_campaign(campaign_id: UUID):
+async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""
     logger.info(f"Starting to run campaign_id: {campaign_id}")
     
@@ -2214,21 +2307,28 @@ async def run_company_campaign(campaign_id: UUID):
         
         # Process campaign based on type
         if campaign['type'] == 'email':
-            await run_email_campaign(campaign, company)
+            await run_email_campaign(campaign, company, campaign_run_id)
         elif campaign['type'] == 'call':
-            await run_call_campaign(campaign, company)
+            await run_call_campaign(campaign, company, campaign_run_id)
             
     except Exception as e:
         logger.error(f"Unexpected error in run_company_campaign: {str(e)}")
         return
 
-async def run_call_campaign(campaign: dict, company: dict):
+async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle call campaign processing"""
     
     # Get all leads having phone number
     leads = await get_leads_with_phone(company['id'])
     logger.info(f"Found {len(leads)} leads with phone number")
 
+    # Update campaign run with status running
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="running"
+    )
+
+    leads_processed = 0
     for lead in leads:
         try:
             if lead.get('phone_number'):  # Only send if lead has phone number, just a safety check here as well
@@ -2243,25 +2343,27 @@ async def run_call_campaign(campaign: dict, company: dict):
                     logger.info(f"Call Script: {call_script}")
 
                     if call_script:
-                        # Create call record and initiate call
-                        call = await create_call(
-                            lead_id=lead['id'],
-                            product_id=campaign['product_id'],
-                            campaign_id=campaign['id'],
-                            script=call_script
+                        # Initiate call with Bland AI
+                        await initiate_call(campaign, lead, call_script, campaign_run_id)
+
+                        # Update campaign run progress
+                        await update_campaign_run_progress(
+                            campaign_run_id=campaign_run_id,
+                            leads_processed=leads_processed + 1
                         )
-                        
-                        if call:
-                            # Initiate call with Bland AI
-                            await initiate_call(campaign, lead, call_script)
-                        else:
-                            logger.error(f"Failed to create call record for lead: {lead['phone_number']}")
+                        leads_processed += 1
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 
         except Exception as e:
             logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
             continue
+    
+    # Update campaign run with status completed
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="completed"
+    )
 
 async def generate_call_script(lead: dict, campaign: dict, company: dict, insights: str) -> str:
     """
@@ -3085,3 +3187,31 @@ async def delete_all_product_icps(
             status_code=500,
             detail=f"Failed to delete ICPs: {str(e)}"
         )
+
+@app.get("/api/companies/{company_id}/campaign-runs", response_model=List[CampaignRunResponse], tags=["Campaigns & Emails"])
+async def get_company_campaign_runs(
+    company_id: UUID,
+    campaign_id: Optional[UUID] = Query(None, description="Filter runs by campaign ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all campaign runs for a company, optionally filtered by campaign ID.
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # If campaign_id is provided, validate it belongs to the company
+    if campaign_id:
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign or str(campaign["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get campaign runs for the specific campaign
+        campaign_runs = await get_campaign_runs(company_id, campaign_id)
+    else:
+        # Get all campaigns for the company
+        campaign_runs = await get_campaign_runs(company_id)
+    
+    return campaign_runs

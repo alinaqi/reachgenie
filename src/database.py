@@ -104,16 +104,45 @@ async def create_lead(company_id: UUID, lead_data: dict):
         print(f"\nError in create_lead: {str(e)}")
         raise e
 
-async def get_leads_by_company(company_id: UUID):
-    response = supabase.table('leads').select('*').eq('company_id', str(company_id)).execute()
-    return response.data
+async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: int = 20, search_term: Optional[str] = None):
+    # Build base query
+    base_query = supabase.table('leads').select('*', count='exact').eq('company_id', str(company_id))
+    
+    # Add search filter if search_term is provided
+    if search_term:
+        pattern = f"%{search_term}%"
+        base_query = base_query.or_(
+            f"name.ilike.{pattern},"
+            f"email.ilike.{pattern},"
+            f"company.ilike.{pattern},"
+            f"job_title.ilike.{pattern}"
+        )
+    
+    # Get total count with search filter
+    count_response = base_query.execute()
+    total = count_response.count if count_response.count is not None else 0
 
-async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None):
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data with the same filters
+    response = base_query.range(offset, offset + limit - 1).execute()
+    
+    return {
+        'items': response.data,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }
+
+async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None, campaign_run_id: Optional[UUID] = None):
     call_data = {
         'lead_id': str(lead_id),
         'product_id': str(product_id),
         'campaign_id': str(campaign_id),
-        'script': script
+        'script': script,
+        'campaign_run_id': str(campaign_run_id)
     }
     response = supabase.table('calls').insert(call_data).execute()
     return response.data[0]
@@ -249,7 +278,7 @@ async def get_calls_by_companies(company_ids: List[str]):
     
     return unique_calls 
 
-async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None):
+async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
     # Get calls with their related data using a join with campaigns
     query = supabase.table('calls').select(
         'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,created_at,campaign_id,leads(*),campaigns!inner(*)'
@@ -258,6 +287,14 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     # Add campaign filter if provided
     if campaign_id:
         query = query.eq('campaign_id', str(campaign_id))
+    
+    # Add campaign run filter if provided
+    if campaign_run_id:
+        query = query.eq('campaign_run_id', str(campaign_run_id))
+    
+    # Add lead filter if provided
+    if lead_id:
+        query = query.eq('lead_id', str(lead_id))
     
     # Execute query with ordering
     response = query.order('created_at', desc=True).execute()
@@ -307,11 +344,12 @@ async def get_campaign_by_id(campaign_id: UUID):
     response = supabase.table('campaigns').select('*').eq('id', str(campaign_id)).execute()
     return response.data[0] if response.data else None
 
-async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime):
+async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, campaign_run_id: UUID):
     log_data = {
         'campaign_id': str(campaign_id),
         'lead_id': str(lead_id),
-        'sent_at': sent_at.isoformat()
+        'sent_at': sent_at.isoformat(),
+        'campaign_run_id': str(campaign_run_id)
     }
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
@@ -709,7 +747,7 @@ async def get_user_by_id(user_id: UUID):
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None):
     """
     Get email logs for a company, optionally filtered by campaign_id and/or lead_id
     
@@ -734,6 +772,9 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     
     if lead_id:
         query = query.eq('lead_id', str(lead_id))
+    
+    if campaign_run_id:
+        query = query.eq('campaign_run_id', str(campaign_run_id))
     
     response = query.execute()
     return response.data
@@ -1393,3 +1434,122 @@ async def get_lead_communication_history(lead_id: UUID):
         'email_history': email_history,
         'call_history': call_history
     }
+
+async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0, leads_processed: int = 0):
+    """
+    Create a new campaign run record
+    
+    Args:
+        campaign_id: UUID of the campaign
+        status: Status of the run ('idle', 'running', 'completed')
+        leads_total: Total number of leads available for this run
+        leads_processed: Number of leads processed so far (defaults to 0)
+        
+    Returns:
+        Dict containing the created campaign run record
+    """
+    try:
+        campaign_run_data = {
+            'campaign_id': str(campaign_id),
+            'status': status,
+            'leads_total': leads_total,
+            'leads_processed': leads_processed,
+            'run_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        response = supabase.table('campaign_runs').insert(campaign_run_data).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to create campaign run for campaign {campaign_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating campaign run: {str(e)}")
+        return None
+
+async def update_campaign_run_status(campaign_run_id: UUID, status: str):
+    """
+    Update the status of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        status: New status ('idle', 'running', 'completed')
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        if status not in ['idle', 'running', 'completed']:
+            logger.error(f"Invalid campaign run status: {status}")
+            return None
+            
+        response = supabase.table('campaign_runs').update({
+            'status': status
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update status for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run status: {str(e)}")
+        return None
+
+async def update_campaign_run_progress(campaign_run_id: UUID, leads_processed: int):
+    """
+    Update the progress (leads_processed) of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        leads_processed: Number of leads processed so far
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        response = supabase.table('campaign_runs').update({
+            'leads_processed': leads_processed
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update progress for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run progress: {str(e)}")
+        return None
+
+async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+    """
+    Get campaign runs for a company, optionally filtered by campaign_id.
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter runs by
+        
+    Returns:
+        List of campaign run records including campaign name
+    """
+    try:
+        if campaign_id:
+            # If campaign_id is provided, directly filter campaign_runs and join with campaigns for the name
+            query = supabase.table('campaign_runs').select(
+                '*,campaigns!inner(name,type)'
+            ).eq('campaign_id', str(campaign_id))
+        else:
+            # If only company_id is provided, join with campaigns to get all runs for the company
+            query = supabase.table('campaign_runs').select(
+                '*,campaigns!inner(name,type,company_id)'
+            ).eq('campaigns.company_id', str(company_id))
+            
+        # Execute query and sort by run_at in descending order
+        response = query.order('run_at', desc=True).execute()
+        logger.info(f"Campaign runs: {response.data}")
+        return response.data if response.data else []
+        
+    except Exception as e:
+        logger.error(f"Error fetching campaign runs: {str(e)}")
+        return []
