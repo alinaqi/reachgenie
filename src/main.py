@@ -83,7 +83,14 @@ from src.database import (
     update_email_log_has_opened,
     update_lead_enrichment, update_campaign_run_status,get_leads_with_email,get_leads_with_phone,create_campaign_run, get_campaign_by_id,
     get_user_company_profile,
-    update_company_account_credentials
+    update_company_account_credentials,
+    add_email_to_queue,
+    get_email_throttle_settings,
+    update_email_throttle_settings,
+    get_emails_sent_count,
+    get_pending_emails_count,
+    get_running_campaign_runs,
+    update_queue_item_status
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -98,7 +105,8 @@ from src.models import (
     CampaignGenerationRequest, CampaignGenerationResponse, LeadsUploadResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
-    CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest
+    CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
+    EmailThrottleSettings
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -2247,173 +2255,73 @@ async def reset_password_endpoint(request: ResetPasswordRequest):
     return await reset_password(reset_token=request.token, new_password=request.new_password)
 
 async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
-    """Handle email campaign processing"""
+    """Handle email campaign processing by queuing emails instead of sending immediately"""
+    # Validate company settings
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
         return
             
     if not company.get("account_type"):
         logger.error(f"Company {campaign['company_id']} missing email provider type")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
         return
             
     if not company.get("name"):
         logger.error(f"Company {campaign['company_id']} missing company name")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
         return    
     
     # Get campaign template
     template = campaign.get('template')
     if not template:
         logger.error(f"Campaign {campaign['id']} missing email template")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
         return
     
-    # Decrypt the password
-    try:
-        decrypted_password = decrypt_password(company["account_password"])
-    except Exception as e:
-        logger.error(f"Failed to decrypt email password: {str(e)}")
-        return
+    # Get all leads having email addresses
+    leads = await get_leads_with_email(campaign['id'])
+    logger.info(f"Found {len(leads)} leads with emails for campaign {campaign['id']}")
+
+    # Update campaign run with status running
+    await update_campaign_run_status(
+        campaign_run_id=campaign_run_id,
+        status="running"
+    )
     
-    # Initialize SMTP client            
-    async with SMTPClient(
-        account_email=company["account_email"],
-        account_password=decrypted_password,
-        provider=company["account_type"]
-    ) as smtp_client:
-        # Get all leads having email add
-        leads = await get_leads_with_email(campaign['id'])
-        logger.info(f"Found {len(leads)} leads with emails")
+    # Set total leads count for the campaign run
+    await update_campaign_run_progress(
+        campaign_run_id=campaign_run_id,
+        leads_processed=0,
+        leads_total=len(leads)
+    )
 
-        # Update campaign run with status running
-        await update_campaign_run_status(
-            campaign_run_id=campaign_run_id,
-            status="running"
-        )
-
-        leads_processed = 0
-        for lead in leads:
-            try:
-                if lead.get('email'):  # Only send if lead has email
-                    logger.info(f"Processing email for lead: {lead['email']}")
-                    
-                    # Check if lead already has enriched data
-                    insights = None
-                    if lead.get('enriched_data'):
-                        logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
-                        # We have enriched data, use it directly
-                        if isinstance(lead['enriched_data'], str):
-                            try:
-                                enriched_data = json.loads(lead['enriched_data'])
-                                insights = json.dumps(enriched_data)
-                            except json.JSONDecodeError:
-                                insights = lead['enriched_data']
-                        else:
-                            insights = json.dumps(lead['enriched_data'])
-                    
-                    # Generate company insights if we don't have any
-                    if not insights:
-                        logger.info(f"Generating new insights for lead: {lead['email']}")
-                        insights = await generate_company_insights(lead, perplexity_service)
-                        
-                        # Save the insights to the lead's enriched_data if we generated new ones
-                        if insights:
-                            try:
-                                # Parse the insights JSON if it's a string
-                                enriched_data = {}
-                                if isinstance(insights, str):
-                                    # Try to extract JSON from the string response
-                                    insights_str = insights.strip()
-                                    # Check if the response is already in JSON format
-                                    try:
-                                        enriched_data = json.loads(insights_str)
-                                    except json.JSONDecodeError:
-                                        # If not, look for JSON within the string (common with LLM responses)
-                                        import re
-                                        json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                        if json_match:
-                                            potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                            enriched_data = json.loads(potential_json)
-                                        else:
-                                            # If we can't extract structured JSON, store as raw text
-                                            enriched_data = {"raw_insights": insights_str}
-                                else:
-                                    enriched_data = insights
-                                
-                                # Update the lead with enriched data
-                                await update_lead_enrichment(lead['id'], enriched_data)
-                                logger.info(f"Updated lead {lead['email']} with new enriched data")
-                            except Exception as e:
-                                logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
-                    
-                    if insights:
-                        logger.info(f"Using insights for lead: {lead['email']}")
-                        
-                        # Generate personalized email content
-                        subject, body = await generate_email_content(lead, campaign, company, insights)
-                        logger.info(f"Generated email content for lead: {lead['email']}")
-                        logger.info(f"Email Subject: {subject}")
-                        logger.info(f"Email Body: {body}")
-
-                        # Replace {email_body} placeholder in template with generated body
-                        final_body = template.replace("{email_body}", body)
-                        body_without_tracking_pixel = final_body
-                    
-                        # Send email using SMTP client
-                        try:
-                            # Create email log first to get the ID for reply-to
-                            email_log = await create_email_log(
-                                campaign_id=campaign['id'],
-                                lead_id=lead['id'],
-                                sent_at=datetime.now(timezone.utc),
-                                campaign_run_id=campaign_run_id
-                            )
-                            logger.info(f"Created email_log with id: {email_log['id']}")
-
-                            # Add tracking pixel to the email body
-                            final_body_with_tracking = add_tracking_pixel(final_body, email_log['id'])
-                            
-                            # Send email with reply-to header
-                            await smtp_client.send_email(
-                                to_email=lead['email'],
-                                subject=subject,  # Use generated subject
-                                html_content=final_body_with_tracking,  # Use template with generated body and tracking pixel
-                                from_name=company["name"],
-                                email_log_id=email_log['id']
-                            )
-                            logger.info(f"Successfully sent email to {lead['email']}")
-                            
-                            # Create email log detail
-                            if email_log:
-                                await create_email_log_detail(
-                                    email_logs_id=email_log['id'],
-                                    message_id=None,
-                                    email_subject=subject,  # Use generated subject
-                                    email_body=body_without_tracking_pixel,  # Use template with generated body without tracking pixel
-                                    sender_type='assistant',
-                                    sent_at=datetime.now(timezone.utc),
-                                    from_name=company['name'],
-                                    from_email=company['account_email'],
-                                    to_email=lead['email']
-                                )
-                                logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-
-                            # Update campaign run progress
-                            await update_campaign_run_progress(
-                                campaign_run_id=campaign_run_id,
-                                leads_processed=leads_processed + 1
-                            )
-                            leads_processed += 1
-                        except Exception as e:
-                            logger.error(f"Error creating email logs: {str(e)}")
-                            continue
-            except Exception as e:
-                logger.error(f"Failed to process email for {lead.get('email')}: {str(e)}")
-                continue
-        
-        # Update campaign run with status completed
-        await update_campaign_run_status(
-            campaign_run_id=campaign_run_id,
-            status="completed"
-        )
+    # Queue emails for each lead instead of sending immediately
+    leads_queued = 0
+    for lead in leads:
+        try:
+            if lead.get('email'):  # Only queue if lead has email
+                logger.info(f"Queueing email for lead: {lead['email']}")
+                
+                # Add to queue
+                await add_email_to_queue(
+                    company_id=campaign['company_id'],
+                    campaign_id=campaign['id'],
+                    campaign_run_id=campaign_run_id,
+                    lead_id=lead['id']
+                )
+                leads_queued += 1
+                logger.info(f"Email for lead {lead['email']} added to queue")
+            else:
+                logger.warning(f"Skipping lead with no email: {lead.get('id')}")
+        except Exception as e:
+            logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
+            continue
+    
+    logger.info(f"Queued {leads_queued} emails for campaign {campaign['id']}")
+    
+    # Note: We don't mark the campaign as completed here
+    # It will be done by the queue processor when all emails have been processed
 
 async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""
@@ -3633,6 +3541,60 @@ async def get_lead_email_script(
             "body": body
         }
     }
+
+@app.get("/api/companies/{company_id}/email-throttle", response_model=EmailThrottleSettings, tags=["Campaigns & Emails"])
+async def get_company_email_throttle(
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get email throttle settings for a company.
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        Email throttle settings for the company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Get throttle settings
+    settings = await get_email_throttle_settings(company_id)
+    return settings
+
+@app.put("/api/companies/{company_id}/email-throttle", response_model=EmailThrottleSettings, tags=["Campaigns & Emails"])
+async def update_company_email_throttle(
+    company_id: UUID,
+    throttle_settings: EmailThrottleSettings,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update email throttle settings for a company.
+    
+    Args:
+        company_id: UUID of the company
+        throttle_settings: New throttle settings
+        
+    Returns:
+        Updated throttle settings
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Update throttle settings
+    updated_settings = await update_email_throttle_settings(
+        company_id=company_id,
+        max_emails_per_hour=throttle_settings.max_emails_per_hour,
+        max_emails_per_day=throttle_settings.max_emails_per_day,
+        enabled=throttle_settings.enabled
+    )
+    
+    return updated_settings
 
 # Helper function to process lead data for response
 def process_lead_data_for_response(lead: dict):
