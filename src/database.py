@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any, Tuple
 import uuid
 import logging
+import math
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -1976,3 +1977,235 @@ async def get_running_campaign_runs(company_id: UUID) -> List[dict]:
     except Exception as e:
         logger.error(f"Error getting running campaign runs: {str(e)}")
         return []
+
+# Do Not Email List Functions
+async def add_to_do_not_email_list(email: str, reason: str, company_id: Optional[UUID] = None) -> Dict:
+    """
+    Add an email to the do_not_email list
+    
+    Args:
+        email: The email address to add
+        reason: Reason for adding to the list (bounce, unsubscribe, complaint, etc.)
+        company_id: Optional company ID if specific to a company
+        
+    Returns:
+        Dict with success status
+    """
+    email = email.lower().strip()  # Normalize email
+    
+    try:
+        query = """
+            INSERT INTO do_not_email (email, reason, company_id, created_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (email) 
+            DO UPDATE SET 
+                reason = $2,
+                updated_at = $4
+            RETURNING id;
+        """
+        
+        values = [
+            email, 
+            reason, 
+            company_id, 
+            datetime.now(timezone.utc)
+        ]
+        
+        result = await supabase.rpc(query, params=values)
+        
+        return {"success": True, "email": email}
+    except Exception as e:
+        logger.error(f"Error adding email to do_not_email list: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+async def is_email_in_do_not_email_list(email: str, company_id: Optional[UUID] = None) -> bool:
+    """
+    Check if an email is in the do_not_email list
+    
+    Args:
+        email: Email address to check
+        company_id: Optional company ID to check company-specific exclusions
+        
+    Returns:
+        Boolean indicating if email should not be contacted
+    """
+    email = email.lower().strip()  # Normalize email
+    
+    try:
+        # First check global do_not_email entries (no company_id)
+        query = """
+            SELECT id FROM do_not_email 
+            WHERE email = $1 AND company_id IS NULL
+            LIMIT 1;
+        """
+        
+        result = await supabase.rpc(query, params=[email])
+        
+        if result and len(result) > 0:
+            return True
+            
+        # If company_id provided, also check company-specific exclusions
+        if company_id:
+            query = """
+                SELECT id FROM do_not_email 
+                WHERE email = $1 AND company_id = $2
+                LIMIT 1;
+            """
+            
+            result = await supabase.rpc(query, params=[email, str(company_id)])
+            
+            if result and len(result) > 0:
+                return True
+                
+        return False
+    except Exception as e:
+        logger.error(f"Error checking do_not_email list: {str(e)}")
+        # If error occurs, assume safe approach and return True
+        return True
+
+async def get_do_not_email_list(company_id: Optional[UUID] = None, 
+                               page: int = 1, 
+                               limit: int = 50) -> Dict:
+    """
+    Get entries from the do_not_email list with pagination
+    
+    Args:
+        company_id: Optional company ID to filter by
+        page: Page number (1-indexed)
+        limit: Number of results per page
+        
+    Returns:
+        Dict with results and pagination info
+    """
+    offset = (page - 1) * limit
+    
+    try:
+        # Prepare WHERE clause based on company_id
+        where_clause = "WHERE company_id IS NULL" if company_id is None else f"WHERE company_id = '{company_id}' OR company_id IS NULL"
+        
+        # Count total entries
+        count_query = f"""
+            SELECT COUNT(*) as total
+            FROM do_not_email
+            {where_clause};
+        """
+        
+        count_result = await supabase.rpc(count_query)
+        total = count_result[0]['total'] if count_result else 0
+        
+        # Fetch paginated results
+        query = f"""
+            SELECT id, email, reason, company_id, created_at, updated_at
+            FROM do_not_email
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT {limit} OFFSET {offset};
+        """
+        
+        results = await supabase.rpc(query)
+        
+        return {
+            "data": results,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "total_pages": math.ceil(total / limit)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting do_not_email list: {str(e)}")
+        return {"data": [], "pagination": {"total": 0, "page": page, "limit": limit, "total_pages": 0}}
+
+async def remove_from_do_not_email_list(email: str, company_id: Optional[UUID] = None) -> Dict:
+    """
+    Remove an email from the do_not_email list
+    
+    Args:
+        email: Email address to remove
+        company_id: Optional company ID if removing from company-specific list
+        
+    Returns:
+        Dict with success status
+    """
+    email = email.lower().strip()  # Normalize email
+    
+    try:
+        # Prepare WHERE clause based on company_id
+        where_clause = "email = $1" if company_id is None else "email = $1 AND company_id = $2"
+        params = [email] if company_id is None else [email, str(company_id)]
+        
+        query = f"""
+            DELETE FROM do_not_email
+            WHERE {where_clause}
+            RETURNING id;
+        """
+        
+        result = await supabase.rpc(query, params=params)
+        
+        return {"success": True, "email": email}
+    except Exception as e:
+        logger.error(f"Error removing email from do_not_email list: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+async def update_last_processed_bounce_uid(company_id: UUID, uid: str) -> bool:
+    """
+    Update the last processed bounce UID for a company
+    
+    Args:
+        company_id: UUID of the company
+        uid: The UID of the last processed bounce email
+        
+    Returns:
+        Boolean indicating success or failure
+    """
+    try:
+        query = """
+            UPDATE companies
+            SET last_processed_bounce_uid = $1, updated_at = $2
+            WHERE id = $3
+            RETURNING id;
+        """
+        
+        values = [uid, datetime.now(timezone.utc), str(company_id)]
+        
+        result = await supabase.rpc(query, params=values)
+        
+        if result and len(result) > 0:
+            logger.info(f"Updated last_processed_bounce_uid to {uid} for company {company_id}")
+            return True
+        else:
+            logger.error(f"Failed to update last_processed_bounce_uid for company {company_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error updating last_processed_bounce_uid: {str(e)}")
+        return False
+
+async def get_email_log_by_message_id(message_id: str) -> Optional[Dict]:
+    """
+    Get email log by message ID
+    
+    Args:
+        message_id: The message ID to look up
+        
+    Returns:
+        Email log record if found, None otherwise
+    """
+    try:
+        query = """
+            SELECT * FROM email_logs
+            WHERE message_id = $1
+            LIMIT 1;
+        """
+        
+        result = await supabase.rpc(query, params=[message_id])
+        
+        if result and len(result) > 0:
+            return result[0]
+        else:
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error getting email log by message ID: {str(e)}")
+        return None

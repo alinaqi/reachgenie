@@ -106,7 +106,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings
+    EmailThrottleSettings, DoNotEmailRequest, DoNotEmailResponse, DoNotEmailListResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -3642,3 +3642,98 @@ def process_lead_data_for_response(lead: dict):
             lead["enriched_data"] = None
     
     return lead
+
+# Do Not Email List Endpoints
+@app.get("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailListResponse, tags=["Email Management"])
+async def get_do_not_email_list_endpoint(
+    company_id: UUID,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get Do Not Email list for a company
+    """
+    # Validate company access
+    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
+    if not user_company_profile:
+        raise HTTPException(status_code=403, detail="You don't have access to this company")
+    
+    result = await get_do_not_email_list(
+        company_id=company_id,
+        page=page,
+        limit=limit
+    )
+    
+    return result
+
+@app.post("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailResponse, tags=["Email Management"])
+async def add_to_do_not_email_list_endpoint(
+    company_id: UUID,
+    request: DoNotEmailRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Add an email to the Do Not Email list
+    """
+    # Validate company access
+    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
+    if not user_company_profile:
+        raise HTTPException(status_code=403, detail="You don't have access to this company")
+    
+    result = await add_to_do_not_email_list(
+        email=request.email,
+        reason=request.reason,
+        company_id=company_id
+    )
+    
+    if result["success"]:
+        return {"success": True, "message": f"Added {request.email} to Do Not Email list"}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to add to Do Not Email list: {result.get('error')}")
+
+@app.delete("/api/companies/{company_id}/do-not-email/{email}", response_model=DoNotEmailResponse, tags=["Email Management"])
+async def remove_from_do_not_email_list_endpoint(
+    company_id: UUID,
+    email: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Remove an email from the Do Not Email list
+    """
+    # Validate company access
+    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
+    if not user_company_profile:
+        raise HTTPException(status_code=403, detail="You don't have access to this company")
+    
+    result = await remove_from_do_not_email_list(
+        email=email,
+        company_id=company_id
+    )
+    
+    if result["success"]:
+        return {"success": True, "message": f"Removed {email} from Do Not Email list"}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to remove from Do Not Email list: {result.get('error')}")
+
+@app.get("/api/do-not-email/check", tags=["Email Management"])
+async def check_do_not_email_status(
+    email: str = Query(..., description="Email address to check"),
+    company_id: Optional[UUID] = Query(None, description="Optional company ID to check company-specific exclusions"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Check if an email is in the Do Not Email list
+    """
+    if company_id:
+        # Validate company access if company_id is provided
+        user_company_profile = await get_user_company_profile(current_user['id'], company_id)
+        if not user_company_profile:
+            raise HTTPException(status_code=403, detail="You don't have access to this company")
+    
+    is_excluded = await is_email_in_do_not_email_list(
+        email=email,
+        company_id=company_id
+    )
+    
+    return {"email": email, "is_excluded": is_excluded}

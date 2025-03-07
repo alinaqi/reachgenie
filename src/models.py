@@ -788,4 +788,31 @@ class EmailThrottleSettings(BaseModel):
                 "enabled": True
             }
         }
+
+# Do Not Email Models
+class DoNotEmailRequest(BaseModel):
+    email: EmailStr
+    reason: str
+
+class DoNotEmailResponse(BaseModel):
+    success: bool
+    message: str
+
+class DoNotEmailEntry(BaseModel):
+    id: UUID
+    email: str
+    reason: str
+    company_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+class PaginationInfo(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+class DoNotEmailListResponse(BaseModel):
+    data: List[DoNotEmailEntry]
+    pagination: PaginationInfo
  

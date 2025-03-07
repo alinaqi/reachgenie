@@ -19,7 +19,12 @@ from src.database import (
     update_campaign_run_status,
     update_campaign_run_progress,
     create_email_log,
-    create_email_log_detail
+    create_email_log_detail,
+    get_email_queue_items,
+    get_product_by_id,
+    is_email_in_do_not_email_list,
+    add_to_do_not_email_list,
+    get_throttle_settings
 )
 from src.services.email_generation import generate_company_insights, generate_email_content
 from src.utils.smtp_client import SMTPClient
@@ -173,6 +178,17 @@ async def process_queued_email(queue_item: dict, company: dict):
                 status='failed',
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign missing email template"
+            )
+            return
+        
+        # Check if email is in do_not_email list before proceeding
+        if await is_email_in_do_not_email_list(lead['email'], UUID(company['id'])):
+            logger.warning(f"Email {lead['email']} is in do_not_email list, skipping")
+            await update_queue_item_status(
+                queue_id=UUID(queue_item['id']),
+                status='skipped',
+                processed_at=datetime.now(timezone.utc),
+                error_message=f"Email {lead['email']} is in do_not_email list"
             )
             return
         
