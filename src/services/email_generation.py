@@ -109,20 +109,39 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Company Contact Person: {company.get('account_email').split('@')[0]}
 
         Create two pieces of content:
-        1. Email Subject: Compelling subject line mentioning our product and key benefits
-        2. Email Content: Professional HTML email highlighting specific benefits for their business
+        1. Email Subject: Compelling subject line mentioning our product and key benefits. Key guidelines for subject:
+        - Keep it short (4-7 words, 40-60 characters)
+        - Create curiosity without being clickbait
+        - Include personalization when possible (name, company)
+        - Align with the email content (don't mislead)
+        - Use lowercase for a more personal feel
+        - Avoid spam trigger words and excessive punctuation
+        Examples:
+        - "Intro from [mutual connection]"
+        - "Your [specific detail] caught my attention"
+        - "Quick idea for [specific pain point]"
+        - "Question about [relevant topic]"
+        - "Impressed by [something they did]"
+        - "Following up on [recent event/news]"
+        2. Email Content: Professional HTML email highlighting specific benefits for their business. Key guidelines for the email content: 
+        - Personalization: Something that makes the email feel 1:1 and not mass-sent
+        - Strong claim: A compelling statement about the value you provide
+        - Evidence: Proof points that back up your claim
+        - Clear next step: A specific action for the recipient to take
+        - Brevity: Keep it under 200 words to respect their time
 
         Important Instructions for Email Content:
         - Use a professional tone
         - Focus on value proposition
-        - Include a clear call to action
+        - Include a clear call to action to the landing page of the product
         - End with a professional signature using the company url and contact person as provided above
         - DO NOT use placeholders like 'Your Name' or 'Your Position'
         - Use the Company Contact Person and Company URL in the signature
         - Format the signature as:
-          Best regards,
+          Best wishes,
           [Company Contact Person]
           [Company URL]
+        - IMPORTANT: In all urls, use utm_source=reachgenie
         {f'''
         - Use the detailed product information to craft a more compelling message
         - Incorporate the key value propositions that align with the lead's needs
