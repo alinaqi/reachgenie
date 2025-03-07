@@ -54,6 +54,16 @@ class BlandClient:
         if request_data:
             call_request_data.update(request_data)
 
+        # Log the secret key status for debugging
+        if self.bland_secret_key:
+            logger.info(f"Using Bland secret key: {self.bland_secret_key[:5]}...")
+        else:
+            logger.error("Bland secret key is None - check your .env configuration")
+            # Default to the API key as a fallback - they are often the same for Bland
+            self.bland_secret_key = self.api_key
+            call_request_data["bland_secret_key"] = self.api_key
+            logger.info("Using API key as a fallback for secret key")
+            
         # Add company voice agent settings if available
         voice = "Florian"
         language = "en"
@@ -90,6 +100,10 @@ class BlandClient:
         logger.info(f"Final script: {final_script}")
 
         async with httpx.AsyncClient() as client:
+            # Check if bland_tool_id exists before creating the payload
+            if not self.bland_tool_id:
+                logger.error("Bland tool ID is None - check your .env configuration")
+            
             # Prepare the request payload
             payload = {
                 "phone_number": phone_number,
@@ -99,7 +113,7 @@ class BlandClient:
                 "background_track": background_track,
                 "temperature": temperature,
                 "model": "enhanced",
-                "tools": [self.bland_tool_id],
+                "tools": [self.bland_tool_id] if self.bland_tool_id else [],  # Only add if it exists
                 "request_data": call_request_data,
                 "webhook": f"{self.webhook_base_url}/api/calls/webhook",
                 "analysis_prompt": analysis_prompt,
@@ -109,6 +123,17 @@ class BlandClient:
                 },
                 "record": record  # Include record parameter with default value True
             }
+                
+            # Final verification of the request_data
+            if not payload["request_data"].get("bland_secret_key"):
+                logger.warning("bland_secret_key still missing in request_data, adding it directly")
+                payload["request_data"]["bland_secret_key"] = self.bland_secret_key
+            
+            # Log the final payload structure (without sensitive values)
+            payload_log = payload.copy()
+            if "request_data" in payload_log and "bland_secret_key" in payload_log["request_data"]:
+                payload_log["request_data"]["bland_secret_key"] = "[REDACTED]"
+            logger.info(f"Final API payload structure: {payload_log}")
             
             # Add optional parameters if they exist
             if transfer_phone_number:
@@ -120,19 +145,45 @@ class BlandClient:
             if custom_phone_number:
                 payload["from_number"] = custom_phone_number
                 
-            response = await client.post(
-                f"{self.base_url}/v1/calls",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
-            )
-            
-            if response.status_code != 200:
-                raise Exception(f"Bland API error: {response.text}")
+            try:
+                response = await client.post(
+                    f"{self.base_url}/v1/calls",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=payload,
+                    timeout=30.0  # Add 30 second timeout
+                )
                 
-            return response.json()
+                # Log detailed response information
+                logger.info(f"API response status code: {response.status_code}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"API call successful, call_id: {result.get('call_id', 'Not provided')}")
+                    return result
+                else:
+                    # Log the error response
+                    logger.error(f"Bland API error: {response.status_code}")
+                    try:
+                        error_detail = response.json()
+                        logger.error(f"Error details: {error_detail}")
+                    except Exception:
+                        logger.error(f"Raw error response: {response.text}")
+                    
+                    # Raise a more specific exception with detailed error information
+                    raise Exception(f"Bland API error: {response.status_code} - {response.text}")
+                
+            except httpx.RequestError as e:
+                # Handle network-related errors
+                logger.error(f"Network error when making Bland API call: {str(e)}")
+                raise Exception(f"Network error when making Bland API call: {str(e)}")
+                
+            except Exception as e:
+                # Handle general exceptions
+                logger.error(f"Error making Bland API call: {str(e)}")
+                raise
 
     async def create_book_appointment_tool(self) -> Dict:
         """

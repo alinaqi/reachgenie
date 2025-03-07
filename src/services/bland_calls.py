@@ -14,6 +14,19 @@ async def initiate_call(
 ):  
     # Initialize Bland client and start the call
     settings = get_settings()
+    
+    # Add debugging logs for Bland settings
+    logger.info(f"Initializing Bland client with API key: {settings.bland_api_key[:5]}...")
+    logger.info(f"Bland secret key exists: {bool(settings.bland_secret_key)}")
+    if settings.bland_secret_key:
+        logger.info(f"Bland secret key starts with: {settings.bland_secret_key[:5]}...")
+    
+    logger.info(f"Bland tool ID exists: {bool(settings.bland_tool_id)}")
+    if settings.bland_tool_id:
+        logger.info(f"Using Bland tool ID: {settings.bland_tool_id}")
+    else:
+        logger.error("Bland tool ID is missing in settings")
+    
     bland_client = BlandClient(
         api_key=settings.bland_api_key,
         base_url=settings.bland_api_url,
@@ -32,9 +45,28 @@ async def initiate_call(
         company = await get_company_by_id(campaign['company_id'])
         if not company:
             raise Exception("Company not found")
+        
+        # Log lead information
+        logger.info(f"Initiating call for lead: {lead.get('first_name', '')} {lead.get('last_name', '')}")
+        logger.info(f"Lead phone number: {lead.get('phone_number', 'Not provided')}")
+        
+        if not lead.get('phone_number'):
+            raise Exception("Lead is missing a phone number")
 
         # Create call record in database with script
-        call = await create_call(lead['id'], campaign['product_id'], campaign['id'], script=call_script, campaign_run_id=campaign_run_id)
+        try:
+            call = await create_call(
+                lead_id=lead['id'], 
+                product_id=campaign['product_id'], 
+                campaign_id=campaign['id'], 
+                script=call_script, 
+                campaign_run_id=campaign_run_id if campaign_run_id is not None else None
+            )
+            logger.info(f"Created call record with ID: {call['id']}")
+        except Exception as db_error:
+            logger.error(f"Error creating call record: {str(db_error)}")
+            logger.exception("Database error traceback:")
+            raise Exception(f"Failed to create call record: {str(db_error)}")
 
         # Prepare request data for the call
         request_data = {
@@ -43,6 +75,15 @@ async def initiate_call(
             "email_subject": f"'{product['product_name']}' Discovery Call – Exclusive Insights for You!",
             "call_log_id": str(call['id'])
         }
+        
+        # Add email if available
+        if lead.get('email'):
+            request_data["email"] = lead['email']
+            request_data["email_subject"] = f"'{product['product_name']}' Discovery Call – Exclusive Insights for You!"
+
+        # Log call details before making the API call
+        logger.info(f"Making call to {lead['phone_number']} for company {company['name']}")
+        logger.info(f"Call script length: {len(call_script)} characters")
 
         bland_response = await bland_client.start_call(
             phone_number=lead['phone_number'],
@@ -51,11 +92,26 @@ async def initiate_call(
             company=company
         )
         
-        logger.info(f"Bland Call ID: {bland_response['call_id']}")
+        logger.info(f"Bland Call ID: {bland_response.get('call_id', 'Not provided')}")
 
         # Update call record in database with bland_call_id
-        await update_call_details(call['id'], bland_response['call_id'])
+        if bland_response and bland_response.get('call_id'):
+            try:
+                db_update_result = await update_call_details(call['id'], bland_response['call_id'])
+                if db_update_result:
+                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']}")
+                else:
+                    logger.warning(f"Failed to update call record in database, but call was initiated. Call ID: {call['id']}, Bland Call ID: {bland_response['call_id']}")
+            except Exception as db_error:
+                # If database update fails, log the error but consider the call to be successful
+                logger.error(f"Error updating call record in database: {str(db_error)}")
+                logger.exception("Database update exception traceback:")
+                # The call was still successfully initiated, so we continue
+        else:
+            logger.warning(f"No call_id in Bland response: {bland_response}")
         
+        # Return the call record regardless of database update status
+        # The call was successfully initiated with Bland
         return call
         
     except Exception as e:

@@ -426,7 +426,6 @@ class LeadsUploadResponse(BaseModel):
 class CronofyAuthResponse(BaseModel):
     message: str
 
-# Lead response models
 class HiringPosition(BaseModel):
     title: str
     url: Optional[str]
@@ -442,6 +441,53 @@ class JobChange(BaseModel):
     previous: dict
     new: dict
     date: Optional[str]
+
+class CreateLeadRequest(BaseModel):
+    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    phone_number: Optional[str] = None
+    company_size: Optional[str] = None
+    job_title: Optional[str] = None
+    lead_source: Optional[str] = None
+    education: Optional[str] = None
+    personal_linkedin_url: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    mobile: Optional[str] = None
+    direct_phone: Optional[str] = None
+    office_phone: Optional[str] = None
+    hq_location: Optional[str] = None
+    website: Optional[str] = None
+    headcount: Optional[int] = None
+    industries: Optional[List[str]] = None
+    department: Optional[str] = None
+    sic_code: Optional[str] = None
+    isic_code: Optional[str] = None
+    naics_code: Optional[str] = None
+    company_address: Optional[str] = None
+    company_city: Optional[str] = None
+    company_zip: Optional[str] = None
+    company_state: Optional[str] = None
+    company_country: Optional[str] = None
+    company_hq_address: Optional[str] = None
+    company_hq_city: Optional[str] = None
+    company_hq_zip: Optional[str] = None
+    company_hq_state: Optional[str] = None
+    company_hq_country: Optional[str] = None
+    company_linkedin_url: Optional[str] = None
+    company_type: Optional[str] = None
+    company_description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    financials: Optional[Union[Dict[str, Any], str, int, float]] = None
+    company_founded_year: Optional[int] = None
+    seniority: Optional[str] = None
+    hiring_positions: Optional[List[Dict[str, Any]]] = None
+    location_move: Optional[Dict[str, Any]] = None
+    job_change: Optional[Dict[str, Any]] = None
 
 class LeadDetail(BaseModel):
     id: UUID
@@ -491,8 +537,9 @@ class LeadDetail(BaseModel):
     hiring_positions: Optional[List[HiringPosition]]
     location_move: Optional[LocationMove]
     job_change: Optional[JobChange]
+    enriched_data: Optional[Dict[str, Any]] = None
 
-    @validator('financials', pre=True)
+    @field_validator('financials')
     def validate_financials(cls, v):
         if v is None:
             return None
@@ -537,11 +584,11 @@ class LeadResponse(BaseModel):
                     "office_phone": "+1234567892",
                     "hq_location": "San Francisco, CA",
                     "website": "https://example.com",
-                    "headcount": 1500,
+                    "headcount": 3500,
                     "industries": ["Technology", "Software"],
                     "department": "Engineering",
                     "sic_code": "7371",
-                    "isic_code": "6201",
+                    "isic_code": "J6201",
                     "naics_code": "541511",
                     "company_address": "123 Main St",
                     "company_city": "San Francisco",
@@ -555,43 +602,16 @@ class LeadResponse(BaseModel):
                     "company_hq_country": "United States",
                     "company_linkedin_url": "https://linkedin.com/company/example",
                     "company_type": "Public",
-                    "company_description": "Leading software company",
-                    "technologies": ["Python", "React", "AWS"],
-                    "financials": {
-                        "revenue": "$100M-$500M",
-                        "funding": "$50M Series C"
-                    },
-                    "company_founded_year": 2010,
+                    "company_description": "Leading provider of software solutions",
+                    "technologies": ["React", "Python", "AWS"],
+                    "financials": {"revenue": "$500M", "funding": "$50M"},
+                    "company_founded_year": 2005,
                     "seniority": "Executive",
-                    "hiring_positions": [
-                        {
-                            "title": "Senior Engineer",
-                            "url": "https://example.com/jobs/123",
-                            "location": "San Francisco, CA",
-                            "date": "2024-01-01"
-                        }
-                    ],
-                    "location_move": {
-                        "from": {
-                            "country": "Canada",
-                            "state": "ON"
-                        },
-                        "to": {
-                            "country": "United States",
-                            "state": "CA"
-                        },
-                        "date": "2023-12-01"
-                    },
-                    "job_change": {
-                        "previous": {
-                            "company": "Previous Corp",
-                            "title": "Engineering Manager"
-                        },
-                        "new": {
-                            "company": "Example Corp",
-                            "title": "CTO"
-                        },
-                        "date": "2024-01-01"
+                    "enriched_data": {
+                        "pain_points": ["Legacy system migration", "Security compliance", "Scaling challenges"],
+                        "needs": ["Cloud migration", "DevOps automation", "Security enhancement"],
+                        "motivations": ["Increasing developer productivity", "Reducing operational costs", "Improving security posture"],
+                        "decision_factors": ["Performance", "Reliability", "Cost", "Ease of implementation"]
                     }
                 }
             }
@@ -723,6 +743,35 @@ class CompanyUserResponse(BaseModel):
                 "email": "john@example.com",
                 "role": "admin",
                 "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000"
+            }
+        }
+
+class CallScriptResponse(BaseModel):
+    status: str
+    data: dict
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "data": {
+                    "script": "Alex: Hello this is Alex, I am calling on behalf of Acme Inc. Do you have a bit of time?\nProspect: Yes, what is this about?\nAlex: Great to hear from you! I'm reaching out because..."
+                }
+            }
+        }
+
+class EmailScriptResponse(BaseModel):
+    status: str
+    data: dict
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "data": {
+                    "subject": "Exclusive offer from Acme Inc just for your business",
+                    "body": "<p>Dear John,</p><p>I recently came across your company and...</p>"
+                }
             }
         }
  

@@ -83,6 +83,28 @@
   - Returns: Success message
   - Note: This marks the product as deleted but preserves all related data
 
+- `GET /api/companies/{company_id}/products/{product_id}/icp`
+  - Get ideal customer profiles for a product
+  - Requires: Authentication
+  - Returns: List of ideal customer profiles
+
+- `POST /api/companies/{company_id}/products/{product_id}/icp`
+  - Generate ideal customer profiles for a product
+  - Requires: Authentication
+  - Optional Query Parameter: `icp_input` - User instructions to focus ICP generation
+  - Returns: List of generated ideal customer profiles
+  - Note: Generates at least 3 atomic ICPs, each focusing on a single specific customer type
+
+- `DELETE /api/companies/{company_id}/products/{product_id}/icp/{icp_id}`
+  - Delete a specific ICP from a product
+  - Requires: Authentication
+  - Returns: Success message
+
+- `DELETE /api/companies/{company_id}/products/{product_id}/icp`
+  - Delete all ICPs from a product
+  - Requires: Authentication
+  - Returns: Success message
+
 ## Campaign Management
 
 ### Campaigns

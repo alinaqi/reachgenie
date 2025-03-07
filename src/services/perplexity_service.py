@@ -115,7 +115,7 @@ class PerplexityService:
             logger.exception("Full traceback:")
             return None
 
-    async def get_company_insights(self, company_name: str, company_website: str, company_description: str) -> Optional[str]:
+    async def get_company_insights(self, company_name: str, company_website: str, company_description: str, lead_title: str = "", lead_department: str = "") -> Optional[str]:
         """
         Get company insights using Perplexity API.
         
@@ -123,6 +123,8 @@ class PerplexityService:
             company_name: Name of the company
             company_website: Company's website URL
             company_description: Description of the company
+            lead_title: The lead's job title
+            lead_department: The lead's department
             
         Returns:
             String containing formatted company insights or None if the request fails
@@ -133,11 +135,13 @@ class PerplexityService:
                 "Content-Type": "application/json"
             }
             
-            # Format the prompt with company details
+            # Format the prompt with company details and lead information
             prompt = COMPANY_INSIGHTS_PROMPT.format(
                 company_name=company_name,
                 company_website=company_website,
-                company_description=company_description
+                company_description=company_description,
+                lead_title=lead_title,
+                lead_department=lead_department
             )
             
             payload = {
@@ -145,7 +149,7 @@ class PerplexityService:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that analyzes companies and provides detailed insights about their functionality and needs. Provide analysis in a clear, structured format with headings."
+                        "content": "You are a leads researcher that analyzes leads/prospects and provides detailed insights about pain points, needs, and motivations. Provide analysis in a clear, structured json format."
                     },
                     {
                         "role": "user",
