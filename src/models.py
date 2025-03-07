@@ -769,9 +769,23 @@ class EmailScriptResponse(BaseModel):
             "example": {
                 "status": "success",
                 "data": {
-                    "subject": "Exclusive offer from Acme Inc just for your business",
-                    "body": "<p>Dear John,</p><p>I recently came across your company and...</p>"
+                    "subject": "Transform Your Outreach with Our AI-Powered Solution",
+                    "body": "<p>Hello John,</p><p>I noticed that ACME Corp has been expanding its customer acquisition efforts, and thought you might be interested in learning how our AI-powered outreach platform can help streamline your sales process.</p><p>Our solution can help you:</p><ul><li>Reduce response time by 40%</li><li>Increase conversion rates by 25%</li><li>Save your team 15+ hours per week</li></ul><p>Would you be available for a quick 15-minute call next week to discuss how we might help ACME Corp achieve its growth goals?</p><p>Best regards,<br>Jane Smith</p>"
                 }
+            }
+        }
+
+class EmailThrottleSettings(BaseModel):
+    max_emails_per_hour: int = Field(50, ge=1, le=1000, description="Maximum number of emails to send per hour")
+    max_emails_per_day: int = Field(500, ge=1, le=10000, description="Maximum number of emails to send per day")
+    enabled: bool = Field(True, description="Whether throttling is enabled")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "max_emails_per_hour": 50,
+                "max_emails_per_day": 500,
+                "enabled": True
             }
         }
  
