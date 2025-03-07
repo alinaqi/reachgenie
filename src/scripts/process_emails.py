@@ -263,7 +263,7 @@ async def process_emails(
                 email_body=final_body, # Use the template with AI reply
                 sender_type='assistant',
                 sent_at=datetime.now(timezone.utc),
-                from_name=None,  # Let the database handle default value
+                from_name=company['name'],
                 from_email=company['account_email'],
                 to_email=email_data['from']
             )
@@ -279,6 +279,7 @@ async def process_emails(
                     to_email=email_data['from'],
                     subject=response_subject,
                     html_content=final_body, # Use the template with AI reply
+                    from_name=company["name"],
                     email_log_id=email_log_id,
                     in_reply_to=email_data['message_id'],
                     references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
