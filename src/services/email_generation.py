@@ -140,7 +140,8 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Format the signature as:
           Best wishes,
           [Company Contact Person]
-          [Company URL]
+          [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
+          [Company URL with utm_source=reachgenie]
         - IMPORTANT: In all urls, use utm_source=reachgenie
         {f'''
         - Use the detailed product information to craft a more compelling message
@@ -171,8 +172,6 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
                     "content": prompt
                 }
             ],
-            temperature=0.7,
-            max_tokens=1000,
             response_format={ "type": "json_object" }
         )
         
