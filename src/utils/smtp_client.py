@@ -175,6 +175,11 @@ class SMTPClient:
             finally:
                 self.smtp = None
 
+    @staticmethod
+    def _extract_name_from_email(email: str) -> str:
+        """Extract name from email address (e.g., 'jack.doe' from 'jack.doe@gmail.com')"""
+        return email.split('@')[0]
+
     async def send_email(
         self,
         to_email: str,
@@ -204,7 +209,9 @@ class SMTPClient:
             # Create message
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
-            message["From"] = f"{from_name} <{self.email}>" if from_name else self.email
+            # Use provided from_name or extract from email
+            display_name = self._extract_name_from_email(self.email)
+            message["From"] = f"{display_name} <{self.email}>"
             message["To"] = to_email
             
             # Add Reply-To header if email_log_id is provided
