@@ -14,6 +14,8 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
         company_name = lead.get('company', '')
         company_website = lead.get('website', '')
         company_description = lead.get('company_description', '')
+        lead_title = lead.get('job_title', '')
+        lead_department = lead.get('department', '')
         
         if not company_name and not company_website:
             logger.warning(f"Insufficient company data for lead {lead.get('id')}")
@@ -22,11 +24,13 @@ async def generate_company_insights(lead: dict, perplexity_service) -> dict:
         insights = await perplexity_service.get_company_insights(
             company_name=company_name,
             company_website=company_website,
-            company_description=company_description
+            company_description=company_description,
+            lead_title=lead_title,
+            lead_department=lead_department
         )
         
         if insights:
-            logger.info(f"Generated insights for company: {company_name}")
+            logger.info(f"Generated insights for company: {company_name} for lead with title: {lead_title}")
         return insights
         
     except Exception as e:
