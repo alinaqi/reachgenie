@@ -437,6 +437,129 @@ async def track_email(email_log_id: UUID):
 3. API endpoints are protected with authentication
 4. Background tasks run with proper error handling and logging
 
+## End-to-End Email Campaign Generation Flow
+
+### Visual Flowchart
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API as API Server
+    participant BG as Background Task
+    participant Perplexity
+    participant OpenAI
+    participant DB as Database
+    participant SMTP
+    
+    User->>API: Create Campaign
+    API->>DB: Store Campaign Details
+    API->>User: Return Campaign ID
+    User->>API: Run Campaign
+    API->>BG: Start Campaign Execution
+    API->>User: Confirmation
+    
+    BG->>DB: Get Leads
+    
+    loop For Each Lead
+        BG->>Perplexity: Generate Company Insights
+        Perplexity-->>BG: Return Insights
+        
+        BG->>DB: Get Product Details
+        DB-->>BG: Return Product + Enrichment Data
+        
+        BG->>OpenAI: Generate Personalized Email
+        OpenAI-->>BG: Return Subject + Content
+        
+        BG->>DB: Create Email Log
+        
+        BG->>SMTP: Send Email with Tracking Pixel
+        
+        BG->>DB: Update Campaign Progress
+    end
+    
+    BG->>DB: Mark Campaign as Complete
+```
+
+### Detailed Step-by-Step Process
+
+1. **Campaign Creation**
+   - User creates a campaign via API, specifying:
+     - Campaign name and type (email)
+     - Target leads
+     - Product to promote
+     - Optional template customization
+
+2. **Campaign Execution**
+   - User triggers campaign execution
+   - System creates a campaign run record
+   - Background task starts processing
+
+3. **Lead Processing (for each lead)**
+   - System validates lead has email address
+   - Retrieves enriched product data if available
+
+4. **Company Research**
+   - Perplexity API analyzes the prospect's company
+   - Generates insights on:
+     - Current functionality and limitations
+     - Customer pain points
+     - Industry challenges
+     - Revenue impact analysis
+
+5. **Content Generation**
+   - OpenAI generates personalized email using:
+     - Lead information (name, company, position)
+     - Company insights from Perplexity
+     - Product details and enrichment data
+     - Sending company information
+
+6. **Email Preparation**
+   - Inserts generated content into template
+   - Adds tracking pixel for open tracking
+   - Creates email log in database
+
+7. **Email Sending**
+   - Connects to SMTP server with company credentials
+   - Sends email to prospect
+   - Updates campaign progress
+
+8. **Follow-up Processing**
+   - System monitors for email opens and replies
+   - After 2 days without response, generates reminder email
+   - Processes any replies with AI-generated responses
+
+### Key AI Integration Points
+
+1. **Company Analysis (Perplexity API)**
+   - Input: Company name, website, description
+   - Output: Structured insights about company needs and challenges
+   - Purpose: Understand prospect's business context
+
+2. **Email Content Generation (OpenAI API)**
+   - Input: 
+     - Lead data
+     - Company insights
+     - Product information
+     - Enrichment data
+   - Output: Personalized subject line and email body
+   - Purpose: Create compelling, targeted messaging
+
+3. **Response Generation (OpenAI API)**
+   - Input: Original email, prospect's reply
+   - Output: Contextually appropriate follow-up message
+   - Purpose: Continue conversation with minimal human intervention
+
+### Performance Metrics
+
+The system tracks several key metrics for email campaigns:
+- Open rate (via tracking pixel)
+- Reply rate
+- Meeting booking rate
+- Campaign completion rate
+- Email delivery success rate
+
+This comprehensive, AI-driven approach ensures each prospect receives highly personalized communication that addresses their specific business needs rather than generic marketing content.
+
 ## Automated Follow-up System
 
 The ReachGenie system includes a sophisticated automated follow-up mechanism that sends reminder emails to prospects who haven't replied to the initial campaign emails. This ensures continuous engagement with leads and increases the chances of conversion.

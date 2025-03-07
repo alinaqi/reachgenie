@@ -424,7 +424,6 @@ class LeadsUploadResponse(BaseModel):
 class CronofyAuthResponse(BaseModel):
     message: str
 
-# Lead response models
 class HiringPosition(BaseModel):
     title: str
     url: Optional[str]
@@ -440,6 +439,53 @@ class JobChange(BaseModel):
     previous: dict
     new: dict
     date: Optional[str]
+
+class CreateLeadRequest(BaseModel):
+    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    phone_number: Optional[str] = None
+    company_size: Optional[str] = None
+    job_title: Optional[str] = None
+    lead_source: Optional[str] = None
+    education: Optional[str] = None
+    personal_linkedin_url: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    mobile: Optional[str] = None
+    direct_phone: Optional[str] = None
+    office_phone: Optional[str] = None
+    hq_location: Optional[str] = None
+    website: Optional[str] = None
+    headcount: Optional[int] = None
+    industries: Optional[List[str]] = None
+    department: Optional[str] = None
+    sic_code: Optional[str] = None
+    isic_code: Optional[str] = None
+    naics_code: Optional[str] = None
+    company_address: Optional[str] = None
+    company_city: Optional[str] = None
+    company_zip: Optional[str] = None
+    company_state: Optional[str] = None
+    company_country: Optional[str] = None
+    company_hq_address: Optional[str] = None
+    company_hq_city: Optional[str] = None
+    company_hq_zip: Optional[str] = None
+    company_hq_state: Optional[str] = None
+    company_hq_country: Optional[str] = None
+    company_linkedin_url: Optional[str] = None
+    company_type: Optional[str] = None
+    company_description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    financials: Optional[Union[Dict[str, Any], str, int, float]] = None
+    company_founded_year: Optional[int] = None
+    seniority: Optional[str] = None
+    hiring_positions: Optional[List[Dict[str, Any]]] = None
+    location_move: Optional[Dict[str, Any]] = None
+    job_change: Optional[Dict[str, Any]] = None
 
 class LeadDetail(BaseModel):
     id: UUID
@@ -490,7 +536,7 @@ class LeadDetail(BaseModel):
     location_move: Optional[LocationMove]
     job_change: Optional[JobChange]
 
-    @validator('financials', pre=True)
+    @field_validator('financials')
     def validate_financials(cls, v):
         if v is None:
             return None

@@ -106,7 +106,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse,
     InvitePasswordRequest, InviteTokenResponse,
     CompanyUserResponse, LeadSearchResponse, CampaignRunResponse,
-    PaginatedLeadResponse
+    PaginatedLeadResponse, CreateLeadRequest
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -1143,6 +1143,97 @@ async def delete_lead_endpoint(
         raise HTTPException(status_code=500, detail="Failed to delete lead")
     
     return {"status": "success", "message": "Lead deleted successfully"}
+
+@app.post("/api/companies/{company_id}/leads", response_model=LeadResponse, tags=["Leads"])
+async def create_lead_endpoint(
+    company_id: UUID,
+    lead_data: CreateLeadRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Create a single lead for a company.
+    
+    Args:
+        company_id: UUID of the company
+        lead_data: Lead information
+        current_user: Current authenticated user
+        
+    Returns:
+        Created lead details
+        
+    Raises:
+        404: Company not found
+        403: User doesn't have access to this company
+    """
+    # Validate company access
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    try:
+        # Process lead data
+        lead_dict = lead_data.dict(exclude_unset=True)
+        
+        # Handle name fields
+        if not lead_dict.get('name') and (lead_dict.get('first_name') or lead_dict.get('last_name')):
+            first_name = lead_dict.get('first_name', '')
+            last_name = lead_dict.get('last_name', '')
+            lead_dict['name'] = f"{first_name} {last_name}".strip()
+        elif lead_dict.get('name') and not (lead_dict.get('first_name') or lead_dict.get('last_name')):
+            # Split full name into first and last name
+            name_parts = lead_dict['name'].split(' ', 1)
+            if len(name_parts) >= 2:
+                lead_dict['first_name'] = name_parts[0]
+                lead_dict['last_name'] = name_parts[1]
+            else:
+                lead_dict['first_name'] = name_parts[0]
+                lead_dict['last_name'] = ""
+        
+        # Handle phone number prioritization
+        if not lead_dict.get('phone_number'):
+            # Try mobile first, then direct, then office
+            if lead_dict.get('mobile'):
+                lead_dict['phone_number'] = lead_dict['mobile']
+            elif lead_dict.get('direct_phone'):
+                lead_dict['phone_number'] = lead_dict['direct_phone']
+            elif lead_dict.get('office_phone'):
+                lead_dict['phone_number'] = lead_dict['office_phone']
+    
+        # Create the lead in the database
+        created_lead = await create_lead(company_id, lead_dict)
+        
+        # Get the created lead with all details
+        lead = await get_lead_by_id(created_lead['id'])
+        
+        # Process fields for response
+        if lead.get("industries") and isinstance(lead["industries"], str):
+            lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
+        
+        if lead.get("technologies") and isinstance(lead["technologies"], str):
+            lead["technologies"] = [tech.strip() for tech in lead["technologies"].split(",")]
+        
+        if lead.get("financials") and isinstance(lead["financials"], str):
+            try:
+                lead["financials"] = json.loads(lead["financials"])
+            except json.JSONDecodeError:
+                lead["financials"] = {"value": lead["financials"]}
+                
+        # Process JSON fields
+        for field in ["hiring_positions", "location_move", "job_change"]:
+            if lead.get(field) and isinstance(lead[field], str):
+                try:
+                    lead[field] = json.loads(lead[field])
+                except json.JSONDecodeError:
+                    lead[field] = None
+        
+        return {
+            "status": "success",
+            "data": lead
+        }
+    
+    except Exception as e:
+        logger.error(f"Error creating lead: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create lead: {str(e)}")
 
 # Calling functionality endpoints
 @app.post("/api/companies/{company_id}/calls/start", response_model=CallInDB, tags=["Calls"])
