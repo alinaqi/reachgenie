@@ -2232,3 +2232,42 @@ async def get_email_queue_items(status: Optional[str] = 'pending', limit: int = 
     except Exception as e:
         logger.error(f"Error getting email queue items: {str(e)}")
         return []
+
+async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[UUID] = None) -> Dict:
+    """
+    Update a lead's do_not_contact status to True based on email address.
+    
+    Args:
+        email: The email address of the lead to update
+        company_id: Optional company ID to filter leads by company
+        
+    Returns:
+        Dict with success status and list of updated lead IDs
+    """
+    email = email.lower().strip()  # Normalize email
+    
+    try:
+        # Build query to update leads with matching email
+        query = supabase.table('leads').update({"do_not_contact": True})
+        
+        # Add email filter
+        query = query.eq('email', email)
+        
+        # Add company filter if provided
+        if company_id:
+            query = query.eq('company_id', str(company_id))
+            
+        # Execute the update
+        response = query.execute()
+        
+        updated_lead_ids = [lead['id'] for lead in response.data] if response.data else []
+        logger.info(f"Updated do_not_contact to True for leads with email {email}: {updated_lead_ids}")
+        
+        return {
+            "success": True, 
+            "updated_lead_ids": updated_lead_ids,
+            "count": len(updated_lead_ids)
+        }
+    except Exception as e:
+        logger.error(f"Error updating lead do_not_contact status for email {email}: {str(e)}")
+        return {"success": False, "error": str(e), "count": 0}

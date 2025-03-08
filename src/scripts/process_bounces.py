@@ -27,7 +27,9 @@ from src.database import (
     get_companies_with_email_credentials,
     add_to_do_not_email_list,
     update_last_processed_bounce_uid,
-    get_email_log_by_message_id
+    get_email_log_by_message_id,
+    get_lead_by_email,
+    update_lead_do_not_contact_by_email
 )
 from src.utils.encryption import decrypt_password
 
@@ -342,6 +344,16 @@ async def fetch_bounces(company: Dict):
                         except Exception as e:
                             logger.error(f"Error retrieving email log: {str(e)}")
                     
+                    # Skip if we can't verify this was an email sent from our system
+                    if not email_log:
+                        logger.info(f"Bounce email doesn't match any message ID in our system, checking if we can find the recipient in our database")
+                        # Additional check - if the bounced email exists in our leads database, process it anyway
+                        lead = await get_lead_by_email(bounced_email)
+                        if not lead:
+                            logger.info(f"Skipping bounce for {bounced_email} - not in our system")
+                            continue
+                        logger.info(f"Processing bounce for {bounced_email} - email address exists in our leads database")
+                    
                     # Add to do_not_email list for both hard and soft bounces
                     try:
                         bounce_reason = f"{bounce_type.replace('_', ' ').title()}: {subject}"
@@ -353,6 +365,22 @@ async def fetch_bounces(company: Dict):
                         
                         if result["success"]:
                             logger.info(f"Added {bounced_email} to do_not_email list ({bounce_type})")
+                            
+                            # Check if the email belongs to a lead in our database
+                            lead = await get_lead_by_email(bounced_email)
+                            if lead:
+                                # Mark the lead as do_not_contact
+                                lead_update_result = await update_lead_do_not_contact_by_email(
+                                    email=bounced_email,
+                                    company_id=company_id
+                                )
+                                
+                                if lead_update_result["success"]:
+                                    logger.info(f"Marked lead with email {bounced_email} as do_not_contact")
+                                else:
+                                    logger.error(f"Failed to mark lead with email {bounced_email} as do_not_contact: {lead_update_result.get('error')}")
+                            else:
+                                logger.info(f"No lead found with email {bounced_email} in our database")
                         else:
                             logger.error(f"Failed to add {bounced_email} to do_not_email list: {result.get('error')}")
                             
