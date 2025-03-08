@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+"""
+Email Bounce Processor
+
+This script processes both hard and soft bounce notifications from company email accounts.
+It performs the following actions:
+1. Connects to each company's email account via IMAP
+2. Searches for bounce notification emails
+3. Extracts the bounced email address
+4. Determines if it's a hard or soft bounce
+5. Adds the bounced email to the "do not email" list
+6. Removes the processed bounce emails from the inbox
+7. Updates the last processed UID to avoid reprocessing the same emails
+
+The script is designed to be run as a scheduled job (e.g., via cron).
+"""
 import imaplib
 import email
 from email.header import decode_header
@@ -215,8 +230,8 @@ async def fetch_bounces(company: Dict):
         # Login to the account
         imap.login(company['account_email'], decrypted_password)
 
-        # Select the inbox - we'll search for bounce messages here
-        imap.select("INBOX", readonly=True)
+        # Select the inbox - changed from readonly=True to readonly=False to allow deletion
+        imap.select("INBOX", readonly=False)
 
         # Get last processed UID for bounces
         last_processed_uid = company.get('last_processed_bounce_uid')
@@ -327,24 +342,22 @@ async def fetch_bounces(company: Dict):
                         except Exception as e:
                             logger.error(f"Error retrieving email log: {str(e)}")
                     
-                    # Add to do_not_email list if it's a hard bounce
-                    if bounce_type == "hard_bounce":
-                        try:
-                            result = await add_to_do_not_email_list(
-                                email=bounced_email,
-                                reason=f"Hard bounce: {subject}",
-                                company_id=company_id
-                            )
+                    # Add to do_not_email list for both hard and soft bounces
+                    try:
+                        bounce_reason = f"{bounce_type.replace('_', ' ').title()}: {subject}"
+                        result = await add_to_do_not_email_list(
+                            email=bounced_email,
+                            reason=bounce_reason,
+                            company_id=company_id
+                        )
+                        
+                        if result["success"]:
+                            logger.info(f"Added {bounced_email} to do_not_email list ({bounce_type})")
+                        else:
+                            logger.error(f"Failed to add {bounced_email} to do_not_email list: {result.get('error')}")
                             
-                            if result["success"]:
-                                logger.info(f"Added {bounced_email} to do_not_email list (hard bounce)")
-                            else:
-                                logger.error(f"Failed to add {bounced_email} to do_not_email list: {result.get('error')}")
-                                
-                        except Exception as e:
-                            logger.error(f"Error processing bounce for {bounced_email}: {str(e)}")
-                    else:
-                        logger.info(f"Detected soft bounce for {bounced_email}, not adding to do_not_email list")
+                    except Exception as e:
+                        logger.error(f"Error processing bounce for {bounced_email}: {str(e)}")
                     
                     # Record that we processed this bounce
                     processed_bounces.append({
@@ -355,7 +368,15 @@ async def fetch_bounces(company: Dict):
                         "processed_at": datetime.now(timezone.utc),
                         "uid": uid
                     })
+                    
+                    # Mark the email for deletion by adding the \Deleted flag
+                    imap.store(email_id, '+FLAGS', '\\Deleted')
+                    logger.info(f"Marked bounce email for {bounced_email} for deletion")
 
+        # Permanently remove emails marked for deletion
+        imap.expunge()
+        logger.info(f"Deleted processed bounce emails from inbox for company '{company['name']}'")
+        
         # Logout from IMAP
         imap.logout()
         
