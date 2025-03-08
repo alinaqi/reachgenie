@@ -2033,28 +2033,26 @@ async def is_email_in_do_not_email_list(email: str, company_id: Optional[UUID] =
     
     try:
         # First check global do_not_email entries (no company_id)
-        query = """
-            SELECT id FROM do_not_email 
-            WHERE email = $1 AND company_id IS NULL
-            LIMIT 1;
-        """
-        
-        result = await supabase.rpc(query, params=[email])
-        
-        if result and len(result) > 0:
+        global_response = supabase.table('do_not_email')\
+            .select('id')\
+            .is_('company_id', 'null')\
+            .eq('email', email)\
+            .limit(1)\
+            .execute()
+            
+        if global_response.data and len(global_response.data) > 0:
             return True
             
         # If company_id provided, also check company-specific exclusions
         if company_id:
-            query = """
-                SELECT id FROM do_not_email 
-                WHERE email = $1 AND company_id = $2
-                LIMIT 1;
-            """
-            
-            result = await supabase.rpc(query, params=[email, str(company_id)])
-            
-            if result and len(result) > 0:
+            company_response = supabase.table('do_not_email')\
+                .select('id')\
+                .eq('company_id', str(company_id))\
+                .eq('email', email)\
+                .limit(1)\
+                .execute()
+                
+            if company_response.data and len(company_response.data) > 0:
                 return True
                 
         return False
