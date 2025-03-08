@@ -55,7 +55,7 @@ class PerplexityService:
             prompt = COMPANY_INFO_PROMPT.format(website=website)
             
             payload = {
-                "model": "sonar-pro",
+                "model": "sonar",
                 "messages": [
                     {
                         "role": "system",
@@ -145,7 +145,7 @@ class PerplexityService:
             )
             
             payload = {
-                "model": "sonar-pro",
+                "model": "sonar",
                 "messages": [
                     {
                         "role": "system",

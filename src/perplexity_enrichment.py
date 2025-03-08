@@ -38,7 +38,7 @@ class PerplexityEnricher:
         try:
             async with httpx.AsyncClient() as client:
                 payload = {
-                    "model": "sonar-pro",
+                    "model": "sonar",
                     "messages": [{"role": "user", "content": query}]
                 }
                 print(f"Sending request to Perplexity API for {person_name} at {company_name}")
@@ -155,7 +155,7 @@ class PerplexityEnricher:
         try:
             async with httpx.AsyncClient() as client:
                 payload = {
-                    "model": "sonar-pro",
+                    "model": "sonar",
                     "messages": [{"role": "user", "content": query}]
                 }
                 print(f"Sending request to Perplexity API for product at {product_url}")
