@@ -31,7 +31,8 @@ class EmailService:
         subject: str,
         html_content: str,
         from_name: Optional[str] = None,
-        from_email: Optional[str] = None
+        from_email: Optional[str] = None,
+        cc_email: Optional[str] = None
     ) -> Dict:
         """
         Send an email using Mailjet.
@@ -42,6 +43,7 @@ class EmailService:
             html_content: HTML content of the email
             from_name: Name of the sender (default: configured mailjet_sender_name)
             from_email: Email address of the sender (default: configured mailjet_sender_email)
+            cc_email: CC recipient email address (optional)
             
         Returns:
             Dict: Response from Mailjet API
@@ -71,6 +73,15 @@ class EmailService:
                 }
             ]
         }
+
+        # Add CC recipient if provided
+        if cc_email:
+            data['Messages'][0]['Cc'] = [
+                {
+                    'Email': cc_email,
+                    'Name': ''
+                }
+            ]
 
         try:
             response = self.client.send.create(data=data)

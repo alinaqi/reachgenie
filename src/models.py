@@ -875,4 +875,151 @@ class AgentSession(BaseModel):
 
     class Config:
         orm_mode = True
+
+class PartnershipType(str, Enum):
+    RESELLER = "RESELLER"
+    REFERRAL = "REFERRAL"
+    TECHNOLOGY = "TECHNOLOGY"
+
+class ApplicationStatus(str, Enum):
+    PENDING = "PENDING"
+    REVIEWING = "REVIEWING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+class CompanySizeRange(str, Enum):
+    TINY = "1-10"
+    SMALL = "11-50"
+    MEDIUM = "51-200"
+    LARGE = "201-500"
+    ENTERPRISE = "501+"
+
+class PartnerApplicationBase(BaseModel):
+    company_name: str
+    contact_name: str
+    contact_email: EmailStr
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+    partnership_type: PartnershipType
+    company_size: CompanySizeRange
+    industry: str
+    current_solutions: Optional[str] = None
+    target_market: Optional[str] = None
+    motivation: str
+    additional_information: Optional[str] = None
+
+class PartnerApplicationCreate(PartnerApplicationBase):
+    """Model for creating a new partner application"""
+    pass
+
+class PartnerApplicationUpdate(BaseModel):
+    """Model for updating an application's status"""
+    status: ApplicationStatus
+
+class PartnerApplicationNoteCreate(BaseModel):
+    """Model for creating a new note on a partner application"""
+    author_name: str
+    note: str
+
+class PartnerApplicationNote(PartnerApplicationNoteCreate):
+    """Model for partner application note responses"""
+    id: UUID
+    application_id: UUID
+    created_at: datetime
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "application_id": "123e4567-e89b-12d3-a456-426614174001",
+                "author_name": "John Doe",
+                "note": "This company looks like a good fit for our referral program.",
+                "created_at": "2023-01-01T12:00:00Z"
+            }
+        }
+        orm_mode = True
+
+class PartnerApplicationResponse(PartnerApplicationBase):
+    """Model for partner application responses"""
+    id: UUID
+    status: ApplicationStatus
+    created_at: datetime
+    updated_at: datetime
+    notes: Optional[List[PartnerApplicationNote]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "company_name": "Acme Corp",
+                "contact_name": "John Doe",
+                "contact_email": "john@acmecorp.com",
+                "contact_phone": "+1-555-123-4567",
+                "website": "https://acmecorp.com",
+                "partnership_type": "RESELLER",
+                "company_size": "11-50",
+                "industry": "Technology",
+                "current_solutions": "Currently using multiple CRM tools",
+                "target_market": "SMB technology companies",
+                "motivation": "Looking to expand product offerings for our clients",
+                "additional_information": "We have a team of 5 sales reps",
+                "status": "PENDING",
+                "created_at": "2023-01-01T12:00:00Z",
+                "updated_at": "2023-01-01T12:00:00Z",
+                "notes": []
+            }
+        }
+        orm_mode = True
+
+class PartnerApplicationListResponse(BaseModel):
+    """Model for paginated partner application list responses"""
+    items: List[PartnerApplicationResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    
+    class Config:
+        orm_mode = True
+
+class PartnerApplicationStats(BaseModel):
+    """Model for partner application statistics"""
+    total_applications: int
+    by_status: Dict[str, int]
+    by_type: Dict[str, int]
+    recent_applications: int  # Last 30 days
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_applications": 150,
+                "by_status": {
+                    "PENDING": 45,
+                    "REVIEWING": 25,
+                    "APPROVED": 50,
+                    "REJECTED": 30
+                },
+                "by_type": {
+                    "RESELLER": 75,
+                    "REFERRAL": 50,
+                    "TECHNOLOGY": 25
+                },
+                "recent_applications": 35
+            }
+        }
+        orm_mode = True
+
+class SimplePartnerApplicationResponse(BaseModel):
+    """Model for minimal partner application creation response"""
+    id: UUID
+    message: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "message": "Your partnership application has been submitted successfully. We will contact you soon."
+            }
+        }
+        orm_mode = True
  

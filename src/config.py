@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     mailjet_webhook_secret: Optional[str] = None
     mailjet_parse_email: Optional[str] = None
     
+    # NoReply Email settings for partnership emails
+    noreply_email: Optional[str] = None
+    noreply_password: Optional[str] = None
+    noreply_provider: str = "gmail"  # Default provider (gmail, outlook, yahoo)
+    
     # Calendar settings
     calendly_username: Optional[str] = None
     

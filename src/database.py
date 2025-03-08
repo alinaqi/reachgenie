@@ -2271,3 +2271,287 @@ async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[U
     except Exception as e:
         logger.error(f"Error updating lead do_not_contact status for email {email}: {str(e)}")
         return {"success": False, "error": str(e), "count": 0}
+
+# Partner Application Database Functions
+
+async def create_partner_application(
+    company_name: str,
+    contact_name: str,
+    contact_email: str,
+    contact_phone: Optional[str],
+    website: Optional[str],
+    partnership_type: str,
+    company_size: str,
+    industry: str,
+    current_solutions: Optional[str],
+    target_market: Optional[str],
+    motivation: str,
+    additional_information: Optional[str]
+) -> Dict:
+    """
+    Create a new partner application in the database
+    
+    Args:
+        company_name: Name of the company
+        contact_name: Name of the contact person
+        contact_email: Email of the contact person
+        contact_phone: Phone number of the contact person (optional)
+        website: Company website (optional)
+        partnership_type: Type of partnership (RESELLER, REFERRAL, TECHNOLOGY)
+        company_size: Size of the company
+        industry: Industry of the company
+        current_solutions: Current solutions used (optional)
+        target_market: Target market (optional)
+        motivation: Motivation for partnership
+        additional_information: Additional information (optional)
+        
+    Returns:
+        Dict containing the created partner application record
+    """
+    application_data = {
+        'company_name': company_name,
+        'contact_name': contact_name,
+        'contact_email': contact_email,
+        'partnership_type': partnership_type,
+        'company_size': company_size,
+        'industry': industry,
+        'motivation': motivation,
+        'status': 'PENDING'  # Default status
+    }
+    
+    # Add optional fields if provided
+    if contact_phone:
+        application_data['contact_phone'] = contact_phone
+    if website:
+        application_data['website'] = website
+    if current_solutions:
+        application_data['current_solutions'] = current_solutions
+    if target_market:
+        application_data['target_market'] = target_market
+    if additional_information:
+        application_data['additional_information'] = additional_information
+    
+    try:
+        response = supabase.table('partner_applications').insert(application_data).execute()
+        logger.info(f"Created partner application for {company_name}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating partner application: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create partner application: {str(e)}"
+        )
+
+async def get_partner_applications(
+    status: Optional[str] = None,
+    partnership_type: Optional[str] = None,
+    page: int = 1,
+    limit: int = 10,
+    sort_by: str = "created_at",
+    sort_order: str = "desc"
+) -> Dict:
+    """
+    Get a paginated list of partner applications with optional filtering
+    
+    Args:
+        status: Filter by application status (optional)
+        partnership_type: Filter by partnership type (optional)
+        page: Page number for pagination (default: 1)
+        limit: Number of items per page (default: 10)
+        sort_by: Field to sort by (default: created_at)
+        sort_order: Sort order (asc or desc) (default: desc)
+        
+    Returns:
+        Dict containing the list of partner applications and pagination metadata
+    """
+    # Calculate offset for pagination
+    offset = (page - 1) * limit
+    
+    # Start building the query
+    query = supabase.table('partner_applications').select('*')
+    
+    # Apply filters if provided
+    if status:
+        query = query.eq('status', status)
+    if partnership_type:
+        query = query.eq('partnership_type', partnership_type)
+    
+    # Apply sorting
+    sort_order_func = 'desc' if sort_order.lower() == 'desc' else 'asc'
+    query = getattr(query.order(sort_by), sort_order_func)()
+    
+    # Get total count (without pagination) for calculating total pages
+    count_query = supabase.table('partner_applications').select('id', count='exact')
+    if status:
+        count_query = count_query.eq('status', status)
+    if partnership_type:
+        count_query = count_query.eq('partnership_type', partnership_type)
+    
+    count_response = count_query.execute()
+    total_count = count_response.count
+    
+    # Apply pagination to the main query
+    query = query.range(offset, offset + limit - 1)
+    
+    # Execute the query
+    response = query.execute()
+    
+    # Calculate total pages
+    total_pages = math.ceil(total_count / limit)
+    
+    return {
+        'items': response.data,
+        'total': total_count,
+        'page': page,
+        'page_size': limit,
+        'total_pages': total_pages
+    }
+
+async def get_partner_application_by_id(application_id: UUID) -> Optional[Dict]:
+    """
+    Get a partner application by ID, including its notes
+    
+    Args:
+        application_id: UUID of the partner application
+        
+    Returns:
+        Dict containing the partner application record with notes, or None if not found
+    """
+    try:
+        # Get the partner application
+        app_response = supabase.table('partner_applications').select('*').eq('id', str(application_id)).execute()
+        
+        if not app_response.data:
+            return None
+        
+        application = app_response.data[0]
+        
+        # Get the notes for this application
+        notes_response = supabase.table('partner_application_notes').select('*').eq('application_id', str(application_id)).order('created_at', desc=True).execute()
+        
+        application['notes'] = notes_response.data
+        
+        return application
+    except Exception as e:
+        logger.error(f"Error getting partner application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get partner application: {str(e)}"
+        )
+
+async def update_partner_application_status(application_id: UUID, status: str) -> Optional[Dict]:
+    """
+    Update the status of a partner application
+    
+    Args:
+        application_id: UUID of the partner application
+        status: New status to set
+        
+    Returns:
+        Dict containing the updated partner application record, or None if not found
+    """
+    try:
+        # Check if application exists
+        app_response = supabase.table('partner_applications').select('id').eq('id', str(application_id)).execute()
+        
+        if not app_response.data:
+            return None
+        
+        # Update the application status
+        update_data = {
+            'status': status,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        response = supabase.table('partner_applications').update(update_data).eq('id', str(application_id)).execute()
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating partner application status {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update partner application status: {str(e)}"
+        )
+
+async def create_partner_application_note(application_id: UUID, author_name: str, note: str) -> Dict:
+    """
+    Add a note to a partner application
+    
+    Args:
+        application_id: UUID of the partner application
+        author_name: Name of the note author
+        note: Content of the note
+        
+    Returns:
+        Dict containing the created note record
+    """
+    try:
+        # Check if application exists
+        app_response = supabase.table('partner_applications').select('id').eq('id', str(application_id)).execute()
+        
+        if not app_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Partner application with ID {application_id} not found"
+            )
+        
+        # Create the note
+        note_data = {
+            'application_id': str(application_id),
+            'author_name': author_name,
+            'note': note
+        }
+        
+        response = supabase.table('partner_application_notes').insert(note_data).execute()
+        
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating partner application note: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create partner application note: {str(e)}"
+        )
+
+async def get_partner_application_statistics() -> Dict:
+    """
+    Get statistics about partner applications
+    
+    Returns:
+        Dict containing statistics about applications (counts by status, type, etc.)
+    """
+    try:
+        # Get total count
+        total_response = supabase.table('partner_applications').select('id', count='exact').execute()
+        total_count = total_response.count
+        
+        # Get counts by status
+        status_counts = {}
+        for status in ['PENDING', 'REVIEWING', 'APPROVED', 'REJECTED']:
+            status_response = supabase.table('partner_applications').select('id', count='exact').eq('status', status).execute()
+            status_counts[status] = status_response.count
+        
+        # Get counts by partnership type
+        type_counts = {}
+        for p_type in ['RESELLER', 'REFERRAL', 'TECHNOLOGY']:
+            type_response = supabase.table('partner_applications').select('id', count='exact').eq('partnership_type', p_type).execute()
+            type_counts[p_type] = type_response.count
+        
+        # Get recent applications count (last 30 days)
+        thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        recent_response = supabase.table('partner_applications').select('id', count='exact').gte('created_at', thirty_days_ago).execute()
+        recent_count = recent_response.count
+        
+        return {
+            'total_applications': total_count,
+            'by_status': status_counts,
+            'by_type': type_counts,
+            'recent_applications': recent_count
+        }
+    except Exception as e:
+        logger.error(f"Error getting partner application statistics: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get partner application statistics: {str(e)}"
+        )
