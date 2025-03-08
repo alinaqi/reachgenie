@@ -23,8 +23,7 @@ from src.database import (
     get_email_queue_items,
     get_product_by_id,
     is_email_in_do_not_email_list,
-    add_to_do_not_email_list,
-    get_throttle_settings
+    add_to_do_not_email_list
 )
 from src.services.email_generation import generate_company_insights, generate_email_content
 from src.utils.smtp_client import SMTPClient

@@ -2209,3 +2209,28 @@ async def get_email_log_by_message_id(message_id: str) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error getting email log by message ID: {str(e)}")
         return None
+
+async def get_email_queue_items(status: Optional[str] = 'pending', limit: int = 100) -> List[dict]:
+    """
+    Get email queue items by status
+    
+    Args:
+        status: Status of items to retrieve (pending, processing, sent, failed)
+        limit: Maximum number of items to retrieve
+        
+    Returns:
+        List of email queue items
+    """
+    try:
+        response = supabase.table('email_queue')\
+            .select('*')\
+            .eq('status', status)\
+            .order('priority', desc=True)\
+            .order('created_at')\
+            .limit(limit)\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        logger.error(f"Error getting email queue items: {str(e)}")
+        return []
