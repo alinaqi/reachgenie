@@ -815,4 +815,64 @@ class PaginationInfo(BaseModel):
 class DoNotEmailListResponse(BaseModel):
     data: List[DoNotEmailEntry]
     pagination: PaginationInfo
+
+# Web Agent Models
+class AnalysisSchema(BaseModel):
+    """Schema for the analysis data collected from conversations"""
+    prospect_name: Optional[str] = None
+    company_name: Optional[str] = None
+    current_outreach_method: Optional[str] = None
+    pain_points: Optional[str] = None
+    interested_in_demo: Optional[bool] = None
+    email_address: Optional[str] = None
+    preferred_demo_date: Optional[str] = None
+
+class WebAgentMetadata(BaseModel):
+    """Metadata for web agent"""
+    source: str
+    version: str
+    user_id: Optional[str] = None
+
+class WebAgentData(BaseModel):
+    """Data model for web agent configuration"""
+    prompt: str
+    voice: str = "lucy"
+    webhook: str
+    analysis_schema: Dict[str, str]
+    metadata: WebAgentMetadata
+    language: str = "ENG"
+    model: str = "enhanced"
+    first_sentence: Optional[str] = None
+    interruption_threshold: int = 120
+    keywords: List[str] = []
+    max_duration: int = 15
+
+class AgentCreateResponse(BaseModel):
+    """Response model for agent creation"""
+    status: str
+    message: str
+    agent_id: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class WebhookResponse(BaseModel):
+    """Response model for webhook endpoint"""
+    status: str
+    message: str
+    agent_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+class AgentSession(BaseModel):
+    """Model for agent session data"""
+    id: UUID
+    agent_id: str
+    user_id: UUID
+    session_token: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    metadata: Optional[Dict[str, Any]] = None
+    analysis: Optional[AnalysisSchema] = None
+
+    class Config:
+        orm_mode = True
  

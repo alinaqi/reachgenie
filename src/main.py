@@ -20,6 +20,7 @@ from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.services.campaigns import run_test_email_campaign, run_test_call_campaign
+from src.routes.web_agent import router as web_agent_router
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password,
@@ -3737,3 +3738,6 @@ async def check_do_not_email_status(
     )
     
     return {"email": email, "is_excluded": is_excluded}
+
+# Include web agent router
+app.include_router(web_agent_router, prefix="/api")
