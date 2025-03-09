@@ -4,6 +4,7 @@ Email service module for handling all email-related functionality.
 from typing import List, Dict, Optional
 from mailjet_rest import Client
 from fastapi import HTTPException, status
+import logging
 from src.config import get_settings
 from src.templates.email_templates import (
     get_password_reset_template,
@@ -13,6 +14,9 @@ from src.templates.email_templates import (
     get_company_addition_template
 )
 from src.services.company_personalization_service import CompanyPersonalizationService
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
