@@ -1985,7 +1985,7 @@ async def add_to_do_not_email_list(email: str, reason: str, company_id: Optional
     
     Args:
         email: The email address to add
-        reason: Reason for adding to the list (bounce, unsubscribe, complaint, etc.)
+        reason: Reason for adding to the list (e.g. 'hard_bounce', 'unsubscribe')
         company_id: Optional company ID if specific to a company
         
     Returns:
@@ -1994,29 +1994,41 @@ async def add_to_do_not_email_list(email: str, reason: str, company_id: Optional
     email = email.lower().strip()  # Normalize email
     
     try:
-        query = """
-            INSERT INTO do_not_email (email, reason, company_id, created_at)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (email) 
-            DO UPDATE SET 
-                reason = $2,
-                updated_at = $4
-            RETURNING id;
-        """
+        # Check if already in the list
+        check_response = supabase.table('do_not_email')\
+            .select('*')\
+            .eq('email', email)\
+            .execute()
         
-        values = [
-            email, 
-            reason, 
-            company_id, 
-            datetime.now(timezone.utc)
-        ]
+        # If already exists, return early
+        if check_response.data and len(check_response.data) > 0:
+            return {"success": True, "email": email, "already_exists": True}
         
-        result = await supabase.rpc(query, params=values)
+        # Insert new record
+        insert_data = {
+            "email": email,
+            "reason": reason,
+            "company_id": str(company_id) if company_id else None,
+            "created_at": datetime.now(timezone.utc)
+        }
         
-        return {"success": True, "email": email}
+        response = supabase.table('do_not_email')\
+            .insert(insert_data)\
+            .execute()
+            
+        # Also update any leads with this email to mark do_not_contact as true
+        await update_lead_do_not_contact_by_email(email, company_id)
+        
+        if response.data and len(response.data) > 0:
+            logger.info(f"Added {email} to do_not_email list")
+            return {"success": True, "email": email}
+        else:
+            logger.error(f"Failed to add {email} to do_not_email list")
+            return {"success": False, "email": email, "error": "Failed to add to list"}
+            
     except Exception as e:
         logger.error(f"Error adding email to do_not_email list: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "email": email, "error": str(e)}
 
 async def is_email_in_do_not_email_list(email: str, company_id: Optional[UUID] = None) -> bool:
     """
@@ -2158,18 +2170,13 @@ async def update_last_processed_bounce_uid(company_id: UUID, uid: str) -> bool:
         Boolean indicating success or failure
     """
     try:
-        query = """
-            UPDATE companies
-            SET last_processed_bounce_uid = $1, updated_at = $2
-            WHERE id = $3
-            RETURNING id;
-        """
+        # Use update method directly without awaiting it
+        response = supabase.table('companies')\
+            .update({"last_processed_bounce_uid": uid, "updated_at": datetime.now(timezone.utc)})\
+            .eq('id', str(company_id))\
+            .execute()
         
-        values = [uid, datetime.now(timezone.utc), str(company_id)]
-        
-        result = await supabase.rpc(query, params=values)
-        
-        if result and len(result) > 0:
+        if response.data and len(response.data) > 0:
             logger.info(f"Updated last_processed_bounce_uid to {uid} for company {company_id}")
             return True
         else:
@@ -2191,16 +2198,15 @@ async def get_email_log_by_message_id(message_id: str) -> Optional[Dict]:
         Email log record if found, None otherwise
     """
     try:
-        query = """
-            SELECT * FROM email_logs
-            WHERE message_id = $1
-            LIMIT 1;
-        """
+        # Use select method directly without awaiting it
+        response = supabase.table('email_logs')\
+            .select('*')\
+            .eq('message_id', message_id)\
+            .limit(1)\
+            .execute()
         
-        result = await supabase.rpc(query, params=[message_id])
-        
-        if result and len(result) > 0:
-            return result[0]
+        if response.data and len(response.data) > 0:
+            return response.data[0]
         else:
             return None
             
@@ -2257,7 +2263,7 @@ async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[U
         if company_id:
             query = query.eq('company_id', str(company_id))
             
-        # Execute the update
+        # Execute the update without awaiting
         response = query.execute()
         
         updated_lead_ids = [lead['id'] for lead in response.data] if response.data else []
