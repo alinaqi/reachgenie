@@ -2198,17 +2198,28 @@ async def get_email_log_by_message_id(message_id: str) -> Optional[Dict]:
         Email log record if found, None otherwise
     """
     try:
-        # Use select method directly without awaiting it
-        response = supabase.table('email_logs')\
-            .select('*')\
+        # Query email_log_details where message_id is stored, then join with email_logs
+        response = supabase.table('email_log_details')\
+            .select('email_logs_id')\
             .eq('message_id', message_id)\
             .limit(1)\
             .execute()
         
+        # If we found a matching message_id, get the associated email log
         if response.data and len(response.data) > 0:
-            return response.data[0]
-        else:
-            return None
+            email_logs_id = response.data[0]['email_logs_id']
+            
+            # Now get the email log with this ID
+            email_log_response = supabase.table('email_logs')\
+                .select('*')\
+                .eq('id', email_logs_id)\
+                .limit(1)\
+                .execute()
+            
+            if email_log_response.data and len(email_log_response.data) > 0:
+                return email_log_response.data[0]
+        
+        return None
             
     except Exception as e:
         logger.error(f"Error getting email log by message ID: {str(e)}")
