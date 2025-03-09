@@ -12,6 +12,7 @@ from src.templates.email_templates import (
     get_invite_template,
     get_company_addition_template
 )
+from src.services.company_personalization_service import CompanyPersonalizationService
 
 settings = get_settings()
 
@@ -171,21 +172,65 @@ class EmailService:
             html_content=html_content
         )
 
-    async def send_invite_email(self, to_email: str, company_name: str, invite_token: str, inviter_name: str) -> Dict:
+    async def send_invite_email(
+        self, 
+        to_email: str, 
+        company_name: str, 
+        invite_token: str, 
+        inviter_name: str,
+        recipient_name: str = "",
+        personalize: bool = True
+    ) -> Dict:
         """
-        Send company invite email.
+        Send company invite email with personalization.
         
         Args:
             to_email: Recipient's email address
             company_name: Name of the company sending invite
             invite_token: Invite token for the link
             inviter_name: Name of the person sending the invite
+            recipient_name: Optional name of the recipient for personalization
+            personalize: Whether to personalize the email with AI-generated content
             
         Returns:
             Dict: Response from Mailjet API
         """
         invite_link = f"{settings.frontend_url}/invite?token={invite_token}"
-        html_content = get_invite_template(company_name, invite_link, inviter_name)
+        
+        # Initialize default personalization content
+        value_proposition = ""
+        engagement_tips = []
+        
+        # Get personalized content if requested
+        if personalize:
+            try:
+                # Initialize the personalization service
+                personalization_service = CompanyPersonalizationService()
+                
+                # Get company information
+                company_info = await personalization_service.get_company_info(company_name)
+                
+                # Generate personalized value proposition
+                value_proposition = await personalization_service.generate_personalized_value_proposition(company_info)
+                
+                # Generate engagement tips
+                engagement_tips = await personalization_service.generate_engagement_tips(company_info)
+                
+                logger.info(f"Generated personalized content for {company_name} invite email to {to_email}")
+            except Exception as e:
+                logger.error(f"Error generating personalized content for invite email: {str(e)}")
+                logger.exception(e)
+                # Continue without personalization if there's an error
+        
+        # Generate the HTML content with personalization
+        html_content = get_invite_template(
+            company_name=company_name, 
+            invite_link=invite_link, 
+            inviter_name=inviter_name,
+            recipient_name=recipient_name,
+            value_proposition=value_proposition,
+            engagement_tips=engagement_tips
+        )
         
         return await self.send_email(
             to_email=to_email,

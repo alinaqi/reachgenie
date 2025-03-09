@@ -68,6 +68,13 @@ def get_base_template(content: str) -> str:
             }}
             .button:hover {{
                 background-color: #4338CA;
+                color: white !important;
+            }}
+            .button:link {{
+                color: white !important;
+            }}
+            .button:active {{
+                color: white !important;
             }}
             .footer {{
                 text-align: center;
@@ -82,6 +89,43 @@ def get_base_template(content: str) -> str:
                 color: #6B7280;
                 font-size: 14px;
                 word-break: break-all;
+            }}
+            .section {{
+                margin: 30px 0;
+                padding: 15px;
+                border-left: 4px solid #4F46E5;
+                background-color: #F5F7FF;
+            }}
+            .section h2 {{
+                color: #4F46E5;
+                font-size: 18px;
+                margin-top: 0;
+                margin-bottom: 15px;
+            }}
+            .tips-section {{
+                margin: 30px 0;
+                padding: 15px;
+                background-color: #F9FAFB;
+                border-left: 4px solid #3B82F6;
+            }}
+            .tips-section h2 {{
+                color: #2563EB;
+                font-size: 18px;
+                margin-top: 0;
+                margin-bottom: 15px;
+            }}
+            .tip {{
+                margin-bottom: 20px;
+            }}
+            .tip h3 {{
+                color: #1D4ED8;
+                font-size: 16px;
+                margin-bottom: 5px;
+            }}
+            .tip p {{
+                margin-top: 5px;
+                padding-left: 10px;
+                border-left: 2px solid #DBEAFE;
             }}
         </style>
     </head>
@@ -188,33 +232,92 @@ def get_account_verification_template(verification_link: str) -> str:
     """
     return get_base_template(content)
 
-def get_invite_template(company_name: str, invite_link: str, inviter_name: str) -> str:
+def get_invite_template(
+    company_name: str, 
+    invite_link: str, 
+    inviter_name: str, 
+    recipient_name: str = "",
+    value_proposition: str = "",
+    engagement_tips: list = None
+) -> str:
     """
-    Company invite email template.
+    Company invite email template with personalization.
     
     Args:
         company_name: Name of the company sending the invite
         invite_link: The invite link with token
         inviter_name: Name of the person who sent the invite
+        recipient_name: Optional name of the recipient for personalization
+        value_proposition: Optional personalized value proposition
+        engagement_tips: Optional list of engagement tips
         
     Returns:
         str: Complete HTML template for company invite email
     """
+    # Extract first name if the full name is provided
+    first_name = recipient_name.split()[0] if recipient_name else ""
+    greeting = f"Hello {first_name}," if first_name else "Hello,"
+    
+    # Start with the basic content
     content = f"""
         <div class="header">
             <h1>You've Been Invited to Join "{company_name}"</h1>
         </div>
         <div class="content">
-            <p>Hello,</p>
+            <p>{greeting}</p>
             <p>{inviter_name} has invited you to join "{company_name}" on ReachGenie. Click the button below to accept the invitation and set up your account:</p>
             <p style="text-align: center;">
-                <a href="{invite_link}" class="button">Accept Invitation</a>
+                <a href="{invite_link}" class="button" style="color: white !important;">Accept Invitation</a>
             </p>
+    """
+    
+    # Add value proposition if provided
+    if value_proposition:
+        # Check if value proposition starts with "Hi there" or similar and replace it
+        modified_value_proposition = value_proposition
+        if first_name and value_proposition:
+            # Replace common greetings with the first name followed by exclamation
+            modified_value_proposition = value_proposition.replace("Hi there!", f"{first_name}!")
+            modified_value_proposition = modified_value_proposition.replace("Hello!", f"{first_name}!")
+            modified_value_proposition = modified_value_proposition.replace("Hi!", f"{first_name}!")
+        
+        content += f"""
+            <div class="section">
+                <h2>How ReachGenie Can Help {company_name}</h2>
+                {modified_value_proposition}
+            </div>
+        """
+    
+    # Add engagement tips if provided
+    if engagement_tips and len(engagement_tips) > 0:
+        content += f"""
+            <div class="tips-section">
+                <h2>Tips for Engaging Your Prospects</h2>
+        """
+        
+        for i, tip in enumerate(engagement_tips):
+            title = tip.get("title", f"Tip {i+1}")
+            tip_content = tip.get("content", "")
+            
+            content += f"""
+                <div class="tip">
+                    <h3>{i+1}. {title}</h3>
+                    <p>{tip_content}</p>
+                </div>
+            """
+        
+        content += """
+            </div>
+        """
+    
+    # Add link fallback and closing
+    content += f"""
             <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
             <p class="link-text">{invite_link}</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """
+    
     return get_base_template(content)
 
 def get_company_addition_template(user_name: str, company_name: str, inviter_name: str) -> str:

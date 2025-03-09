@@ -2714,7 +2714,9 @@ async def invite_users_to_company(
                         to_email=invite.email,
                         company_name=company["name"],
                         invite_token=invite_token["token"],
-                        inviter_name=inviter_name
+                        inviter_name=inviter_name,
+                        recipient_name=invite.name if invite.name and invite.name.strip() else invite.email.split('@')[0],
+                        personalize=True
                     )
                     
                     results.append({
