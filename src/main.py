@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -3751,3 +3751,62 @@ app.include_router(web_agent_router, prefix="/api")
 
 # Include partner applications router
 app.include_router(partner_applications_router)
+
+@app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
+async def send_campaign_summary_email_endpoint(
+    campaign_id: UUID,
+    request: Dict[str, str] = Body(...),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """
+    Send a comprehensive campaign summary email
+    
+    - **campaign_id**: UUID of the campaign
+    - **request**: Body containing recipient_email and optional recipient_first_name
+    """
+    try:
+        # Verify user has permission for this campaign
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Campaign not found: {campaign_id}"
+            )
+            
+        # Check company association
+        if str(campaign['company_id']) not in [role.company_id for role in current_user.company_roles]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to access this campaign"
+            )
+            
+        # Get the recipient email from the request body
+        recipient_email = request.get('recipient_email')
+        if not recipient_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="recipient_email is required"
+            )
+            
+        # Get optional recipient first name
+        recipient_first_name = request.get('recipient_first_name')
+            
+        # Import the function to send summary email
+        from src.scripts.generate_simple_campaign_summary import send_simple_summary_email
+        
+        # Send the email asynchronously
+        await send_simple_summary_email(campaign_id, recipient_email, recipient_first_name)
+        
+        return {
+            "status": "success",
+            "message": f"Campaign summary email sent to {recipient_email}"
+        }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending campaign summary email: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send campaign summary email: {str(e)}"
+        )

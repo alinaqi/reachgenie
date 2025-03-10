@@ -2572,3 +2572,70 @@ async def get_partner_application_statistics() -> Dict:
             status_code=500,
             detail=f"Failed to get partner application statistics: {str(e)}"
         )
+
+async def get_leads_by_campaign(campaign_id: UUID) -> List[Dict]:
+    """
+    Get all leads associated with a campaign's company
+    
+    Args:
+        campaign_id: UUID of the campaign
+        
+    Returns:
+        List of lead records
+    """
+    try:
+        # First get the campaign to get company_id
+        campaign = await get_campaign_by_id(campaign_id)
+        
+        if not campaign:
+            logger.warning(f"Campaign with ID {campaign_id} not found")
+            return []
+            
+        # Get company_id from campaign
+        company_id = campaign.get('company_id')
+        if not company_id:
+            logger.warning(f"Campaign {campaign_id} has no company_id")
+            return []
+            
+        # Get all leads for this company
+        leads_response = await get_leads_by_company(UUID(company_id), page_number=1, limit=1000)
+        
+        if not leads_response or 'data' not in leads_response:
+            return []
+            
+        return leads_response.get('data', [])
+        
+    except Exception as e:
+        logger.error(f"Error fetching leads for campaign {campaign_id}: {str(e)}")
+        return []
+
+async def get_lead_details(lead_id: UUID) -> Optional[Dict]:
+    """
+    Get detailed information about a lead, including any enrichment data
+    
+    Args:
+        lead_id: UUID of the lead
+        
+    Returns:
+        Dict containing lead details or None if not found
+    """
+    try:
+        # First get basic lead information
+        lead = await get_lead_by_id(lead_id)
+        
+        if not lead:
+            logger.warning(f"Lead with ID {lead_id} not found")
+            return None
+            
+        # Get communication history to get a more complete picture
+        communication_history = await get_lead_communication_history(lead_id)
+        
+        # Return combined information
+        return {
+            **lead,
+            "communication_history": communication_history.get("history", []) if communication_history else []
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting lead details for {lead_id}: {str(e)}")
+        return None
