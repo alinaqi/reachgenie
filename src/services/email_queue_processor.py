@@ -35,6 +35,27 @@ from src.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+def _extract_name_from_email(email: str) -> str:
+    """
+    Extract name from email address and format it as a proper name
+    (e.g., 'Jack Doe' from 'jack.doe@gmail.com')
+    """
+    # Get the part before @
+    local_part = email.split('@')[0]
+    
+    # Replace common separators with spaces
+    name = local_part.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+    
+    # Split into parts and capitalize each part
+    name_parts = [part.capitalize() for part in name.split() if part]
+    
+    # If we have at least one part, return the formatted name
+    if name_parts:
+        return ' '.join(name_parts)
+    
+    # Fallback to just capitalize the local part if splitting produces no valid parts
+    return local_part.capitalize()
+
 async def process_email_queues():
     """Process email queues for all companies"""
     try:
@@ -304,15 +325,25 @@ async def process_queued_email(queue_item: dict, company: dict):
                 account_password=decrypted_password,
                 provider=company["account_type"]
             ) as smtp_client:
+                # Extract name from email or use company name as fallback
+                sender_name = None
+                if company.get("account_email"):
+                    sender_name = _extract_name_from_email(company["account_email"])
+                
+                # If extraction failed or produced a generic result, use company name
+                account_email_local = company.get("account_email", "").split('@')[0].capitalize() if company.get("account_email") else ""
+                if not sender_name or sender_name == account_email_local:
+                    sender_name = company["name"]
+                    
                 # Send email with reply-to header
                 await smtp_client.send_email(
                     to_email=lead['email'],
                     subject=subject,
                     html_content=final_body_with_tracking,
-                    from_name=company["name"],
+                    from_name=sender_name,  # Use extracted name or company name
                     email_log_id=email_log['id']
                 )
-                logger.info(f"Successfully sent email to {lead['email']}")
+                logger.info(f"Successfully sent email to {lead['email']} from {sender_name}")
                 
                 # Create email log detail
                 await create_email_log_detail(
@@ -322,7 +353,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     email_body=body_without_tracking_pixel,
                     sender_type='assistant',
                     sent_at=datetime.now(timezone.utc),
-                    from_name=company['name'],
+                    from_name=sender_name,  # Use the same sender name here
                     from_email=company['account_email'],
                     to_email=lead['email']
                 )

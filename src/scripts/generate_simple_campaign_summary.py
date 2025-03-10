@@ -477,6 +477,27 @@ async def generate_simple_summary_email(campaign_id: UUID, recipient_first_name:
     # Wrap in base template
     return get_base_template(content)
 
+def _extract_name_from_email(email: str) -> str:
+    """
+    Extract name from email address and format it as a proper name
+    (e.g., 'Jack Doe' from 'jack.doe@gmail.com')
+    """
+    # Get the part before @
+    local_part = email.split('@')[0]
+    
+    # Replace common separators with spaces
+    name = local_part.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+    
+    # Split into parts and capitalize each part
+    name_parts = [part.capitalize() for part in name.split() if part]
+    
+    # If we have at least one part, return the formatted name
+    if name_parts:
+        return ' '.join(name_parts)
+    
+    # Fallback to just capitalize the local part if splitting produces no valid parts
+    return local_part.capitalize()
+
 async def send_simple_summary_email(campaign_id: UUID, recipient_email: str, recipient_first_name: Optional[str] = None) -> None:
     """
     Generate and send a simple campaign summary email
@@ -493,19 +514,40 @@ async def send_simple_summary_email(campaign_id: UUID, recipient_email: str, rec
             logger.error(f"Campaign with ID {campaign_id} not found")
             return
             
+        # Get company details
+        company_id = UUID(campaign['company_id'])
+        company = await get_company_by_id(company_id)
+        if not company:
+            logger.error(f"Company with ID {company_id} not found")
+            return
+            
+        # Determine the sender name based on company account email
+        # First priority: Use the name extracted from the account email if available
+        # Second priority: Use the company name
+        from_name = None
+        if company.get('account_email'):
+            from_name = _extract_name_from_email(company['account_email'])
+        
+        # If no account email or extraction failed, fall back to company name
+        if not from_name or from_name == company.get('account_email', '').split('@')[0].capitalize():
+            from_name = company.get('name', 'ReachGenie')
+            
         # Generate the email content
         email_content = await generate_simple_summary_email(campaign_id, recipient_first_name)
         
         # Send the email
         email_service = EmailService()
         
+        # Use the determined sender name
         await email_service.send_email(
             to_email=recipient_email,
             subject=f"Campaign Summary: {campaign['name']}",
-            html_content=email_content
+            html_content=email_content,
+            from_name=from_name,  # Use name extracted from email or company name
+            from_email=None  # Use the default email from settings
         )
         
-        logger.info(f"Successfully sent campaign summary email for campaign {campaign_id} to {recipient_email}")
+        logger.info(f"Successfully sent campaign summary email for campaign {campaign_id} to {recipient_email} with sender name: {from_name}")
     
     except Exception as e:
         logger.error(f"Error sending campaign summary email: {str(e)}")
