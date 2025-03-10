@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query
 from typing import List, Optional
 from uuid import UUID
+import uuid
 import logging
 
 from src.models import (
