@@ -99,24 +99,23 @@ from src.database import (
     get_valid_invite_token,
     mark_invite_token_used,
     clear_company_cronofy_data,
-    update_company_cronofy_profile,
-    process_do_not_email_csv_upload
+    update_company_cronofy_profile
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
 from src.models import (
-    UserBase, UserCreate, UserInDB, Token, TokenData, UserUpdate, 
-    CompanyBase, CompanyCreate, CompanyInDB, ProductBase, ProductCreate, ProductInDB,
+    UserBase, UserCreate, UserInDB, Token, UserUpdate, 
+    CompanyBase, CompanyCreate, CompanyInDB, ProductCreate, ProductInDB,
     LeadBase, LeadCreate, LeadInDB, PaginatedLeadResponse, LeadResponse, LeadDetail,
     CallBase, CallCreate, CallInDB, BlandWebhookPayload, EmailCampaignBase, EmailCampaignCreate,
     EmailCampaignInDB, AccountCredentialsUpdate, EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest, ResetPasswordResponse,
-    CampaignGenerationRequest, CampaignGenerationResponse, LeadsUploadResponse, CronofyAuthResponse,
+    CampaignGenerationRequest, CampaignGenerationResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings, DoNotEmailRequest, DoNotEmailResponse, DoNotEmailListResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -150,10 +149,6 @@ handler = BugsnagHandler()
 # send only ERROR-level logs and above
 handler.setLevel(logging.ERROR)
 logger.addHandler(handler)
-
-class TaskResponse(BaseModel):
-    task_id: UUID
-    message: str
 
 class BookAppointmentRequest(BaseModel):
     company_uuid: UUID
@@ -3654,176 +3649,6 @@ def process_lead_data_for_response(lead: dict):
             lead["enriched_data"] = None
     
     return lead
-
-# Do Not Email List Endpoints
-@app.get("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailListResponse, tags=["Email Management"])
-async def get_do_not_email_list_endpoint(
-    company_id: UUID,
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(50, ge=1, le=100, description="Items per page"),
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Get Do Not Email list for a company
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await get_do_not_email_list(
-        company_id=company_id,
-        page=page,
-        limit=limit
-    )
-    
-    return result
-
-@app.post("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailResponse, tags=["Email Management"])
-async def add_to_do_not_email_list_endpoint(
-    company_id: UUID,
-    request: DoNotEmailRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Add an email to the Do Not Email list
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await add_to_do_not_email_list(
-        email=request.email,
-        reason=request.reason,
-        company_id=company_id
-    )
-    
-    if result["success"]:
-        return {"success": True, "message": f"Added {request.email} to Do Not Email list"}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to add to Do Not Email list: {result.get('error')}")
-
-@app.delete("/api/companies/{company_id}/do-not-email/{email}", response_model=DoNotEmailResponse, tags=["Email Management"])
-async def remove_from_do_not_email_list_endpoint(
-    company_id: UUID,
-    email: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Remove an email from the Do Not Email list
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await remove_from_do_not_email_list(
-        email=email,
-        company_id=company_id
-    )
-    
-    if result["success"]:
-        return {"success": True, "message": f"Removed {email} from Do Not Email list"}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to remove from Do Not Email list: {result.get('error')}")
-
-@app.get("/api/do-not-email/check", tags=["Email Management"])
-async def check_do_not_email_status(
-    email: str = Query(..., description="Email address to check"),
-    company_id: Optional[UUID] = Query(None, description="Optional company ID to check company-specific exclusions"),
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Check if an email is in the Do Not Email list
-    """
-    if company_id:
-        # Validate company access if company_id is provided
-        user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-        if not user_company_profile:
-            raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    is_excluded = await is_email_in_do_not_email_list(
-        email=email,
-        company_id=company_id
-    )
-    
-    return {"email": email, "is_excluded": is_excluded}
-
-@app.post("/api/companies/{company_id}/do-not-email/upload", response_model=TaskResponse, tags=["Email Management"])
-async def upload_do_not_email_list(
-    background_tasks: BackgroundTasks,
-    company_id: UUID,
-    current_user: dict = Depends(get_current_user),
-    file: UploadFile = File(...)
-):
-    """
-    Upload email addresses from CSV file to add to the Do Not Email list.
-    The processing will be done in the background.
-    
-    Args:
-        background_tasks: FastAPI background tasks
-        company_id: UUID of the company
-        current_user: Current authenticated user
-        file: CSV file containing email addresses and reasons
-        
-    Returns:
-        Task ID for tracking the upload progress
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    try:
-        # Initialize Supabase client with service role
-        settings = get_settings()
-        supabase: Client = create_client(
-            settings.supabase_url,
-            settings.SUPABASE_SERVICE_KEY
-        )
-        
-        # Generate unique file name
-        file_name = f"{company_id}/{uuid.uuid4()}.csv"
-        
-        # Read and upload file content
-        file_content = await file.read()
-        if isinstance(file_content, str):
-            file_content = file_content.encode('utf-8')
-        
-        # Upload file to Supabase storage
-        storage = supabase.storage.from_("do-not-email-uploads")
-        try:
-            storage.upload(
-                path=file_name,
-                file=file_content,
-                file_options={"content-type": "text/csv"}
-            )
-        except Exception as upload_error:
-            logger.error(f"Storage upload error: {str(upload_error)}")
-            raise HTTPException(status_code=500, detail="Failed to upload file to storage")
-        
-        # Create task record
-        task_id = uuid.uuid4()
-        await create_upload_task(task_id, company_id, current_user["id"], file_name)
-        
-        # Add background task
-        background_tasks.add_task(
-            process_do_not_email_csv_upload,
-            company_id,
-            file_name,
-            current_user["id"],
-            task_id
-        )
-        
-        return TaskResponse(
-            task_id=task_id,
-            message="File upload started. Use the task ID to check the status."
-        )
-        
-    except Exception as e:
-        logger.error(f"Error starting do-not-email list upload: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # Include web agent router
 app.include_router(web_agent_router, prefix="/api")

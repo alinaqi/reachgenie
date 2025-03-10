@@ -368,6 +368,9 @@ class EmailCampaignBase(BaseModel):
     product_id: UUID
     template: Optional[str] = None
 
+class TaskResponse(BaseModel):
+    task_id: UUID
+    message: str
 class TestRunCampaignRequest(BaseModel):
     lead_contact: str
 class EmailCampaignCreate(EmailCampaignBase):
