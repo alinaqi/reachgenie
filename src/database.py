@@ -437,23 +437,29 @@ async def get_leads_with_email(campaign_id: UUID):
     if not campaign:
         return []
     
-    # Get only leads that have an email address (not null and not empty)
+    # Get only leads that:
+    # 1. Have an email address (not null and not empty)
+    # 2. Have not been marked as do_not_contact
     response = supabase.table('leads')\
         .select('*')\
         .eq('company_id', campaign['company_id'])\
         .neq('email', None)\
         .neq('email', '')\
+        .eq('do_not_contact', False)\
         .execute()
     
     return response.data
 
 async def get_leads_with_phone(company_id: UUID):
-    # Get only those leads who have phone number (not null and not empty)
+    # Get only those leads who:
+    # 1. Have a phone number (not null and not empty)
+    # 2. Have not been marked as do_not_contact
     response = supabase.table('leads')\
         .select('*')\
         .eq('company_id', company_id)\
         .neq('phone_number', None)\
         .neq('phone_number', '')\
+        .eq('do_not_contact', False)\
         .execute()
     
     return response.data
