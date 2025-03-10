@@ -7,13 +7,16 @@ from typing import List, Dict
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from src.utils.smtp_client import SMTPClient
+from src.config import get_settings
+from openai import AsyncOpenAI
 
 from src.database import (
     get_companies_with_email_credentials,
     create_email_log_detail,
     update_email_log_has_replied,
     update_last_processed_uid,
-    get_campaign_from_email_log
+    get_campaign_from_email_log,
+    add_to_do_not_email_list
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -234,6 +237,74 @@ async def process_emails(
             logger.info(f"Successfully updated has_replied status for email_log_id: {email_log_id}")
         else:
             logger.error(f"Failed to update has_replied status for email_log_id: {email_log_id}")
+
+        # Check for unsubscribe request using GPT-4o-mini
+        settings = get_settings()
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        try:
+            logger.info(f"Checking for unsubscribe request in email: {email_data['subject']}")
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an assistant that analyzes email content to determine if the user is requesting to unsubscribe or opt-out from emails. Respond with 'yes' if the email contains an unsubscribe request, and 'no' if it doesn't."},
+                    {"role": "user", "content": f"Subject: {email_data['subject']}\n\nBody: {email_data['body']}\n\nDoes this email contain a request to unsubscribe, opt-out, stop receiving emails, or any similar request?"}
+                ],
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            unsubscribe_check = response.choices[0].message.content.strip().lower()
+            logger.info(f"Unsubscribe check result: {unsubscribe_check}")
+            
+            if unsubscribe_check == "yes":
+                logger.info(f"Unsubscribe request detected from {email_data['from']} - adding to do_not_email list")
+                company_id = UUID(company['id'])
+                result = await add_to_do_not_email_list(
+                    email=email_data['from'],
+                    reason='unsubscribe_request',
+                    company_id=company_id
+                )
+                
+                if result.get('success'):
+                    logger.info(f"Successfully added {email_data['from']} to do_not_email list for company {company['name']}")
+                    
+                    # Send confirmation email about unsubscription
+                    async with SMTPClient(
+                        account_email=company['account_email'],
+                        account_password=decrypted_password,
+                        provider=company['account_type']
+                    ) as smtp_client:
+                        unsubscribe_confirmation = f"""
+                        <html>
+                        <body>
+                            <p>Hello {email_data['from_name'] or 'there'},</p>
+                            <p>We've received your request to unsubscribe from our emails. You have been successfully removed from our email list.</p>
+                            <p>If you have any questions or if this was done in error, please contact us.</p>
+                            <p>Best regards,<br>{company['name']} Team</p>
+                        </body>
+                        </html>
+                        """
+                        
+                        await smtp_client.send_email(
+                            to_email=email_data['from'],
+                            subject="Unsubscribe Confirmation",
+                            html_content=unsubscribe_confirmation,
+                            from_name=company["name"],
+                            email_log_id=email_log_id,
+                            in_reply_to=email_data['message_id'],
+                            references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
+                        )
+                        logger.info(f"Sent unsubscribe confirmation to {email_data['from']}")
+                    
+                    # Skip AI reply since we've already sent an unsubscribe confirmation
+                    continue
+                else:
+                    logger.error(f"Failed to add {email_data['from']} to do_not_email list: {result.get('error')}")
+            
+        except Exception as e:
+            logger.error(f"Error checking for unsubscribe request: {str(e)}")
+            # Continue with normal processing if unsubscribe check fails
 
         # Get campaign details to get the template
         campaign = await get_campaign_from_email_log(email_log_id)
