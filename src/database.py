@@ -2007,11 +2007,13 @@ async def add_to_do_not_email_list(email: str, reason: str, company_id: Optional
             return {"success": True, "email": email, "already_exists": True}
         
         # Insert new record
+        current_time = datetime.now(timezone.utc).isoformat()
         insert_data = {
             "email": email,
-            "reason": reason,
+            "reason": reason if reason else "Imported from CSV",
             "company_id": str(company_id) if company_id else None,
-            "created_at": datetime.now(timezone.utc)
+            "created_at": current_time,
+            "updated_at": current_time
         }
         
         response = supabase.table('do_not_email')\
