@@ -281,7 +281,7 @@ async def process_emails(
                             <p>Hello {email_data['from_name'] or 'there'},</p>
                             <p>We've received your request to unsubscribe from our emails. You have been successfully removed from our email list.</p>
                             <p>If you have any questions or if this was done in error, please contact us.</p>
-                            <p>Best regards,<br>{company['name']} Team</p>
+                            <p>Best regards</p>
                         </body>
                         </html>
                         """
