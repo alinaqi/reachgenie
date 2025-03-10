@@ -247,8 +247,8 @@ async def process_emails(
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are an assistant that analyzes email content to determine if the user is requesting to unsubscribe or opt-out from emails. Respond with 'yes' if the email contains an unsubscribe request, and 'no' if it doesn't."},
-                    {"role": "user", "content": f"Subject: {email_data['subject']}\n\nBody: {email_data['body']}\n\nDoes this email contain a request to unsubscribe, opt-out, stop receiving emails, or any similar request?"}
+                    {"role": "system", "content": "You are an assistant that analyzes email content to determine if the user is explicitly requesting to unsubscribe or opt-out from emails. Look for phrases like 'please unsubscribe me', 'remove me from your list', 'stop sending emails', etc. Do NOT consider standard unsubscribe links in email footers as unsubscribe requests. Only detect when a human is actively asking to be removed from communications. Respond with 'yes' if the email contains a clear unsubscribe request from the user, and 'no' if it doesn't."},
+                    {"role": "user", "content": f"Subject: {email_data['subject']}\n\nBody: {email_data['body']}\n\nDoes this email contain an explicit request from the user to unsubscribe, opt-out, stop receiving emails, or any similar request?"}
                 ],
                 temperature=0.1,
                 max_tokens=10
