@@ -97,7 +97,8 @@ from src.database import (
     create_invite_token,
     get_valid_invite_token,
     mark_invite_token_used,
-    clear_company_cronofy_data
+    clear_company_cronofy_data,
+    update_company_cronofy_profile
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
