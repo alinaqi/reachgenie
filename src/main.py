@@ -131,6 +131,7 @@ from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content
 from src.services.call_generation import generate_call_script
+from src.routes.email_queues import router as email_queues_router
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -3735,6 +3736,7 @@ app.include_router(partner_applications_router)
 # Include do-not-email routers
 app.include_router(do_not_email_router)
 app.include_router(do_not_email_check_router)
+app.include_router(email_queues_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
