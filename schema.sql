@@ -196,6 +196,35 @@ COMMENT ON COLUMN campaign_runs.leads_total IS 'Number of call/email leads that 
 COMMENT ON COLUMN campaign_runs.leads_processed IS 'Number of leads processed so far in this run';
 COMMENT ON COLUMN campaign_runs.status IS 'Status of the campaign run: idle (default), running, or completed';
 
+-- Email Queue table
+CREATE TABLE IF NOT EXISTS email_queue (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    campaign_id UUID REFERENCES campaigns(id) NOT NULL,
+    campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
+    lead_id UUID REFERENCES leads(id) NOT NULL,
+    subject TEXT NOT NULL,
+    email_body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
+    priority INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    scheduled_for TIMESTAMP WITH TIME ZONE,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Add comments to explain the columns
+COMMENT ON COLUMN email_queue.subject IS 'Subject line of the email to be sent';
+COMMENT ON COLUMN email_queue.email_body IS 'Body content of the email to be sent';
+COMMENT ON COLUMN email_queue.status IS 'Status of the queued email: pending (default), processing, sent, or failed';
+COMMENT ON COLUMN email_queue.processed_at IS 'Timestamp when the email was processed (sent or failed)';
+
+-- Create index for faster querying of pending emails
+CREATE INDEX IF NOT EXISTS email_queue_status_idx ON email_queue(status);
+CREATE INDEX IF NOT EXISTS email_queue_campaign_run_id_idx ON email_queue(campaign_run_id);
+
 -- Partner Applications table
 CREATE TABLE IF NOT EXISTS partner_applications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

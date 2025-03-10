@@ -1032,4 +1032,28 @@ class DoNotEmailBulkImportResponse(BaseModel):
     emails_saved: int
     emails_skipped: int
     unmapped_headers: List[str]
+
+class EmailQueueItem(BaseModel):
+    id: UUID
+    company_id: UUID
+    campaign_id: UUID
+    campaign_run_id: UUID
+    lead_id: UUID
+    subject: str
+    email_body: str
+    status: str
+    priority: int
+    retry_count: int
+    max_retries: int
+    error_message: Optional[str]
+    created_at: datetime
+    scheduled_for: Optional[datetime]
+    processed_at: Optional[datetime]
+
+class PaginatedEmailQueueResponse(BaseModel):
+    items: List[EmailQueueItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
  

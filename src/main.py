@@ -99,7 +99,9 @@ from src.database import (
     get_valid_invite_token,
     mark_invite_token_used,
     clear_company_cronofy_data,
-    update_company_cronofy_profile
+    update_company_cronofy_profile,
+    get_email_queues_by_campaign_run,
+    get_campaign_run
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -115,7 +117,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings,TaskResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -129,6 +131,7 @@ from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content
 from src.services.call_generation import generate_call_script
+from src.routes.email_queues import router as email_queues_router
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -2308,12 +2311,86 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
             if lead.get('email'):  # Only queue if lead has email
                 logger.info(f"Queueing email for lead: {lead['email']}")
                 
+                # =============== Generate HTML subject and email - START ================================
+                try:
+                    # Check if lead already has enriched data
+                    insights = None
+                    if lead.get('enriched_data'):
+                        logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
+                        # We have enriched data, use it directly
+                        if isinstance(lead['enriched_data'], str):
+                            try:
+                                enriched_data = json.loads(lead['enriched_data'])
+                                insights = json.dumps(enriched_data)
+                            except json.JSONDecodeError:
+                                insights = lead['enriched_data']
+                        else:
+                            insights = json.dumps(lead['enriched_data'])
+                    
+                    # Generate company insights if we don't have any
+                    if not insights:
+                        logger.info(f"Generating new insights for lead: {lead['email']}")
+                        insights = await generate_company_insights(lead, perplexity_service)
+                        
+                        # Save the insights to the lead's enriched_data if we generated new ones
+                        if insights:
+                            try:
+                                # Parse the insights JSON if it's a string
+                                enriched_data = {}
+                                if isinstance(insights, str):
+                                    # Try to extract JSON from the string response
+                                    insights_str = insights.strip()
+                                    # Check if the response is already in JSON format
+                                    try:
+                                        enriched_data = json.loads(insights_str)
+                                    except json.JSONDecodeError:
+                                        # If not, look for JSON within the string (common with LLM responses)
+                                        import re
+                                        json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                                        if json_match:
+                                            potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                                            enriched_data = json.loads(potential_json)
+                                        else:
+                                            # If we can't extract structured JSON, store as raw text
+                                            enriched_data = {"raw_insights": insights_str}
+                                else:
+                                    enriched_data = insights
+                                
+                                # Update the lead with enriched data
+                                from src.database import update_lead_enrichment
+                                await update_lead_enrichment(lead['id'], enriched_data)
+                                logger.info(f"Updated lead {lead['email']} with new enriched data")
+                            except Exception as e:
+                                logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
+                    
+                    if not insights:
+                        logger.error(f"Failed to generate insights for lead {lead['email']}")
+                        return
+                        
+                    # Generate personalized email content
+                    subject, body = await generate_email_content(lead, campaign, company, insights)
+                    if not subject or not body:
+                        logger.error(f"Failed to generate email content for lead {lead['email']}")
+                        return
+                        
+                    logger.info(f"Generated email content for lead: {lead['email']}")
+                    logger.info(f"Email Subject: {subject}")
+                    
+                    # Replace {email_body} placeholder in template with generated body
+                    final_body = template.replace("{email_body}", body)
+
+                except Exception as e:
+                    logger.error(f"Error processing email for {lead['email']}: {str(e)}")
+                # =============== Generate HTML subject and email - END ====================================
+
                 # Add to queue
                 await add_email_to_queue(
                     company_id=campaign['company_id'],
                     campaign_id=campaign['id'],
                     campaign_run_id=campaign_run_id,
-                    lead_id=lead['id']
+                    lead_id=lead['id'],
+                    subject=subject,
+                    body=final_body
                 )
                 leads_queued += 1
                 logger.info(f"Email for lead {lead['email']} added to queue")
@@ -3659,6 +3736,7 @@ app.include_router(partner_applications_router)
 # Include do-not-email routers
 app.include_router(do_not_email_router)
 app.include_router(do_not_email_check_router)
+app.include_router(email_queues_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
@@ -3718,3 +3796,44 @@ async def send_campaign_summary_email_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send campaign summary email: {str(e)}"
         )
+
+@app.get("/api/campaigns/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse, tags=["Campaigns & Emails"])
+async def get_campaign_run_email_queues(
+    campaign_run_id: UUID,
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get paginated list of email queues for a specific campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        current_user: Current authenticated user
+        
+    Returns:
+        Paginated list of email queues
+    """
+    # Get the campaign run to verify access
+    campaign_run = await get_campaign_run(campaign_run_id)
+    if not campaign_run:
+        raise HTTPException(status_code=404, detail="Campaign run not found")
+    
+    # Get the campaign to verify company access
+    campaign = await get_campaign_by_id(campaign_run['campaign_id'])
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Check if user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this campaign")
+    
+    # Get paginated email queues
+    return await get_email_queues_by_campaign_run(
+        campaign_run_id=campaign_run_id,
+        page_number=page_number,
+        limit=limit
+    )
