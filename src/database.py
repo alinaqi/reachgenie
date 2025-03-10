@@ -2790,3 +2790,25 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
         'page_size': limit,
         'total_pages': (total + limit - 1) // limit if total > 0 else 1
     }
+
+async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
+    """
+    Get a campaign run by its ID
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        Campaign run record or None if not found
+    """
+    try:
+        response = supabase.table('campaign_runs').select('*').eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            return None
+            
+        return response.data[0]
+        
+    except Exception as e:
+        logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
+        return None
