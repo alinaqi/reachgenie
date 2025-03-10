@@ -368,6 +368,9 @@ class EmailCampaignBase(BaseModel):
     product_id: UUID
     template: Optional[str] = None
 
+class TaskResponse(BaseModel):
+    task_id: UUID
+    message: str
 class TestRunCampaignRequest(BaseModel):
     lead_contact: str
 class EmailCampaignCreate(EmailCampaignBase):
@@ -1022,4 +1025,11 @@ class SimplePartnerApplicationResponse(BaseModel):
             }
         }
         orm_mode = True
+
+# Do Not Email Bulk Import Models
+class DoNotEmailBulkImportResponse(BaseModel):
+    message: str
+    emails_saved: int
+    emails_skipped: int
+    unmapped_headers: List[str]
  

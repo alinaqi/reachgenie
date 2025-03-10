@@ -22,6 +22,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.services.campaigns import run_test_email_campaign, run_test_call_campaign
 from src.routes.web_agent import router as web_agent_router
 from src.routes.partner_applications import router as partner_applications_router
+from src.routes.do_not_email import router as do_not_email_router, check_router as do_not_email_check_router
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password,
@@ -104,17 +105,17 @@ from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
 from src.services.bland_calls import initiate_call
 from src.models import (
-    UserBase, UserCreate, UserInDB, Token, TokenData, UserUpdate, 
-    CompanyBase, CompanyCreate, CompanyInDB, ProductBase, ProductCreate, ProductInDB,
+    UserBase, UserCreate, UserInDB, Token, UserUpdate, 
+    CompanyBase, CompanyCreate, CompanyInDB, ProductCreate, ProductInDB,
     LeadBase, LeadCreate, LeadInDB, PaginatedLeadResponse, LeadResponse, LeadDetail,
     CallBase, CallCreate, CallInDB, BlandWebhookPayload, EmailCampaignBase, EmailCampaignCreate,
     EmailCampaignInDB, AccountCredentialsUpdate, EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest, ResetPasswordResponse,
-    CampaignGenerationRequest, CampaignGenerationResponse, LeadsUploadResponse, CronofyAuthResponse,
+    CampaignGenerationRequest, CampaignGenerationResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings, DoNotEmailRequest, DoNotEmailResponse, DoNotEmailListResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -148,10 +149,6 @@ handler = BugsnagHandler()
 # send only ERROR-level logs and above
 handler.setLevel(logging.ERROR)
 logger.addHandler(handler)
-
-class TaskResponse(BaseModel):
-    task_id: UUID
-    message: str
 
 class BookAppointmentRequest(BaseModel):
     company_uuid: UUID
@@ -3653,106 +3650,15 @@ def process_lead_data_for_response(lead: dict):
     
     return lead
 
-# Do Not Email List Endpoints
-@app.get("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailListResponse, tags=["Email Management"])
-async def get_do_not_email_list_endpoint(
-    company_id: UUID,
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(50, ge=1, le=100, description="Items per page"),
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Get Do Not Email list for a company
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await get_do_not_email_list(
-        company_id=company_id,
-        page=page,
-        limit=limit
-    )
-    
-    return result
-
-@app.post("/api/companies/{company_id}/do-not-email", response_model=DoNotEmailResponse, tags=["Email Management"])
-async def add_to_do_not_email_list_endpoint(
-    company_id: UUID,
-    request: DoNotEmailRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Add an email to the Do Not Email list
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await add_to_do_not_email_list(
-        email=request.email,
-        reason=request.reason,
-        company_id=company_id
-    )
-    
-    if result["success"]:
-        return {"success": True, "message": f"Added {request.email} to Do Not Email list"}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to add to Do Not Email list: {result.get('error')}")
-
-@app.delete("/api/companies/{company_id}/do-not-email/{email}", response_model=DoNotEmailResponse, tags=["Email Management"])
-async def remove_from_do_not_email_list_endpoint(
-    company_id: UUID,
-    email: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Remove an email from the Do Not Email list
-    """
-    # Validate company access
-    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-    if not user_company_profile:
-        raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    result = await remove_from_do_not_email_list(
-        email=email,
-        company_id=company_id
-    )
-    
-    if result["success"]:
-        return {"success": True, "message": f"Removed {email} from Do Not Email list"}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to remove from Do Not Email list: {result.get('error')}")
-
-@app.get("/api/do-not-email/check", tags=["Email Management"])
-async def check_do_not_email_status(
-    email: str = Query(..., description="Email address to check"),
-    company_id: Optional[UUID] = Query(None, description="Optional company ID to check company-specific exclusions"),
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Check if an email is in the Do Not Email list
-    """
-    if company_id:
-        # Validate company access if company_id is provided
-        user_company_profile = await get_user_company_profile(current_user['id'], company_id)
-        if not user_company_profile:
-            raise HTTPException(status_code=403, detail="You don't have access to this company")
-    
-    is_excluded = await is_email_in_do_not_email_list(
-        email=email,
-        company_id=company_id
-    )
-    
-    return {"email": email, "is_excluded": is_excluded}
-
 # Include web agent router
 app.include_router(web_agent_router, prefix="/api")
 
 # Include partner applications router
 app.include_router(partner_applications_router)
+
+# Include do-not-email routers
+app.include_router(do_not_email_router)
+app.include_router(do_not_email_check_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
