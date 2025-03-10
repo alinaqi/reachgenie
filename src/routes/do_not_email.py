@@ -26,13 +26,18 @@ from supabase import create_client, Client
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Create router
-router = APIRouter(
+# Create routers
+companies_router = APIRouter(
     prefix="/api/companies",
     tags=["Email Management"]
 )
 
-@router.get("/{company_id}/do-not-email", response_model=DoNotEmailListResponse)
+check_router = APIRouter(
+    prefix="/api",
+    tags=["Email Management"]
+)
+
+@companies_router.get("/{company_id}/do-not-email", response_model=DoNotEmailListResponse)
 async def get_do_not_email_list_endpoint(
     company_id: UUID,
     page: int = Query(1, ge=1, description="Page number"),
@@ -55,7 +60,7 @@ async def get_do_not_email_list_endpoint(
     
     return result
 
-@router.post("/{company_id}/do-not-email", response_model=DoNotEmailResponse)
+@companies_router.post("/{company_id}/do-not-email", response_model=DoNotEmailResponse)
 async def add_to_do_not_email_list_endpoint(
     company_id: UUID,
     request: DoNotEmailRequest,
@@ -80,7 +85,7 @@ async def add_to_do_not_email_list_endpoint(
     else:
         raise HTTPException(status_code=500, detail=f"Failed to add to Do Not Email list: {result.get('error')}")
 
-@router.delete("/{company_id}/do-not-email/{email}", response_model=DoNotEmailResponse)
+@companies_router.delete("/{company_id}/do-not-email/{email}", response_model=DoNotEmailResponse)
 async def remove_from_do_not_email_list_endpoint(
     company_id: UUID,
     email: str,
@@ -104,7 +109,7 @@ async def remove_from_do_not_email_list_endpoint(
     else:
         raise HTTPException(status_code=500, detail=f"Failed to remove from Do Not Email list: {result.get('error')}")
 
-@router.get("/do-not-email/check")
+@check_router.get("/do-not-email/check")
 async def check_do_not_email_status(
     email: str = Query(..., description="Email address to check"),
     company_id: Optional[UUID] = Query(None, description="Optional company ID to check company-specific exclusions"),
@@ -126,7 +131,7 @@ async def check_do_not_email_status(
     
     return {"email": email, "is_excluded": is_excluded}
 
-@router.post("/{company_id}/do-not-email/upload", response_model=TaskResponse)
+@companies_router.post("/{company_id}/do-not-email/upload", response_model=TaskResponse)
 async def upload_do_not_email_list(
     background_tasks: BackgroundTasks,
     company_id: UUID,
@@ -190,4 +195,8 @@ async def upload_do_not_email_list(
         
     except Exception as e:
         logger.error(f"Error starting do-not-email list upload: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Export both routers
+router = companies_router
+check_router = check_router 

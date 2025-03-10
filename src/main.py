@@ -22,7 +22,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.services.campaigns import run_test_email_campaign, run_test_call_campaign
 from src.routes.web_agent import router as web_agent_router
 from src.routes.partner_applications import router as partner_applications_router
-from src.routes.do_not_email import router as do_not_email_router
+from src.routes.do_not_email import router as do_not_email_router, check_router as do_not_email_check_router
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password,
@@ -3656,8 +3656,9 @@ app.include_router(web_agent_router, prefix="/api")
 # Include partner applications router
 app.include_router(partner_applications_router)
 
-# Include do-not-email router
+# Include do-not-email routers
 app.include_router(do_not_email_router)
+app.include_router(do_not_email_check_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
