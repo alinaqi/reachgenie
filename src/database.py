@@ -2757,3 +2757,36 @@ async def process_do_not_email_csv_upload(
     except Exception as e:
         logger.error(f"Error processing do-not-email CSV upload: {str(e)}")
         await update_task_status(task_id, "failed", str(e))
+
+async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20):
+    """
+    Get paginated email queues for a specific campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        
+    Returns:
+        Dictionary containing paginated email queues and metadata
+    """
+    # Build base query
+    base_query = supabase.table('email_queue').select('*', count='exact').eq('campaign_run_id', str(campaign_run_id))
+    
+    # Get total count
+    count_response = base_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data
+    response = base_query.range(offset, offset + limit - 1).order('created_at', desc=True).execute()
+    
+    return {
+        'items': response.data,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }

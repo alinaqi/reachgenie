@@ -99,7 +99,9 @@ from src.database import (
     get_valid_invite_token,
     mark_invite_token_used,
     clear_company_cronofy_data,
-    update_company_cronofy_profile
+    update_company_cronofy_profile,
+    get_email_queues_by_campaign_run,
+    get_campaign_run
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -115,7 +117,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings,TaskResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -3792,3 +3794,44 @@ async def send_campaign_summary_email_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send campaign summary email: {str(e)}"
         )
+
+@app.get("/api/campaigns/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse, tags=["Campaigns & Emails"])
+async def get_campaign_run_email_queues(
+    campaign_run_id: UUID,
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get paginated list of email queues for a specific campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        current_user: Current authenticated user
+        
+    Returns:
+        Paginated list of email queues
+    """
+    # Get the campaign run to verify access
+    campaign_run = await get_campaign_run(campaign_run_id)
+    if not campaign_run:
+        raise HTTPException(status_code=404, detail="Campaign run not found")
+    
+    # Get the campaign to verify company access
+    campaign = await get_campaign_by_id(campaign_run['campaign_id'])
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Check if user has access to the company
+    companies = await get_companies_by_user_id(current_user["id"])
+    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+        raise HTTPException(status_code=403, detail="Not authorized to access this campaign")
+    
+    # Get paginated email queues
+    return await get_email_queues_by_campaign_run(
+        campaign_run_id=campaign_run_id,
+        page_number=page_number,
+        limit=limit
+    )
