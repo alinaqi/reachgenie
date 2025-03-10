@@ -98,7 +98,8 @@ from src.database import (
     get_valid_invite_token,
     mark_invite_token_used,
     clear_company_cronofy_data,
-    update_company_cronofy_profile
+    update_company_cronofy_profile,
+    process_do_not_email_csv_upload
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -3747,6 +3748,81 @@ async def check_do_not_email_status(
     )
     
     return {"email": email, "is_excluded": is_excluded}
+
+@app.post("/api/companies/{company_id}/do-not-email/upload", response_model=TaskResponse, tags=["Email Management"])
+async def upload_do_not_email_list(
+    background_tasks: BackgroundTasks,
+    company_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    file: UploadFile = File(...)
+):
+    """
+    Upload email addresses from CSV file to add to the Do Not Email list.
+    The processing will be done in the background.
+    
+    Args:
+        background_tasks: FastAPI background tasks
+        company_id: UUID of the company
+        current_user: Current authenticated user
+        file: CSV file containing email addresses and reasons
+        
+    Returns:
+        Task ID for tracking the upload progress
+    """
+    # Validate company access
+    user_company_profile = await get_user_company_profile(current_user['id'], company_id)
+    if not user_company_profile:
+        raise HTTPException(status_code=403, detail="You don't have access to this company")
+    
+    try:
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Generate unique file name
+        file_name = f"{company_id}/{uuid.uuid4()}.csv"
+        
+        # Read and upload file content
+        file_content = await file.read()
+        if isinstance(file_content, str):
+            file_content = file_content.encode('utf-8')
+        
+        # Upload file to Supabase storage
+        storage = supabase.storage.from_("do-not-email-uploads")
+        try:
+            storage.upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": "text/csv"}
+            )
+        except Exception as upload_error:
+            logger.error(f"Storage upload error: {str(upload_error)}")
+            raise HTTPException(status_code=500, detail="Failed to upload file to storage")
+        
+        # Create task record
+        task_id = uuid.uuid4()
+        await create_upload_task(task_id, company_id, current_user["id"], file_name)
+        
+        # Add background task
+        background_tasks.add_task(
+            process_do_not_email_csv_upload,
+            company_id,
+            file_name,
+            current_user["id"],
+            task_id
+        )
+        
+        return TaskResponse(
+            task_id=task_id,
+            message="File upload started. Use the task ID to check the status."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting do-not-email list upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Include web agent router
 app.include_router(web_agent_router, prefix="/api")

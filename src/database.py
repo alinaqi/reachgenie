@@ -6,6 +6,8 @@ from typing import List, Dict, Optional, Any, Tuple
 import uuid
 import logging
 import math
+import csv
+import io
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -2639,3 +2641,105 @@ async def get_lead_details(lead_id: UUID) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error getting lead details for {lead_id}: {str(e)}")
         return None
+
+async def process_do_not_email_csv_upload(
+    company_id: UUID,
+    file_url: str,
+    user_id: UUID,
+    task_id: UUID
+):
+    """
+    Process a CSV file containing email addresses to add to the do_not_email list
+    
+    Args:
+        company_id: UUID of the company
+        file_url: URL of the uploaded file in storage
+        user_id: UUID of the user who initiated the upload
+        task_id: UUID of the upload task
+    """
+    try:
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Update task status to processing
+        await update_task_status(task_id, "processing")
+        
+        # Download file from Supabase
+        try:
+            storage = supabase.storage.from_("do-not-email-uploads")
+            response = storage.download(file_url)
+            if not response:
+                raise Exception("No data received from storage")
+                
+            csv_text = response.decode('utf-8')
+            csv_data = csv.DictReader(io.StringIO(csv_text))
+            
+            # Validate CSV structure
+            if not csv_data.fieldnames:
+                raise Exception("CSV file has no headers")
+                
+        except Exception as download_error:
+            logger.error(f"Error downloading file: {str(download_error)}")
+            await update_task_status(task_id, "failed", f"Failed to download file: {str(download_error)}")
+            return
+        
+        email_count = 0
+        skipped_count = 0
+        unmapped_headers = set()
+        
+        # Get CSV headers
+        headers = csv_data.fieldnames
+        if not headers:
+            await update_task_status(task_id, "failed", "CSV file has no headers")
+            return
+            
+        # Process each row
+        for row in csv_data:
+            try:
+                email = row.get('email', '').strip()
+                reason = row.get('reason', 'Imported from CSV').strip()
+                
+                if not email:
+                    logger.info(f"Skipping row - no email address provided: {row}")
+                    skipped_count += 1
+                    continue
+                
+                # Add to do_not_email list
+                result = await add_to_do_not_email_list(
+                    email=email,
+                    reason=reason,
+                    company_id=company_id
+                )
+                
+                if result["success"]:
+                    email_count += 1
+                    # Update any leads with this email to mark do_not_contact as true
+                    await update_lead_do_not_contact_by_email(email, company_id)
+                else:
+                    logger.error(f"Failed to add {email} to do_not_email list: {result.get('error')}")
+                    skipped_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Error processing row: {str(e)}")
+                logger.error(f"Row data that failed: {row}")
+                skipped_count += 1
+                continue
+        
+        # Update task status with results
+        await update_task_status(
+            task_id,
+            "completed",
+            json.dumps({
+                "emails_saved": email_count,
+                "emails_skipped": skipped_count,
+                "unmapped_headers": list(unmapped_headers)
+            })
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing do-not-email CSV upload: {str(e)}")
+        await update_task_status(task_id, "failed", str(e))
