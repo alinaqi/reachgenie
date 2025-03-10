@@ -1704,7 +1704,9 @@ async def add_email_to_queue(
     company_id: UUID, 
     campaign_id: UUID, 
     campaign_run_id: UUID, 
-    lead_id: UUID, 
+    lead_id: UUID,
+    subject: str,
+    body: str,
     priority: int = 1, 
     scheduled_for: Optional[datetime] = None
 ) -> dict:
@@ -1716,6 +1718,8 @@ async def add_email_to_queue(
         campaign_id: UUID of the campaign
         campaign_run_id: UUID of the campaign run
         lead_id: UUID of the lead
+        subject: Subject of the email
+        body: Body of the email
         priority: Priority of the email (higher number = higher priority)
         scheduled_for: When to process this email (defaults to now)
         
@@ -1734,7 +1738,9 @@ async def add_email_to_queue(
         'priority': priority,
         'scheduled_for': scheduled_for.isoformat(),
         'retry_count': 0,
-        'max_retries': 3
+        'max_retries': 3,
+        'subject': subject,
+        'email_body': body
     }
     
     try:
