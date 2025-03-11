@@ -41,7 +41,7 @@ check_router = APIRouter(
 @companies_router.get("/{company_id}/do-not-email", response_model=DoNotEmailListResponse)
 async def get_do_not_email_list_endpoint(
     company_id: UUID,
-    page: int = Query(1, ge=1, description="Page number"),
+    page_number: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: dict = Depends(get_current_user)
 ):
@@ -55,7 +55,7 @@ async def get_do_not_email_list_endpoint(
     
     result = await get_do_not_email_list(
         company_id=company_id,
-        page=page,
+        page_number=page_number,
         limit=limit
     )
     
