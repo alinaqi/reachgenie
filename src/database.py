@@ -2090,58 +2090,65 @@ async def is_email_in_do_not_email_list(email: str, company_id: Optional[UUID] =
         return True
 
 async def get_do_not_email_list(company_id: Optional[UUID] = None, 
-                               page: int = 1, 
+                               page_number: int = 1, 
                                limit: int = 50) -> Dict:
     """
     Get entries from the do_not_email list with pagination
     
     Args:
         company_id: Optional company ID to filter by
-        page: Page number (1-indexed)
+        page_number: Page number (1-indexed)
         limit: Number of results per page
         
     Returns:
-        Dict with results and pagination info
+        Dict with items and pagination info matching the leads endpoint format
     """
-    offset = (page - 1) * limit
-    
     try:
-        # Prepare WHERE clause based on company_id
-        where_clause = "WHERE company_id IS NULL" if company_id is None else f"WHERE company_id = '{company_id}' OR company_id IS NULL"
+        # Calculate offset for pagination
+        offset = (page_number - 1) * limit
         
-        # Count total entries
-        count_query = f"""
-            SELECT COUNT(*) as total
-            FROM do_not_email
-            {where_clause};
-        """
+        # Build base query for count
+        count_query = supabase.table('do_not_email').select('id', count='exact')
         
-        count_result = await supabase.rpc(count_query)
-        total = count_result[0]['total'] if count_result else 0
+        # Build base query for data
+        data_query = supabase.table('do_not_email').select('*')
         
-        # Fetch paginated results
-        query = f"""
-            SELECT id, email, reason, company_id, created_at, updated_at
-            FROM do_not_email
-            {where_clause}
-            ORDER BY created_at DESC
-            LIMIT {limit} OFFSET {offset};
-        """
+        # Add filters based on company_id
+        if company_id is None:
+            # Get global entries (no company_id)
+            count_query = count_query.is_('company_id', 'null')
+            data_query = data_query.is_('company_id', 'null')
+        else:
+            # Get only company-specific entries
+            count_query = count_query.eq('company_id', str(company_id))
+            data_query = data_query.eq('company_id', str(company_id))
         
-        results = await supabase.rpc(query)
+        # Execute count query
+        count_response = count_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Get paginated results with ordering
+        response = data_query\
+            .order('created_at', desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
         
         return {
-            "data": results,
-            "pagination": {
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "total_pages": math.ceil(total / limit)
-            }
+            'items': response.data,
+            'total': total,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
         }
     except Exception as e:
         logger.error(f"Error getting do_not_email list: {str(e)}")
-        return {"data": [], "pagination": {"total": 0, "page": page, "limit": limit, "total_pages": 0}}
+        return {
+            'items': [],
+            'total': 0,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': 1
+        }
 
 async def remove_from_do_not_email_list(email: str, company_id: Optional[UUID] = None) -> Dict:
     """
