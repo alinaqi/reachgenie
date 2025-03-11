@@ -2101,7 +2101,7 @@ async def get_do_not_email_list(company_id: Optional[UUID] = None,
         limit: Number of results per page
         
     Returns:
-        Dict with results and pagination info
+        Dict with items and pagination info matching the leads endpoint format
     """
     try:
         # Calculate offset for pagination
@@ -2134,17 +2134,21 @@ async def get_do_not_email_list(company_id: Optional[UUID] = None,
             .execute()
         
         return {
-            "data": response.data,
-            "pagination": {
-                "total": total,
-                "page": page_number,
-                "limit": limit,
-                "total_pages": math.ceil(total / limit)
-            }
+            'items': response.data,
+            'total': total,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
         }
     except Exception as e:
         logger.error(f"Error getting do_not_email list: {str(e)}")
-        return {"data": [], "pagination": {"total": 0, "page": page_number, "limit": limit, "total_pages": 0}}
+        return {
+            'items': [],
+            'total': 0,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': 1
+        }
 
 async def remove_from_do_not_email_list(email: str, company_id: Optional[UUID] = None) -> Dict:
     """

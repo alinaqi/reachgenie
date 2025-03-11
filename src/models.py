@@ -809,15 +809,12 @@ class DoNotEmailEntry(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-class PaginationInfo(BaseModel):
+class DoNotEmailListResponse(BaseModel):
+    items: List[DoNotEmailEntry]
     total: int
     page: int
-    limit: int
+    page_size: int
     total_pages: int
-
-class DoNotEmailListResponse(BaseModel):
-    data: List[DoNotEmailEntry]
-    pagination: PaginationInfo
 
 # Web Agent Models
 class AnalysisSchema(BaseModel):
