@@ -2783,7 +2783,10 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
         .eq('campaign_run_id', str(campaign_run_id))
 
     # Get total count
-    count_response = base_query.execute()
+    total_count_query = supabase.table('email_queue')\
+        .select('id', count='exact')\
+        .eq('campaign_run_id', str(campaign_run_id))
+    count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
 
     # Calculate offset from page_number
