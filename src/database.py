@@ -2777,9 +2777,11 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
     Returns:
         Dictionary containing paginated email queues and metadata
     """
-    # Build base query
-    base_query = supabase.table('email_queue').select('*', count='exact').eq('campaign_run_id', str(campaign_run_id))
-    
+    # Modify the base query to select fields from email_queue and join with leads
+    base_query = supabase.table('email_queue')\
+        .select('*, leads!inner(name, email)')\
+        .eq('campaign_run_id', str(campaign_run_id))
+
     # Get total count
     count_response = base_query.execute()
     total = count_response.count if count_response.count is not None else 0
@@ -2789,9 +2791,14 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
 
     # Get paginated data
     response = base_query.range(offset, offset + limit - 1).order('created_at', desc=True).execute()
-    
+
+    # Map leads fields to lead_name and lead_email
+    items = [
+        {**item, 'lead_name': item['leads']['name'], 'lead_email': item['leads']['email']} for item in response.data
+    ]
+
     return {
-        'items': response.data,
+        'items': items,
         'total': total,
         'page': page_number,
         'page_size': limit,
