@@ -114,11 +114,12 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     email_log_id = UUID(log['email_log_id'])
                     
                     # Set the next reminder type based on current type
-                    next_reminder_type = {
-                        None: 'r1',
-                        'r1': 'r2',
-                        'r2': 'r3'
-                    }.get(reminder_type, 'r1')
+                    # This will be used to determine the next reminder in sequence
+                    if reminder_type is None:
+                        next_reminder = 'r1'
+                    else:
+                        current_num = int(reminder_type[1])  # Extract number from 'r1', 'r2', etc.
+                        next_reminder = f'r{current_num + 1}'
                     
                     # Get the original email content
                     original_email = await get_first_email_detail(email_log_id)
@@ -149,7 +150,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         from_name=company['name'],
                         from_email=company['account_email'],
                         to_email=log['lead_email'],  # Using lead's email address
-                        reminder_type=next_reminder_type
+                        reminder_type=next_reminder
                     )
                     
                     # Add tracking pixel to the email body
@@ -168,7 +169,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     current_time = datetime.now(timezone.utc)
                     success = await update_reminder_sent_status(
                         email_log_id=email_log_id,
-                        reminder_type=next_reminder_type,
+                        reminder_type=next_reminder,
                         last_reminder_sent_at=current_time
                     )
                     if success:
@@ -194,18 +195,22 @@ async def main():
         for campaign in campaigns:
             logger.info(f"Processing campaign {campaign['name']} ({campaign['id']})")
         
-            # Define reminder types to process, if you need another reminder say r3 just add it to this list, no need to change majorly anything else apart from few if conditions above
-            reminder_types = [None, 'r1', 'r2']
+            # Generate reminder types dynamically based on campaign's number_of_reminders
+            num_reminders = campaign.get('number_of_reminders', 2)  # Default to 2 if not set
+            reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]  # Removed +1 to match exact count
+
+            # Create dynamic mapping for reminder type descriptions
+            reminder_descriptions = {None: 'first'}
+            for i in range(1, num_reminders):  # Removed +1 to match exact count
+                if i == num_reminders - 1:  # Adjusted condition for last reminder
+                    reminder_descriptions[f'r{i}'] = f'{i+1}th and final'
+                else:
+                    reminder_descriptions[f'r{i}'] = f'{i+1}th'
 
             # Process each reminder type
             for reminder_type in reminder_types:
-
                 # Set the reminder type based on current type
-                next_reminder_type = {
-                    None: 'first',
-                    'r1': 'second',
-                    'r2': 'third'
-                }.get(reminder_type, 'first')
+                next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
 
                 # Fetch all email logs that need to send reminder
                 email_logs = await get_email_logs_reminder(reminder_type)
