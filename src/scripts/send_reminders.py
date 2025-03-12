@@ -11,7 +11,8 @@ from src.database import (
     get_email_logs_reminder, 
     get_first_email_detail,
     create_email_log_detail,
-    update_reminder_sent_status
+    update_reminder_sent_status,
+    get_campaigns
 )
 from src.utils.encryption import decrypt_password
 
@@ -187,41 +188,47 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
 async def main():
     """Main function to process reminder emails for all companies"""
     try:
-        # Define reminder types to process, if you need another reminder say r3 just add it to this list, no need to change majorly anything else apart from few if conditions above
-        reminder_types = [None, 'r1', 'r2']
+        campaigns = await get_campaigns(campaign_type='email')
+        logger.info(f"Found {len(campaigns)} campaigns")
 
-        # Process each reminder type
-        for reminder_type in reminder_types:
+        for campaign in campaigns:
+            logger.info(f"Processing campaign {campaign['name']} ({campaign['id']})")
+        
+            # Define reminder types to process, if you need another reminder say r3 just add it to this list, no need to change majorly anything else apart from few if conditions above
+            reminder_types = [None, 'r1', 'r2']
 
-            # Set the reminder type based on current type
-            next_reminder_type = {
-                None: 'first',
-                'r1': 'second',
-                'r2': 'third'
-            }.get(reminder_type, 'first')
+            # Process each reminder type
+            for reminder_type in reminder_types:
 
-            # Fetch all email logs that need to send reminder
-            email_logs = await get_email_logs_reminder(reminder_type)
-            logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
-            
-            # Group email logs by company for batch processing
-            company_logs = {}
-            for log in email_logs:
-                company_id = str(log['company_id'])
-                if company_id not in company_logs:
-                    company_logs[company_id] = {
-                        'id': company_id,
-                        'name': log['company_name'],
-                        'account_email': log['account_email'],
-                        'account_password': log['account_password'],
-                        'account_type': log['account_type'],
-                        'logs': []
-                    }
-                company_logs[company_id]['logs'].append(log)
-            
-            # Process reminder for each company
-            for company_data in company_logs.values():
-                await send_reminder_emails(company_data, reminder_type)
+                # Set the reminder type based on current type
+                next_reminder_type = {
+                    None: 'first',
+                    'r1': 'second',
+                    'r2': 'third'
+                }.get(reminder_type, 'first')
+
+                # Fetch all email logs that need to send reminder
+                email_logs = await get_email_logs_reminder(reminder_type)
+                logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
+                
+                # Group email logs by company for batch processing
+                company_logs = {}
+                for log in email_logs:
+                    company_id = str(log['company_id'])
+                    if company_id not in company_logs:
+                        company_logs[company_id] = {
+                            'id': company_id,
+                            'name': log['company_name'],
+                            'account_email': log['account_email'],
+                            'account_password': log['account_password'],
+                            'account_type': log['account_type'],
+                            'logs': []
+                        }
+                    company_logs[company_id]['logs'].append(log)
+                
+                # Process reminder for each company
+                for company_data in company_logs.values():
+                    await send_reminder_emails(company_data, reminder_type)
             
     except Exception as e:
         logger.error(f"Error in main reminder process: {str(e)}")
