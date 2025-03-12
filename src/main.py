@@ -1510,7 +1510,9 @@ async def create_company_campaign(
         description=campaign.description,
         product_id=campaign.product_id,
         type=campaign.type.value,  # Convert enum to string value
-        template=campaign.template
+        template=campaign.template,
+        number_of_reminders=campaign.number_of_reminders,
+        days_between_reminders=campaign.days_between_reminders
     )
 
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB], tags=["Campaigns & Emails"])

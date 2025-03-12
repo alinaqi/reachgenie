@@ -102,7 +102,7 @@ async def process_company_email_queue(company_id: UUID):
         hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         emails_sent_last_hour = await get_emails_sent_count(company_id, hour_ago)
         
-        hourly_limit = throttle_settings.get('max_emails_per_hour', 500)
+        hourly_limit = throttle_settings.get('max_emails_per_hour', 300)
         if emails_sent_last_hour >= hourly_limit:
             logger.info(f"Company {company_id} reached hourly limit ({emails_sent_last_hour}/{hourly_limit})")
             return
@@ -111,7 +111,7 @@ async def process_company_email_queue(company_id: UUID):
         day_ago = datetime.now(timezone.utc) - timedelta(days=1)
         emails_sent_last_day = await get_emails_sent_count(company_id, day_ago)
         
-        daily_limit = throttle_settings.get('max_emails_per_day', 500)
+        daily_limit = throttle_settings.get('max_emails_per_day', 300)
         if emails_sent_last_day >= daily_limit:
             logger.info(f"Company {company_id} reached daily limit ({emails_sent_last_day}/{daily_limit})")
             return

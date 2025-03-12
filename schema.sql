@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
     product_id UUID REFERENCES products(id),
     type TEXT NOT NULL DEFAULT 'email',
     template TEXT,
+    number_of_reminders INTEGER DEFAULT 0,
+    days_between_reminders INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

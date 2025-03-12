@@ -386,14 +386,16 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     
     return calls
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
         'description': description,
         'product_id': str(product_id),
         'type': type,
-        'template': template
+        'template': template,
+        'number_of_reminders': number_of_reminders,
+        'days_between_reminders': days_between_reminders
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
@@ -914,7 +916,7 @@ async def update_company_voice_agent_settings(company_id: UUID, settings: dict) 
         logger.exception("Full exception details:")
         return None
 
-async def get_email_logs_reminder(reminder_type: Optional[str] = None):
+async def get_email_logs_reminder(campaign_id: UUID, days_between_reminders: int, reminder_type: Optional[str] = None):
     """
     Fetch all email logs that need to be processed for reminders.
     Joins with campaigns and companies to ensure we only get active records.
@@ -922,10 +924,10 @@ async def get_email_logs_reminder(reminder_type: Optional[str] = None):
     Only fetches records where:
     - For first reminder (reminder_type is None):
       - No reminder has been sent yet (last_reminder_sent is NULL)
-      - More than 2 days have passed since the initial email was sent
+      - More than days_between_reminders days have passed since the initial email was sent
     - For subsequent reminders:
       - last_reminder_sent equals the specified reminder_type
-      - More than 2 days have passed since the last reminder was sent
+      - More than days_between_reminders days have passed since the last reminder was sent
     
     Args:
         reminder_type: Optional type of reminder to filter by (e.g., 'r1' for first reminder)
@@ -934,8 +936,8 @@ async def get_email_logs_reminder(reminder_type: Optional[str] = None):
         List of dictionaries containing email log data with campaign and company information
     """
     try:
-        # Calculate the date threshold (2 days ago from now)
-        two_days_ago = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        # Calculate the date threshold (days_between_reminders days ago from now)
+        days_between_reminders_ago = (datetime.now(timezone.utc) - timedelta(days=days_between_reminders)).isoformat()
         
         # Build the base query
         query = supabase.table('email_logs')\
@@ -945,17 +947,18 @@ async def get_email_logs_reminder(reminder_type: Optional[str] = None):
                 'leads!inner(email)'
             )\
             .eq('has_replied', False)\
+            .eq('campaigns.id', str(campaign_id))\
             .eq('campaigns.companies.deleted', False)
             
         # Add reminder type filter
         if reminder_type is None:
             query = query\
                 .is_('last_reminder_sent', 'null')\
-                .lt('sent_at', two_days_ago)  # Only check sent_at for first reminder
+                .lt('sent_at', days_between_reminders_ago)  # Only check sent_at for first reminder
         else:
             query = query\
                 .eq('last_reminder_sent', reminder_type)\
-                .lt('last_reminder_sent_at', two_days_ago)  # Check last reminder timing
+                .lt('last_reminder_sent_at', days_between_reminders_ago)  # Check last reminder timing
             
         # Execute query with ordering
         response = query.order('sent_at', desc=False).execute()
@@ -2838,3 +2841,21 @@ async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
         return None
+
+async def get_campaigns(campaign_type: Optional[str] = None):
+    """
+    Get all campaigns, optionally filtered by type
+    
+    Args:
+        campaign_type: Optional type filter ('email', 'call', or None for all)
+        
+    Returns:
+        List of campaigns
+    """
+    query = supabase.table('campaigns').select('*')
+    
+    if campaign_type and campaign_type != 'all':
+        query = query.eq('type', campaign_type)
+    
+    response = query.execute()
+    return response.data
