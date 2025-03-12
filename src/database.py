@@ -2164,19 +2164,27 @@ async def remove_from_do_not_email_list(email: str, company_id: Optional[UUID] =
     email = email.lower().strip()  # Normalize email
     
     try:
-        # Prepare WHERE clause based on company_id
-        where_clause = "email = $1" if company_id is None else "email = $1 AND company_id = $2"
-        params = [email] if company_id is None else [email, str(company_id)]
+        # Build query to delete email from do_not_email list
+        query = supabase.table('do_not_email').delete()
         
-        query = f"""
-            DELETE FROM do_not_email
-            WHERE {where_clause}
-            RETURNING id;
-        """
+        # Add email filter
+        query = query.eq('email', email)
         
-        result = await supabase.rpc(query, params=params)
+        # Add company filter if provided
+        if company_id:
+            query = query.eq('company_id', str(company_id))
+        else:
+            query = query.is_('company_id', 'null')
         
-        return {"success": True, "email": email}
+        # Execute the delete query
+        response = query.execute()
+        
+        if response.data:
+            # Update lead's do_not_contact to False
+            await update_lead_do_not_contact_by_email(email, company_id, False)
+            return {"success": True, "email": email}
+        else:
+            return {"success": False, "error": "Email not found in the list"}
     except Exception as e:
         logger.error(f"Error removing email from do_not_email list: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -2273,13 +2281,14 @@ async def get_email_queue_items(status: Optional[str] = 'pending', limit: int = 
         logger.error(f"Error getting email queue items: {str(e)}")
         return []
 
-async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[UUID] = None) -> Dict:
+async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[UUID] = None, do_not_contact: bool = True) -> Dict:
     """
-    Update a lead's do_not_contact status to True based on email address.
+    Update a lead's do_not_contact status based on email address.
     
     Args:
         email: The email address of the lead to update
         company_id: Optional company ID to filter leads by company
+        do_not_contact: Boolean to set the do_not_contact status
         
     Returns:
         Dict with success status and list of updated lead IDs
@@ -2288,7 +2297,7 @@ async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[U
     
     try:
         # Build query to update leads with matching email
-        query = supabase.table('leads').update({"do_not_contact": True})
+        query = supabase.table('leads').update({"do_not_contact": do_not_contact})
         
         # Add email filter
         query = query.eq('email', email)
@@ -2301,7 +2310,7 @@ async def update_lead_do_not_contact_by_email(email: str, company_id: Optional[U
         response = query.execute()
         
         updated_lead_ids = [lead['id'] for lead in response.data] if response.data else []
-        logger.info(f"Updated do_not_contact to True for leads with email {email}: {updated_lead_ids}")
+        logger.info(f"Updated do_not_contact to {do_not_contact} for leads with email {email}: {updated_lead_ids}")
         
         return {
             "success": True, 
