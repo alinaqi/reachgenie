@@ -35,7 +35,14 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
     reminder_ordinal = {
         None: "1st",
         "r1": "2nd",
-        "r2": "3rd and final"
+        "r2": "3rd",
+        "r3": "4th",
+        "r4": "5th",
+        "r5": "6th",
+        "r6": "7th",
+        "r7": "8th",
+        "r8": "9th",
+        "r9": "10th"
     }.get(reminder_type, "1st")  # Default to "1st" if unknown type
     
     system_prompt = """You are an AI assistant helping to generate reminder emails. 
@@ -220,9 +227,9 @@ async def main():
                 next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
 
                 # Fetch all email logs of the campaign that need to send reminder
-                email_logs = await get_email_logs_reminder(reminder_type)
+                email_logs = await get_email_logs_reminder(campaign['id'], campaign['days_between_reminders'], reminder_type)
                 logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
-                
+
                 # Group email logs by company for batch processing
                 company_logs = {}
                 for log in email_logs:
@@ -246,4 +253,4 @@ async def main():
         logger.error(f"Error in main reminder process: {str(e)}")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
