@@ -367,6 +367,8 @@ class EmailCampaignBase(BaseModel):
     type: CampaignType = CampaignType.EMAIL
     product_id: UUID
     template: Optional[str] = None
+    number_of_reminders: Optional[int] = 0
+    days_between_reminders: Optional[int] = 0
 
 class TaskResponse(BaseModel):
     task_id: UUID

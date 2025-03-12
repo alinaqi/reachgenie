@@ -386,14 +386,16 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     
     return calls
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
         'description': description,
         'product_id': str(product_id),
         'type': type,
-        'template': template
+        'template': template,
+        'number_of_reminders': number_of_reminders,
+        'days_between_reminders': days_between_reminders
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
