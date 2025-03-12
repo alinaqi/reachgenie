@@ -190,17 +190,21 @@ async def main():
     """Main function to process reminder emails for all companies"""
     try:
         campaigns = await get_campaigns(campaign_type='email')
-        logger.info(f"Found {len(campaigns)} campaigns")
+        logger.info(f"Found {len(campaigns)} campaigns \n")
 
         for campaign in campaigns:
-            logger.info(f"Processing campaign {campaign['name']} ({campaign['id']})")
+            logger.info(f"Processing campaign '{campaign['name']}' ({campaign['id']})")
+            logger.info(f"Number of reminders: {campaign['number_of_reminders']}")
+            #logger.info(f"Days between reminders: {campaign['days_between_reminders']}")
         
             # Generate reminder types dynamically based on campaign's number_of_reminders
             num_reminders = campaign.get('number_of_reminders')
-            reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
+            
+            reminder_types = []
+            if num_reminders > 0:
+                reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
 
-            logger.info(f"Reminder types: {reminder_types}")
-            return
+            logger.info(f"Reminder types: {reminder_types} \n")
 
             # Create dynamic mapping for reminder type descriptions
             reminder_descriptions = {None: 'first'}
