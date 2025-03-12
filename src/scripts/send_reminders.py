@@ -219,7 +219,7 @@ async def main():
                 # Set the reminder type based on current type
                 next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
 
-                # Fetch all email logs that need to send reminder
+                # Fetch all email logs of the campaign that need to send reminder
                 email_logs = await get_email_logs_reminder(reminder_type)
                 logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
                 
