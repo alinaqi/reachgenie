@@ -196,12 +196,15 @@ async def main():
             logger.info(f"Processing campaign {campaign['name']} ({campaign['id']})")
         
             # Generate reminder types dynamically based on campaign's number_of_reminders
-            num_reminders = campaign.get('number_of_reminders', 2)  # Default to 2 if not set
-            reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]  # Removed +1 to match exact count
+            num_reminders = campaign.get('number_of_reminders')
+            reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
+
+            logger.info(f"Reminder types: {reminder_types}")
+            return
 
             # Create dynamic mapping for reminder type descriptions
             reminder_descriptions = {None: 'first'}
-            for i in range(1, num_reminders):  # Removed +1 to match exact count
+            for i in range(1, num_reminders):
                 if i == num_reminders - 1:  # Adjusted condition for last reminder
                     reminder_descriptions[f'r{i}'] = f'{i+1}th and final'
                 else:
