@@ -317,7 +317,13 @@ async def process_emails(
         if not template:
             logger.error(f"Campaign {campaign['id']} missing email template")
             continue
+        
+        auto_reply_enabled = campaign.get('auto_reply_enabled', False)
+        if not auto_reply_enabled:
+            logger.info(f"Auto reply is not enabled for campaign {campaign['id']}. Skipping AI reply.")
+            continue
 
+        # Generate AI reply
         ai_reply = await generate_ai_reply(email_log_id, email_data)
 
         if ai_reply:
