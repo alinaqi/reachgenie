@@ -20,7 +20,7 @@ from src.database import (
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
-
+from src.utils.string_utils import _extract_name_from_email
 # IMAP server configurations
 IMAP_SERVERS = {
     'gmail': 'imap.gmail.com',
@@ -317,7 +317,13 @@ async def process_emails(
         if not template:
             logger.error(f"Campaign {campaign['id']} missing email template")
             continue
+        
+        auto_reply_enabled = campaign.get('auto_reply_enabled', False)
+        if not auto_reply_enabled:
+            logger.info(f"Auto reply is not enabled for campaign {campaign['id']}. Skipping AI reply.")
+            continue
 
+        # Generate AI reply
         ai_reply = await generate_ai_reply(email_log_id, email_data)
 
         if ai_reply:
@@ -327,6 +333,9 @@ async def process_emails(
             # Replace {email_body} placeholder in template with generated AI reply
             final_body = template.replace("{email_body}", ai_reply)
 
+            if company["account_email"]:
+                sender_name = _extract_name_from_email(company["account_email"])
+
             await create_email_log_detail(
                 email_logs_id=email_log_id,
                 message_id=None,
@@ -334,7 +343,7 @@ async def process_emails(
                 email_body=final_body, # Use the template with AI reply
                 sender_type='assistant',
                 sent_at=datetime.now(timezone.utc),
-                from_name=company['name'],
+                from_name=sender_name,
                 from_email=company['account_email'],
                 to_email=email_data['from']
             )
@@ -350,7 +359,7 @@ async def process_emails(
                     to_email=email_data['from'],
                     subject=response_subject,
                     html_content=final_body, # Use the template with AI reply
-                    from_name=company["name"],
+                    from_name=sender_name,
                     email_log_id=email_log_id,
                     in_reply_to=email_data['message_id'],
                     references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
