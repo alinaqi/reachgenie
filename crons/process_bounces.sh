@@ -8,7 +8,7 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 
 # Run the bounce processing script
 echo "Starting bounce processing at $(date)"
-python3 -m src.scripts.process_bounces
+cronlock python -m src.scripts.process_bounces
 echo "Finished bounce processing at $(date)"
 
 # Exit with the script's exit code
