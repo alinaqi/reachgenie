@@ -15,6 +15,7 @@ from src.database import (
     get_campaigns
 )
 from src.utils.encryption import decrypt_password
+from src.utils.string_utils import _extract_name_from_email
 
 # Configure logging
 logging.basicConfig(
@@ -146,6 +147,9 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     # Create subject line for reminder
                     subject = f"Re: {original_email['email_subject']}" if not original_email['email_subject'].startswith('Re:') else original_email['email_subject']
                     
+                    if company["account_email"]:
+                        sender_name = _extract_name_from_email(company["account_email"])
+
                     # Create email log detail for the reminder
                     await create_email_log_detail(
                         email_logs_id=email_log_id,
@@ -154,7 +158,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         email_body=reminder_content,
                         sender_type='assistant',
                         sent_at=datetime.now(timezone.utc),
-                        from_name=company['name'],
+                        from_name=sender_name,
                         from_email=company['account_email'],
                         to_email=log['lead_email'],  # Using lead's email address
                         reminder_type=next_reminder
@@ -168,7 +172,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                         to_email=log['lead_email'],  # Using lead's email address
                         subject=subject,
                         html_content=reminder_content, # add tracking pixel to the email body
-                        from_name=company['name'],
+                        from_name=sender_name,
                         email_log_id=email_log_id
                     )
                     
