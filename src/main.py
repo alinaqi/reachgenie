@@ -1513,6 +1513,8 @@ async def create_company_campaign(
         template=campaign.template,
         number_of_reminders=campaign.number_of_reminders,
         days_between_reminders=campaign.days_between_reminders,
+        phone_number_of_reminders=campaign.phone_number_of_reminders,
+        phone_days_between_reminders=campaign.phone_days_between_reminders,
         auto_reply_enabled=campaign.auto_reply_enabled
     )
 
