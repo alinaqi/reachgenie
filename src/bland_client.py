@@ -36,14 +36,14 @@ class BlandClient:
             4 - If the call was picked up, had a conversation, and the person showed interest
 
         2. Analyze the sentiment:
-            - For call levels 0 or 1 (not connected, voicemail, not picked up), automatically set sentiment as 'negative'
+            - For call levels 0 or 1 (not connected, voicemail, not picked up), automatically set sentiment as 'not_connected'
             - For connected calls (levels 2-4), determine if the overall tone and interaction was positive or negative
             
-            Always return strictly 'positive' or 'negative' as the sentiment value.
+            Always return strictly 'positive', 'negative', or 'not_connected' as the sentiment value.
 
         Format your response to match exactly with the schema, providing the call_level number and sentiment string.
         Note:
-        - Sentiment must ALWAYS be either 'positive' or 'negative', never null or empty
+        - Sentiment must ALWAYS be either 'positive', 'negative', or 'not_connected', never null or empty
         """
 
         # Prepare request data with bland_secret_key
