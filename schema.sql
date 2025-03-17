@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS calls (
     script TEXT,
     recording_url TEXT,
     failure_reason TEXT,
+    last_reminder_sent VARCHAR(2),
+    last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,6 +92,12 @@ COMMENT ON COLUMN calls.recording_url IS 'URL to the recorded call audio file';
 
 -- Add comment to explain the failure_reason column
 COMMENT ON COLUMN calls.failure_reason IS 'Reason for call failure if the call was unsuccessful';
+
+-- Add comment to explain the last_reminder_sent column
+COMMENT ON COLUMN calls.last_reminder_sent IS 'The type of the last reminder sent (e.g., r1, r2)';
+
+-- Add comment to explain the last_reminder_sent_at column
+COMMENT ON COLUMN calls.last_reminder_sent_at IS 'Timestamp of when the last reminder was sent';
 
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
