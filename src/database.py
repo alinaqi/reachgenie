@@ -2937,3 +2937,32 @@ async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int,
     except Exception as e:
         logger.error(f"Error fetching call logs for reminder: {str(e)}")
         return []
+    
+async def get_call_by_id(call_id: UUID):
+    response = supabase.table('calls').select('*').eq('id', str(call_id)).execute()
+    return response.data[0] if response.data else None
+
+async def update_call_reminder_sent_status(call_log_id: UUID, reminder_type: str, last_reminder_sent_at: datetime) -> bool:
+    """
+    Update the last_reminder_sent field and timestamp for a call log
+    
+    Args:
+        call_log_id: UUID of the call log to update
+        reminder_type: Type of reminder sent (e.g., 'r1' for first reminder)
+        last_reminder_sent_at: Timestamp when the reminder was sent
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('calls')\
+            .update({
+                'last_reminder_sent': reminder_type,
+                'last_reminder_sent_at': last_reminder_sent_at.isoformat()
+            })\
+            .eq('id', str(call_log_id))\
+            .execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating reminder status for log {call_log_id}: {str(e)}")
+        return False

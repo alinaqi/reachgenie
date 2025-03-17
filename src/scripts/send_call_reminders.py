@@ -7,15 +7,18 @@ from openai import AsyncOpenAI
 from src.config import get_settings
 from datetime import datetime, timezone
 from src.database import (
-    get_call_logs_reminder, 
-    create_email_log_detail,
-    update_reminder_sent_status,
+    get_call_logs_reminder,
+    update_call_reminder_sent_status,
     get_campaigns,
     get_lead_by_id,
-    update_lead_enrichment
+    update_lead_enrichment,
+    get_campaign_by_id,
+    get_company_by_id
 )
 from src.services.perplexity_service import perplexity_service
 from src.services.email_generation import generate_company_insights
+from src.services.call_generation import generate_call_script
+from src.services.bland_calls import initiate_call
 
 # Configure logging
 logging.basicConfig(
@@ -116,9 +119,11 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                     current_num = int(reminder_type[1])  # Extract number from 'r1', 'r2', etc.
                     next_reminder = f'r{current_num + 1}'
 
-###### START
                 logger.info(f"Processing call for lead: {log['lead_phone_number']}")
                 
+                lead_id = log['lead_id']
+                lead = await get_lead_by_id(lead_id)
+
                 # Check if lead already has enriched data
                 insights = None
                 if log.get('lead_enriched_data'):
@@ -136,8 +141,6 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                 # Generate company insights if we don't have any
                 if not insights:
                     logger.info(f"Generating new insights for lead: {log['lead_phone_number']}")
-                    lead_id = log['lead_id']
-                    lead = await get_lead_by_id(lead_id)
 
                     insights = await generate_company_insights(lead, perplexity_service)
                     
@@ -170,58 +173,42 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                             logger.info(f"Updated lead {lead['phone_number']} with new enriched data")
                         except Exception as e:
                             logger.error(f"Error storing insights for lead {lead['phone_number']}: {str(e)}")
-###### END
 
+                if insights:
+                    logger.info(f"Using insights for lead: {log['lead_phone_number']}")
+                    
+                    campaign_id = log['campaign_id']
+                    campaign = await get_campaign_by_id(campaign_id)
 
+                    company = await get_company_by_id(company_id)
+                    
+                    # Generate personalized call script
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    logger.info(f"Generated call script for lead: {lead['phone_number']}")
+                    logger.info(f"Call Script: {call_script}")
 
+                    if call_script:
+                        # Initiate call with Bland AI
+                        await initiate_call(campaign=campaign, lead=lead, call_script=call_script, call_log_id=call_log_id)
 
-
-
-
-
-
-                # Create email log detail for the reminder
-                await create_email_log_detail(
-                    email_logs_id=email_log_id,
-                    message_id=None,  # New message, no ID yet
-                    email_subject=subject,
-                    email_body=reminder_content,
-                    sender_type='assistant',
-                    sent_at=datetime.now(timezone.utc),
-                    from_name=sender_name,
-                    from_email=company['account_email'],
-                    to_email=log['lead_email'],  # Using lead's email address
-                    reminder_type=next_reminder
-                )
-                
-                # Add tracking pixel to the email body
-                reminder_content = add_tracking_pixel(reminder_content, email_log_id)
-                
-                # Send the reminder email
-                await smtp_client.send_email(
-                    to_email=log['lead_email'],  # Using lead's email address
-                    subject=subject,
-                    html_content=reminder_content, # add tracking pixel to the email body
-                    from_name=sender_name,
-                    email_log_id=email_log_id
-                )
-                
-                # Update the reminder status in database with current timestamp
-                current_time = datetime.now(timezone.utc)
-                success = await update_reminder_sent_status(
-                    email_log_id=email_log_id,
-                    reminder_type=next_reminder,
-                    last_reminder_sent_at=current_time
-                )
-                if success:
-                    logger.info(f"Successfully updated reminder status for log {email_log_id}")
-                else:
-                    logger.error(f"Failed to update reminder status for log {email_log_id}")
-                
-                logger.info(f"Successfully sent reminder email for log {email_log_id} to {log['lead_email']}")
+                        # Update the reminder status in database with current timestamp
+                        current_time = datetime.now(timezone.utc)
+                        success = await update_call_reminder_sent_status(
+                            call_log_id=call_log_id,
+                            reminder_type=next_reminder,
+                            last_reminder_sent_at=current_time
+                        )
+                        if success:
+                            logger.info(f"Successfully updated reminder status for log {call_log_id}")
+                        else:
+                            logger.error(f"Failed to update reminder status for log {call_log_id}")
+                        
+                        logger.info(f"Successfully sent reminder call for log {call_log_id} to {lead['phone_number']}")
+                    else:
+                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
                 
             except Exception as e:
-                logger.error(f"Error processing log {log['email_log_id']}: {str(e)}")
+                logger.error(f"Error processing log {log['call_log_id']}: {str(e)}")
                 continue
         
     except Exception as e:
