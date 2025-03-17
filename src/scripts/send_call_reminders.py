@@ -1,0 +1,287 @@
+import logging
+import asyncio
+from typing import Dict
+from uuid import UUID
+import json
+from openai import AsyncOpenAI
+from src.config import get_settings
+from datetime import datetime, timezone
+from src.database import (
+    get_call_logs_reminder, 
+    create_email_log_detail,
+    update_reminder_sent_status,
+    get_campaigns,
+    get_lead_by_id,
+    update_lead_enrichment
+)
+from src.services.perplexity_service import perplexity_service
+from src.services.email_generation import generate_company_insights
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Configure OpenAI
+settings = get_settings()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+async def get_reminder_content(original_email_body: str, reminder_type: str) -> str:
+    """
+    Generate reminder email content using OpenAI based on the original email
+    """
+    # Determine the ordinal based on reminder type
+    reminder_ordinal = {
+        None: "1st",
+        "r1": "2nd",
+        "r2": "3rd",
+        "r3": "4th",
+        "r4": "5th",
+        "r5": "6th",
+        "r6": "7th",
+        "r7": "8th",
+        "r8": "9th",
+        "r9": "10th"
+    }.get(reminder_type, "1st")  # Default to "1st" if unknown type
+    
+    system_prompt = """You are an AI assistant helping to generate reminder emails. 
+    Your task is to create a polite and professional follow-up email that references 
+    the original email content while maintaining a courteous tone.
+    
+    Important guidelines:
+    1. Generate ONLY the email body content
+    2. DO NOT include any subject line
+    3. DO NOT include any signature, name, or "Best regards" type closings
+    4. DO NOT use placeholder values like [Your Name]
+    5. End the email naturally with the last sentence of the message"""
+    
+    user_prompt = f"""Please generate the {reminder_ordinal} reminder email body for the following original email.
+    The reminder should:
+    1. Reference the original email content
+    2. Be professional and courteous
+    3. Express interest in following up
+    4. Ask if they had a chance to review the previous email
+    5. Ask if they have any questions or concerns
+    
+    Remember:
+    - Only provide the email body content
+    - Do not include subject, signature, or any placeholder values
+    - End with the last meaningful sentence
+    
+    Original email:
+    {original_email_body}
+    """
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        reminder_content = response.choices[0].message.content.strip()
+        return reminder_content
+    except Exception as e:
+        logger.error(f"Error generating reminder content: {str(e)}")
+        return None
+
+async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
+    """
+    Send reminder calls for a single company's campaign
+    
+    Args:
+        company: Company data dictionary containing call records and settings
+        reminder_type: Type of reminder to send (e.g., 'r1' for first reminder)
+    """
+    try:
+        company_id = UUID(company['id'])
+        logger.info(f"Processing reminder calls for company '{company['name']}' ({company_id})")
+
+        # Process each call log for the company
+        for log in company['logs']:
+            try:
+                call_log_id = UUID(log['call_log_id'])
+                
+                # Set the next reminder type based on current type
+                # This will be used to determine the next reminder in sequence
+                if reminder_type is None:
+                    next_reminder = 'r1'
+                else:
+                    current_num = int(reminder_type[1])  # Extract number from 'r1', 'r2', etc.
+                    next_reminder = f'r{current_num + 1}'
+
+###### START
+                logger.info(f"Processing call for lead: {log['lead_phone_number']}")
+                
+                # Check if lead already has enriched data
+                insights = None
+                if log.get('lead_enriched_data'):
+                    logger.info(f"Lead {log['lead_phone_number']} already has enriched data, using existing insights")
+                    # We have enriched data, use it directly
+                    if isinstance(log['lead_enriched_data'], str):
+                        try:
+                            enriched_data = json.loads(log['lead_enriched_data'])
+                            insights = json.dumps(enriched_data)
+                        except json.JSONDecodeError:
+                            insights = log['lead_enriched_data']
+                    else:
+                        insights = json.dumps(log['lead_enriched_data'])
+                
+                # Generate company insights if we don't have any
+                if not insights:
+                    logger.info(f"Generating new insights for lead: {log['lead_phone_number']}")
+                    lead_id = log['lead_id']
+                    lead = await get_lead_by_id(lead_id)
+
+                    insights = await generate_company_insights(lead, perplexity_service)
+                    
+                    # Save the insights to the lead's enriched_data if we generated new ones
+                    if insights:
+                        try:
+                            # Parse the insights JSON if it's a string
+                            enriched_data = {}
+                            if isinstance(insights, str):
+                                # Try to extract JSON from the string response
+                                insights_str = insights.strip()
+                                # Check if the response is already in JSON format
+                                try:
+                                    enriched_data = json.loads(insights_str)
+                                except json.JSONDecodeError:
+                                    # If not, look for JSON within the string (common with LLM responses)
+                                    import re
+                                    json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                                    if json_match:
+                                        potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                                        enriched_data = json.loads(potential_json)
+                                    else:
+                                        # If we can't extract structured JSON, store as raw text
+                                        enriched_data = {"raw_insights": insights_str}
+                            else:
+                                enriched_data = insights
+                            
+                            # Update the lead with enriched data
+                            await update_lead_enrichment(lead['id'], enriched_data)
+                            logger.info(f"Updated lead {lead['phone_number']} with new enriched data")
+                        except Exception as e:
+                            logger.error(f"Error storing insights for lead {lead['phone_number']}: {str(e)}")
+###### END
+
+
+
+
+
+
+
+
+
+                # Create email log detail for the reminder
+                await create_email_log_detail(
+                    email_logs_id=email_log_id,
+                    message_id=None,  # New message, no ID yet
+                    email_subject=subject,
+                    email_body=reminder_content,
+                    sender_type='assistant',
+                    sent_at=datetime.now(timezone.utc),
+                    from_name=sender_name,
+                    from_email=company['account_email'],
+                    to_email=log['lead_email'],  # Using lead's email address
+                    reminder_type=next_reminder
+                )
+                
+                # Add tracking pixel to the email body
+                reminder_content = add_tracking_pixel(reminder_content, email_log_id)
+                
+                # Send the reminder email
+                await smtp_client.send_email(
+                    to_email=log['lead_email'],  # Using lead's email address
+                    subject=subject,
+                    html_content=reminder_content, # add tracking pixel to the email body
+                    from_name=sender_name,
+                    email_log_id=email_log_id
+                )
+                
+                # Update the reminder status in database with current timestamp
+                current_time = datetime.now(timezone.utc)
+                success = await update_reminder_sent_status(
+                    email_log_id=email_log_id,
+                    reminder_type=next_reminder,
+                    last_reminder_sent_at=current_time
+                )
+                if success:
+                    logger.info(f"Successfully updated reminder status for log {email_log_id}")
+                else:
+                    logger.error(f"Failed to update reminder status for log {email_log_id}")
+                
+                logger.info(f"Successfully sent reminder email for log {email_log_id} to {log['lead_email']}")
+                
+            except Exception as e:
+                logger.error(f"Error processing log {log['email_log_id']}: {str(e)}")
+                continue
+        
+    except Exception as e:
+        logger.error(f"Error processing reminders for company {company['name']}: {str(e)}")
+
+async def main():
+    """Main function to process reminder calls for all companies"""
+    try:
+        campaigns = await get_campaigns(campaign_type='call')
+        logger.info(f"Found {len(campaigns)} campaigns \n")
+
+        for campaign in campaigns:
+            logger.info(f"Processing campaign '{campaign['name']}' ({campaign['id']})")
+            logger.info(f"Number of reminders: {campaign['phone_number_of_reminders']}")
+            #logger.info(f"Days between reminders: {campaign['phone_days_between_reminders']}")
+        
+            # Generate reminder types dynamically based on campaign's phone_number_of_reminders
+            num_reminders = campaign.get('phone_number_of_reminders')
+            
+            reminder_types = []
+            if num_reminders > 0:
+                reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
+
+            logger.info(f"Reminder types: {reminder_types} \n")
+
+            # Create dynamic mapping for reminder type descriptions
+            reminder_descriptions = {None: 'first'}
+            for i in range(1, num_reminders):
+                if i == num_reminders - 1:  # Adjusted condition for last reminder
+                    reminder_descriptions[f'r{i}'] = f'{i+1}th and final'
+                else:
+                    reminder_descriptions[f'r{i}'] = f'{i+1}th'
+
+            # Process each reminder type
+            for reminder_type in reminder_types:
+                # Set the reminder type based on current type
+                next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
+
+                # Fetch all call logs of the campaign that need to send reminder
+                call_logs = await get_call_logs_reminder(campaign['id'], campaign['phone_days_between_reminders'], reminder_type)
+                logger.info(f"Found {len(call_logs)} call logs for which the {next_reminder_type} reminder needs to be sent.")
+
+                # Group call logs by company for batch processing
+                company_logs = {}
+                for log in call_logs:
+                    company_id = str(log['company_id'])
+                    if company_id not in company_logs:
+                        company_logs[company_id] = {
+                            'id': company_id,
+                            'name': log['company_name'],
+                            'logs': []
+                        }
+                    company_logs[company_id]['logs'].append(log)
+                
+                # Process reminder for each company
+                for company_data in company_logs.values():
+                    await send_reminder_calls(company_data, reminder_type)
+            
+    except Exception as e:
+        logger.error(f"Error in main reminder process: {str(e)}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
