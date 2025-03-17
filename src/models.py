@@ -370,6 +370,8 @@ class EmailCampaignBase(BaseModel):
     number_of_reminders: Optional[int] = 0
     days_between_reminders: Optional[int] = 0
     auto_reply_enabled: Optional[bool] = False
+    phone_number_of_reminders: Optional[int] = 0
+    phone_days_between_reminders: Optional[int] = 0
 
 class TaskResponse(BaseModel):
     task_id: UUID

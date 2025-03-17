@@ -2,7 +2,8 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason
+from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason, get_call_by_id
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,8 @@ async def initiate_call(
     campaign: dict,
     lead: dict,
     call_script: str,
-    campaign_run_id: UUID
+    campaign_run_id: Optional[UUID] = None,
+    call_log_id: Optional[UUID] = None
 ):  
     # Initialize Bland client and start the call
     settings = get_settings()
@@ -54,19 +56,27 @@ async def initiate_call(
             raise Exception("Lead is missing a phone number")
 
         # Create call record in database with script
-        try:
-            call = await create_call(
-                lead_id=lead['id'], 
-                product_id=campaign['product_id'], 
-                campaign_id=campaign['id'], 
-                script=call_script, 
-                campaign_run_id=campaign_run_id if campaign_run_id is not None else None
-            )
-            logger.info(f"Created call record with ID: {call['id']}")
-        except Exception as db_error:
-            logger.error(f"Error creating call record: {str(db_error)}")
-            logger.exception("Database error traceback:")
-            raise Exception(f"Failed to create call record: {str(db_error)}")
+        if campaign_run_id is not None:
+            try:
+                call = await create_call(
+                    lead_id=lead['id'], 
+                    product_id=campaign['product_id'], 
+                    campaign_id=campaign['id'], 
+                    script=call_script, 
+                    campaign_run_id=campaign_run_id if campaign_run_id is not None else None
+                )
+                logger.info(f"Created call record with ID: {call['id']}")
+            except Exception as db_error:
+                logger.error(f"Error creating call record: {str(db_error)}")
+                logger.exception("Database error traceback:")
+                raise Exception(f"Failed to create call record: {str(db_error)}")
+        else:
+            if call_log_id is not None:
+                call = await get_call_by_id(call_log_id)
+                logger.info(f"Found call record with ID: {call['id']}")
+            else:
+                logger.error("No call log ID provided")
+                raise Exception("No call log ID provided")
 
         # Prepare request data for the call
         request_data = {

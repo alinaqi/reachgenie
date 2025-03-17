@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS calls (
     script TEXT,
     recording_url TEXT,
     failure_reason TEXT,
+    last_reminder_sent VARCHAR(2),
+    last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -91,6 +93,12 @@ COMMENT ON COLUMN calls.recording_url IS 'URL to the recorded call audio file';
 -- Add comment to explain the failure_reason column
 COMMENT ON COLUMN calls.failure_reason IS 'Reason for call failure if the call was unsuccessful';
 
+-- Add comment to explain the last_reminder_sent column
+COMMENT ON COLUMN calls.last_reminder_sent IS 'The type of the last reminder sent (e.g., r1, r2)';
+
+-- Add comment to explain the last_reminder_sent_at column
+COMMENT ON COLUMN calls.last_reminder_sent_at IS 'Timestamp of when the last reminder was sent';
+
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -102,6 +110,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
     template TEXT,
     number_of_reminders INTEGER DEFAULT 0,
     days_between_reminders INTEGER DEFAULT 0,
+    phone_number_of_reminders INTEGER DEFAULT 0,
+    phone_days_between_reminders INTEGER DEFAULT 0,
     auto_reply_enabled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -111,6 +121,8 @@ COMMENT ON COLUMN campaigns.type IS 'Type of campaign (e.g., email, call, etc.)'
 COMMENT ON COLUMN campaigns.product_id IS 'Reference to the product associated with this campaign';
 COMMENT ON COLUMN campaigns.template IS 'Template content for the campaign';
 COMMENT ON COLUMN campaigns.auto_reply_enabled IS 'Flag to enable/disable automatic replies for the campaign';
+COMMENT ON COLUMN campaigns.phone_number_of_reminders IS 'Number of phone call reminders to be made';
+COMMENT ON COLUMN campaigns.phone_days_between_reminders IS 'Number of days to wait between phone call reminders';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (

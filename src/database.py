@@ -386,7 +386,7 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     
     return calls
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
@@ -396,6 +396,8 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
         'template': template,
         'number_of_reminders': number_of_reminders,
         'days_between_reminders': days_between_reminders,
+        'phone_number_of_reminders': phone_number_of_reminders,
+        'phone_days_between_reminders': phone_days_between_reminders,
         'auto_reply_enabled': auto_reply_enabled
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
@@ -2860,3 +2862,107 @@ async def get_campaigns(campaign_type: Optional[str] = None):
     
     response = query.execute()
     return response.data
+
+async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int, reminder_type: Optional[str] = None):
+    """
+    Fetch all call logs that need to be processed for reminders.
+    Joins with campaigns and companies to ensure we only get active records.
+    Excludes deleted companies.
+    Only fetches records where:
+    - For first reminder (reminder_type is None):
+      - No reminder has been sent yet (last_reminder_sent is NULL)
+      - More than days_between_reminders days have passed since the initial call was sent
+    - For subsequent reminders:
+      - last_reminder_sent equals the specified reminder_type
+      - More than days_between_reminders days have passed since the last reminder was sent
+    
+    Args:
+        reminder_type: Optional type of reminder to filter by (e.g., 'r1' for first reminder)
+    
+    Returns:
+        List of dictionaries containing call log data with campaign and company information
+    """
+    try:
+        # Calculate the date threshold (days_between_reminders days ago from now)
+        days_between_reminders_ago = (datetime.now(timezone.utc) - timedelta(days=days_between_reminders)).isoformat()
+        
+        # Build the base query
+        query = supabase.table('calls')\
+            .select(
+                'id, created_at, sentiment, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
+                'campaigns!inner(id, name, company_id, companies!inner(id, name)), ' +
+                'leads!inner(phone_number,enriched_data)'
+            )\
+            .eq('sentiment', 'not_connected')\
+            .eq('campaigns.id', str(campaign_id))\
+            .eq('campaigns.companies.deleted', False)
+            
+        # Add reminder type filter
+        if reminder_type is None:
+            query = query\
+                .is_('last_reminder_sent', 'null')\
+                .lt('created_at', days_between_reminders_ago)  # Only check created_at for first reminder
+        else:
+            query = query\
+                .eq('last_reminder_sent', reminder_type)\
+                .lt('last_reminder_sent_at', days_between_reminders_ago)  # Check last reminder timing
+            
+        # Execute query with ordering
+        response = query.order('created_at', desc=False).execute()
+        
+        # Flatten the nested structure to match the expected format
+        flattened_data = []
+        for record in response.data:
+            campaign = record['campaigns']
+            company = campaign['companies']
+            lead = record['leads']
+            
+            flattened_record = {
+                'call_log_id': record['id'],
+                'created_at': record['created_at'],
+                'sentiment': record['sentiment'],
+                'last_reminder_sent': record['last_reminder_sent'],
+                'last_reminder_sent_at': record['last_reminder_sent_at'],
+                'lead_id': record['lead_id'],
+                'lead_phone_number': lead['phone_number'],
+                'lead_enriched_data': lead['enriched_data'],
+                'campaign_id': campaign['id'],
+                'campaign_name': campaign['name'],
+                'company_id': company['id'],
+                'company_name': company['name']
+            }
+            flattened_data.append(flattened_record)
+            
+        return flattened_data
+    except Exception as e:
+        logger.error(f"Error fetching call logs for reminder: {str(e)}")
+        return []
+    
+async def get_call_by_id(call_id: UUID):
+    response = supabase.table('calls').select('*').eq('id', str(call_id)).execute()
+    return response.data[0] if response.data else None
+
+async def update_call_reminder_sent_status(call_log_id: UUID, reminder_type: str, last_reminder_sent_at: datetime) -> bool:
+    """
+    Update the last_reminder_sent field and timestamp for a call log
+    
+    Args:
+        call_log_id: UUID of the call log to update
+        reminder_type: Type of reminder sent (e.g., 'r1' for first reminder)
+        last_reminder_sent_at: Timestamp when the reminder was sent
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('calls')\
+            .update({
+                'last_reminder_sent': reminder_type,
+                'last_reminder_sent_at': last_reminder_sent_at.isoformat()
+            })\
+            .eq('id', str(call_log_id))\
+            .execute()
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating reminder status for log {call_log_id}: {str(e)}")
+        return False
