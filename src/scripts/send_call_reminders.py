@@ -31,69 +31,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-async def get_reminder_content(original_email_body: str, reminder_type: str) -> str:
-    """
-    Generate reminder email content using OpenAI based on the original email
-    """
-    # Determine the ordinal based on reminder type
-    reminder_ordinal = {
-        None: "1st",
-        "r1": "2nd",
-        "r2": "3rd",
-        "r3": "4th",
-        "r4": "5th",
-        "r5": "6th",
-        "r6": "7th",
-        "r7": "8th",
-        "r8": "9th",
-        "r9": "10th"
-    }.get(reminder_type, "1st")  # Default to "1st" if unknown type
-    
-    system_prompt = """You are an AI assistant helping to generate reminder emails. 
-    Your task is to create a polite and professional follow-up email that references 
-    the original email content while maintaining a courteous tone.
-    
-    Important guidelines:
-    1. Generate ONLY the email body content
-    2. DO NOT include any subject line
-    3. DO NOT include any signature, name, or "Best regards" type closings
-    4. DO NOT use placeholder values like [Your Name]
-    5. End the email naturally with the last sentence of the message"""
-    
-    user_prompt = f"""Please generate the {reminder_ordinal} reminder email body for the following original email.
-    The reminder should:
-    1. Reference the original email content
-    2. Be professional and courteous
-    3. Express interest in following up
-    4. Ask if they had a chance to review the previous email
-    5. Ask if they have any questions or concerns
-    
-    Remember:
-    - Only provide the email body content
-    - Do not include subject, signature, or any placeholder values
-    - End with the last meaningful sentence
-    
-    Original email:
-    {original_email_body}
-    """
-    
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
-        
-        reminder_content = response.choices[0].message.content.strip()
-        return reminder_content
-    except Exception as e:
-        logger.error(f"Error generating reminder content: {str(e)}")
-        return None
-
 async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
     """
     Send reminder calls for a single company's campaign
