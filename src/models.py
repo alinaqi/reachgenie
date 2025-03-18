@@ -360,6 +360,7 @@ class BlandWebhookPayload(BaseModel):
 class CampaignType(str, Enum):
     EMAIL = 'email'
     CALL = 'call'
+    EMAIL_AND_CALL = 'email_and_call'
 
 class EmailCampaignBase(BaseModel):
     name: str
