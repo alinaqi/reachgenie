@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS calls (
     failure_reason TEXT,
     last_reminder_sent VARCHAR(2),
     last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
+    is_reminder_eligible BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -98,6 +99,9 @@ COMMENT ON COLUMN calls.last_reminder_sent IS 'The type of the last reminder sen
 
 -- Add comment to explain the last_reminder_sent_at column
 COMMENT ON COLUMN calls.last_reminder_sent_at IS 'Timestamp of when the last reminder was sent';
+
+-- Add comment to explain the is_reminder_eligible column
+COMMENT ON COLUMN calls.is_reminder_eligible IS 'Indicates whether the call is eligible for reminders';
 
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
