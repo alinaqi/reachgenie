@@ -1517,7 +1517,8 @@ async def create_company_campaign(
         days_between_reminders=campaign.days_between_reminders,
         phone_number_of_reminders=campaign.phone_number_of_reminders,
         phone_days_between_reminders=campaign.phone_days_between_reminders,
-        auto_reply_enabled=campaign.auto_reply_enabled
+        auto_reply_enabled=campaign.auto_reply_enabled,
+        trigger_call_on=campaign.trigger_call_on
     )
 
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB], tags=["Campaigns & Emails"])
