@@ -1619,8 +1619,8 @@ async def run_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Only validate email credentials if campaign type is email
-    if campaign['type'] == 'email':
+    # Only validate email credentials if campaign type is email or email_and_call
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
         if not company.get("account_email") or not company.get("account_password"):
             logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
             raise HTTPException(
@@ -1634,7 +1634,7 @@ async def run_campaign(
                 detail="Email provider type not configured. Please set up email provider type first."
             )
     # Get total leads count based on campaign type
-    if campaign['type'] == 'email':
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
         leads = await get_leads_with_email(campaign['id'])
     elif campaign['type'] == 'call':
         leads = await get_leads_with_phone(company['id'])
@@ -2431,7 +2431,7 @@ async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
             return
         
         # Process campaign based on type
-        if campaign['type'] == 'email':
+        if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
             await run_email_campaign(campaign, company, campaign_run_id)
         elif campaign['type'] == 'call':
             await run_call_campaign(campaign, company, campaign_run_id)
