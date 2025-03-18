@@ -290,7 +290,7 @@ async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
 
-async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict], recording_url: Optional[str] = None):
+async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict], recording_url: Optional[str] = None, reminder_eligible: bool = False):
     """
     Update call record with webhook data from Bland AI
     
@@ -309,7 +309,8 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
             'sentiment': sentiment,
             'summary': summary,
             'transcripts': transcripts,
-            'recording_url': recording_url
+            'recording_url': recording_url,
+            'is_reminder_eligible': reminder_eligible
         }
         response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
         return response.data[0] if response.data else None
@@ -2889,11 +2890,11 @@ async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int,
         # Build the base query
         query = supabase.table('calls')\
             .select(
-                'id, created_at, sentiment, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
+                'id, created_at, is_reminder_eligible, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
                 'campaigns!inner(id, name, company_id, companies!inner(id, name)), ' +
                 'leads!inner(phone_number,enriched_data)'
             )\
-            .eq('sentiment', 'not_connected')\
+            .eq('is_reminder_eligible', True)\
             .eq('campaigns.id', str(campaign_id))\
             .eq('campaigns.companies.deleted', False)
             

@@ -26,7 +26,7 @@ class BlandClient:
         """
 
         analysis_prompt = """
-        Based on the call transcript and summary, provide the two pieces of analysis:
+        Based on the call transcript and summary, provide the three pieces of analysis:
 
         1. Determine the call level using the following criteria:
             0 - If the call was not connected at all
@@ -36,14 +36,20 @@ class BlandClient:
             4 - If the call was picked up, had a conversation, and the person showed interest
 
         2. Analyze the sentiment:
-            - For call levels 0 or 1 (not connected, voicemail, not picked up), automatically set sentiment as 'not_connected'
             - For connected calls (levels 2-4), determine if the overall tone and interaction was positive or negative
-            
-            Always return strictly 'positive', 'negative', or 'not_connected' as the sentiment value.
 
-        Format your response to match exactly with the schema, providing the call_level number and sentiment string.
+        3. Analyze the reminder eligibility:
+            - For call levels 0 or 1 (not connected, voicemail, not picked up), automatically set reminder eligibility as true
+            - For connected calls (levels 2-4), automatically set reminder eligibility as false
+
+            Always return strictly 'positive', 'negative' as the sentiment value.
+            Always return true or false as the reminder eligibility value.
+
+        Format your response to match exactly with the schema, providing the call_level number, sentiment string, and reminder_eligible boolean.
+
         Note:
-        - Sentiment must ALWAYS be either 'positive', 'negative', or 'not_connected', never null or empty
+        - Sentiment must ALWAYS be either 'positive', 'negative', never null or empty.
+        - Reminder eligibility must ALWAYS be true or false, never null or empty.
         """
 
         # Prepare request data with bland_secret_key
@@ -119,7 +125,8 @@ class BlandClient:
                 "analysis_prompt": analysis_prompt,
                 "analysis_schema": {
                    "call_level": "integer",
-                   "sentiment": "string"
+                   "sentiment": "string",
+                   "reminder_eligible": "boolean"
                 },
                 "record": record  # Include record parameter with default value True
             }
