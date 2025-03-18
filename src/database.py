@@ -2847,20 +2847,20 @@ async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
         logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
         return None
 
-async def get_campaigns(campaign_type: Optional[str] = None):
+async def get_campaigns(campaign_types: Optional[List[str]] = None):
     """
-    Get all campaigns, optionally filtered by type
+    Get all campaigns, optionally filtered by multiple types
     
     Args:
-        campaign_type: Optional type filter ('email', 'call', or None for all)
+        campaign_types: Optional list of types to filter (['email', 'call'], etc.)
         
     Returns:
         List of campaigns
     """
     query = supabase.table('campaigns').select('*')
     
-    if campaign_type and campaign_type != 'all':
-        query = query.eq('type', campaign_type)
+    if campaign_types:
+        query = query.in_('type', campaign_types)    
     
     response = query.execute()
     return response.data
