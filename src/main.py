@@ -3278,8 +3278,8 @@ async def run_test_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Only validate email credentials if campaign type is email
-    if campaign['type'] == 'email':
+    # Only validate email credentials if campaign type is email or email_and_call
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
         if not company.get("account_email") or not company.get("account_password"):
             logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
             raise HTTPException(
@@ -3316,7 +3316,7 @@ async def run_company_test_campaign(campaign_id: UUID, lead_contact: str):
             return
         
         # Process campaign based on type
-        if campaign['type'] == 'email':
+        if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
             await run_test_email_campaign(campaign, company, lead_contact)
         elif campaign['type'] == 'call':
             await run_test_call_campaign(campaign, company, lead_contact)
