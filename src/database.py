@@ -457,29 +457,33 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
     if not campaign:
         return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
     
-    # Build base query
-    base_query = supabase.from_('leads')\
-        .eq('company_id', campaign['company_id'])\
-        .neq('email', None)\
-        .neq('email', '')\
-        .eq('do_not_contact', False)
+    def apply_filters(query):
+        return query\
+            .eq('company_id', campaign['company_id'])\
+            .neq('email', None)\
+            .neq('email', '')\
+            .eq('do_not_contact', False)
     
     if count:
-        # Return just the count using Supabase count syntax
-        response = base_query.select('id', count='exact').execute()
+        # Get count using the filter chain
+        response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
         return response.count
     else:
         # Calculate offset for pagination
         offset = (page - 1) * limit
         
         # Get total count for pagination metadata
-        count_response = base_query.select('id', count='exact').execute()
+        count_response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
         total = count_response.count if count_response.count is not None else 0
         
         # Get paginated data
-        response = base_query.select('*')\
-            .range(offset, offset + limit - 1)\
-            .execute()
+        response = apply_filters(
+            supabase.from_('leads').select('*')
+        ).range(offset, offset + limit - 1).execute()
         
         return {
             'items': response.data,
