@@ -61,25 +61,22 @@ async def process_email_queues():
     try:
         logger.info("Starting email queue processing")
         
-        # Get all companies with active email queues
-        # For now, simply get all unique company IDs from the queue
+        # Get unique company IDs with pending emails using DISTINCT
         from src.database import supabase
-        response = supabase.table('email_queue')\
+        response = supabase.from_('email_queue')\
             .select('company_id')\
             .eq('status', 'pending')\
-            .execute()
+            .execute(count='exact', head=True, distinct=True)
             
         if not response.data:
             logger.info("No pending emails in queue for any company")
             return
             
-        # Get unique company IDs
-        company_ids = list(set([item['company_id'] for item in response.data]))
-        logger.info(f"Found {len(company_ids)} companies with pending emails")
-        
+        logger.info(f"Found {len(response.data)} companies with pending emails")
+            
         # Process queue for each company
-        for company_id in company_ids:
-            await process_company_email_queue(UUID(company_id))
+        for item in response.data:
+            await process_company_email_queue(UUID(item['company_id']))
             
         logger.info("Email queue processing completed")
     except Exception as e:
