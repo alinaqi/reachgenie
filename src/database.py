@@ -458,7 +458,7 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
         return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
     
     # Build base query
-    base_query = supabase.table('leads')\
+    base_query = supabase.from_('leads')\
         .eq('company_id', campaign['company_id'])\
         .neq('email', None)\
         .neq('email', '')\
@@ -504,7 +504,7 @@ async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int 
         If count=False: Dict containing paginated leads data and metadata
     """
     # Build base query
-    base_query = supabase.table('leads')\
+    base_query = supabase.from_('leads')\
         .eq('company_id', company_id)\
         .neq('phone_number', None)\
         .neq('phone_number', '')\
