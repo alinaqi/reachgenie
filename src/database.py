@@ -507,29 +507,33 @@ async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int 
         If count=True: Total number of leads
         If count=False: Dict containing paginated leads data and metadata
     """
-    # Build base query
-    base_query = supabase.from_('leads')\
-        .eq('company_id', company_id)\
-        .neq('phone_number', None)\
-        .neq('phone_number', '')\
-        .eq('do_not_contact', False)
+    def apply_filters(query):
+        return query\
+            .eq('company_id', str(company_id))\
+            .neq('phone_number', None)\
+            .neq('phone_number', '')\
+            .eq('do_not_contact', False)
     
     if count:
-        # Return just the count using Supabase count syntax
-        response = base_query.select('id', count='exact').execute()
+        # Get count using the filter chain
+        response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
         return response.count
     else:
         # Calculate offset for pagination
         offset = (page - 1) * limit
         
         # Get total count for pagination metadata
-        count_response = base_query.select('id', count='exact').execute()
+        count_response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
         total = count_response.count if count_response.count is not None else 0
         
         # Get paginated data
-        response = base_query.select('*')\
-            .range(offset, offset + limit - 1)\
-            .execute()
+        response = apply_filters(
+            supabase.from_('leads').select('*')
+        ).range(offset, offset + limit - 1).execute()
         
         return {
             'items': response.data,
