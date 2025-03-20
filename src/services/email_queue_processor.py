@@ -64,9 +64,9 @@ async def process_email_queues():
         # Get unique company IDs with pending emails using DISTINCT
         from src.database import supabase
         response = supabase.from_('email_queue')\
-            .select('company_id')\
+            .select('company_id', distinct=True)\
             .eq('status', 'pending')\
-            .execute(count='exact', head=True, distinct=True)
+            .execute()
             
         if not response.data:
             logger.info("No pending emails in queue for any company")
