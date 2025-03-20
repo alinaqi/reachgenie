@@ -460,19 +460,22 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False):
         response = base_query.select('*').execute()
         return response.data
 
-async def get_leads_with_phone(company_id: UUID):
-    # Get only those leads who:
-    # 1. Have a phone number (not null and not empty)
-    # 2. Have not been marked as do_not_contact
-    response = supabase.table('leads')\
-        .select('*')\
+async def get_leads_with_phone(company_id: UUID, count: bool = False):
+    # Build base query
+    base_query = supabase.table('leads')\
         .eq('company_id', company_id)\
         .neq('phone_number', None)\
         .neq('phone_number', '')\
-        .eq('do_not_contact', False)\
-        .execute()
+        .eq('do_not_contact', False)
     
-    return response.data
+    if count:
+        # Return just the count using Supabase count syntax
+        response = base_query.select('id', count='exact').execute()
+        return response.count
+    else:
+        # Return the full data as before
+        response = base_query.select('*').execute()
+        return response.data
 
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
