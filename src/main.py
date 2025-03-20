@@ -1638,17 +1638,17 @@ async def run_campaign(
             )
     # Get total leads count based on campaign type
     if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
-        leads = await get_leads_with_email(campaign['id'],count=True)
+        lead_count = await get_leads_with_email(campaign['id'], count=True)
     elif campaign['type'] == 'call':
-        leads = await get_leads_with_phone(company['id'])
+        lead_count = await get_leads_with_phone(company['id'], count=True)
     else:
-        leads = []
+        lead_count = 0
 
     # Create a new campaign run record
     campaign_run = await create_campaign_run(
         campaign_id=campaign_id,
         status="idle",
-        leads_total=len(leads)
+        leads_total=lead_count
     )
     
     if not campaign_run:
@@ -1657,7 +1657,7 @@ async def run_campaign(
             detail="Failed to create campaign run record"
         )
     
-    logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
+    logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
     # Add campaign execution to background tasks
     background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
     
@@ -2309,11 +2309,11 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
     )
     
     # Set total leads count for the campaign run
-    await update_campaign_run_progress(
-        campaign_run_id=campaign_run_id,
-        leads_processed=0,
-        leads_total=len(leads)
-    )
+    #await update_campaign_run_progress(
+    #    campaign_run_id=campaign_run_id,
+    #    leads_processed=0,
+    #    leads_total=len(leads)
+    #)
 
     # Queue emails for each lead instead of sending immediately
     leads_queued = 0
