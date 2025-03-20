@@ -489,7 +489,20 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             'total_pages': math.ceil(total / limit) if total > 0 else 1
         }
 
-async def get_leads_with_phone(company_id: UUID, count: bool = False):
+async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+    """
+    Get leads with phone numbers for a company with pagination support
+    
+    Args:
+        company_id: UUID of the company
+        count: If True, return only the count of leads
+        page: Page number (1-indexed)
+        limit: Number of leads per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict containing paginated leads data and metadata
+    """
     # Build base query
     base_query = supabase.table('leads')\
         .eq('company_id', company_id)\
@@ -502,9 +515,25 @@ async def get_leads_with_phone(company_id: UUID, count: bool = False):
         response = base_query.select('id', count='exact').execute()
         return response.count
     else:
-        # Return the full data as before
-        response = base_query.select('*').execute()
-        return response.data
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total count for pagination metadata
+        count_response = base_query.select('id', count='exact').execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Get paginated data
+        response = base_query.select('*')\
+            .range(offset, offset + limit - 1)\
+            .execute()
+        
+        return {
+            'items': response.data,
+            'total': total,
+            'page': page,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
+        }
 
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
