@@ -438,11 +438,24 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, 
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
 
-async def get_leads_with_email(campaign_id: UUID, count: bool = False):
+async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+    """
+    Get leads with email addresses for a campaign with pagination support
+    
+    Args:
+        campaign_id: UUID of the campaign
+        count: If True, return only the count of leads
+        page: Page number (1-indexed)
+        limit: Number of leads per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict containing paginated leads data and metadata
+    """
     # First get the campaign to get company_id
     campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        return 0 if count else []
+        return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
     
     # Build base query
     base_query = supabase.table('leads')\
@@ -456,9 +469,25 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False):
         response = base_query.select('id', count='exact').execute()
         return response.count
     else:
-        # Return the full data as before
-        response = base_query.select('*').execute()
-        return response.data
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total count for pagination metadata
+        count_response = base_query.select('id', count='exact').execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Get paginated data
+        response = base_query.select('*')\
+            .range(offset, offset + limit - 1)\
+            .execute()
+        
+        return {
+            'items': response.data,
+            'total': total,
+            'page': page,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
+        }
 
 async def get_leads_with_phone(company_id: UUID, count: bool = False):
     # Build base query
