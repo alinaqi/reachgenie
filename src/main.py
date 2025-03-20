@@ -1638,7 +1638,7 @@ async def run_campaign(
             )
     # Get total leads count based on campaign type
     if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
-        leads = await get_leads_with_email(campaign['id'])
+        leads = await get_leads_with_email(campaign['id'],count=True)
     elif campaign['type'] == 'call':
         leads = await get_leads_with_phone(company['id'])
     else:
