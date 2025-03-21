@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS calls (
     failure_reason TEXT,
     last_reminder_sent VARCHAR(2),
     last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
+    is_reminder_eligible BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -99,6 +100,9 @@ COMMENT ON COLUMN calls.last_reminder_sent IS 'The type of the last reminder sen
 -- Add comment to explain the last_reminder_sent_at column
 COMMENT ON COLUMN calls.last_reminder_sent_at IS 'Timestamp of when the last reminder was sent';
 
+-- Add comment to explain the is_reminder_eligible column
+COMMENT ON COLUMN calls.is_reminder_eligible IS 'Indicates whether the call is eligible for reminders';
+
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -113,6 +117,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     phone_number_of_reminders INTEGER DEFAULT 0,
     phone_days_between_reminders INTEGER DEFAULT 0,
     auto_reply_enabled BOOLEAN DEFAULT FALSE,
+    trigger_call_on TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -123,6 +128,7 @@ COMMENT ON COLUMN campaigns.template IS 'Template content for the campaign';
 COMMENT ON COLUMN campaigns.auto_reply_enabled IS 'Flag to enable/disable automatic replies for the campaign';
 COMMENT ON COLUMN campaigns.phone_number_of_reminders IS 'Number of phone call reminders to be made';
 COMMENT ON COLUMN campaigns.phone_days_between_reminders IS 'Number of days to wait between phone call reminders';
+COMMENT ON COLUMN campaigns.trigger_call_on IS 'Specifies the condition or event that triggers a call in the campaign';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (

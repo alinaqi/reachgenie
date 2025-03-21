@@ -290,7 +290,7 @@ async def get_company_by_id(company_id: UUID):
     response = supabase.table('companies').select('*').eq('id', str(company_id)).execute()
     return response.data[0] if response.data else None
 
-async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict], recording_url: Optional[str] = None):
+async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment: str, summary: str, transcripts: list[dict], recording_url: Optional[str] = None, reminder_eligible: bool = False):
     """
     Update call record with webhook data from Bland AI
     
@@ -309,7 +309,8 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
             'sentiment': sentiment,
             'summary': summary,
             'transcripts': transcripts,
-            'recording_url': recording_url
+            'recording_url': recording_url,
+            'is_reminder_eligible': reminder_eligible
         }
         response = supabase.table('calls').update(call_data).eq('bland_call_id', bland_call_id).execute()
         return response.data[0] if response.data else None
@@ -386,7 +387,7 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     
     return calls
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
@@ -398,26 +399,27 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
         'days_between_reminders': days_between_reminders,
         'phone_number_of_reminders': phone_number_of_reminders,
         'phone_days_between_reminders': phone_days_between_reminders,
-        'auto_reply_enabled': auto_reply_enabled
+        'auto_reply_enabled': auto_reply_enabled,
+        'trigger_call_on': trigger_call_on
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
 
-async def get_campaigns_by_company(company_id: UUID, campaign_type: Optional[str] = None):
+async def get_campaigns_by_company(company_id: UUID, campaign_types: Optional[List[str]] = None):
     """
-    Get campaigns for a company, optionally filtered by type
+    Get campaigns for a company, optionally filtered by multiple types
     
     Args:
         company_id: UUID of the company
-        campaign_type: Optional type filter ('email', 'call', or None for all)
+        campaign_types: Optional list of types to filter (['email', 'call'], etc.)
         
     Returns:
         List of campaigns
     """
     query = supabase.table('campaigns').select('*').eq('company_id', str(company_id))
     
-    if campaign_type and campaign_type != 'all':
-        query = query.eq('type', campaign_type)
+    if campaign_types:
+        query = query.in_('type', campaign_types) 
     
     response = query.execute()
     return response.data
@@ -436,38 +438,110 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, 
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
 
-async def get_leads_with_email(campaign_id: UUID):
+async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+    """
+    Get leads with email addresses for a campaign with pagination support
+    
+    Args:
+        campaign_id: UUID of the campaign
+        count: If True, return only the count of leads
+        page: Page number (1-indexed)
+        limit: Number of leads per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict containing paginated leads data and metadata
+    """
     # First get the campaign to get company_id
     campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
-        return []
+        return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
     
-    # Get only leads that:
-    # 1. Have an email address (not null and not empty)
-    # 2. Have not been marked as do_not_contact
-    response = supabase.table('leads')\
-        .select('*')\
-        .eq('company_id', campaign['company_id'])\
-        .neq('email', None)\
-        .neq('email', '')\
-        .eq('do_not_contact', False)\
-        .execute()
+    def apply_filters(query):
+        return query\
+            .eq('company_id', campaign['company_id'])\
+            .neq('email', None)\
+            .neq('email', '')\
+            .eq('do_not_contact', False)
     
-    return response.data
+    if count:
+        # Get count using the filter chain
+        response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
+        return response.count
+    else:
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total count for pagination metadata
+        count_response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Get paginated data
+        response = apply_filters(
+            supabase.from_('leads').select('*')
+        ).range(offset, offset + limit - 1).execute()
+        
+        return {
+            'items': response.data,
+            'total': total,
+            'page': page,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
+        }
 
-async def get_leads_with_phone(company_id: UUID):
-    # Get only those leads who:
-    # 1. Have a phone number (not null and not empty)
-    # 2. Have not been marked as do_not_contact
-    response = supabase.table('leads')\
-        .select('*')\
-        .eq('company_id', company_id)\
-        .neq('phone_number', None)\
-        .neq('phone_number', '')\
-        .eq('do_not_contact', False)\
-        .execute()
+async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+    """
+    Get leads with phone numbers for a company with pagination support
     
-    return response.data
+    Args:
+        company_id: UUID of the company
+        count: If True, return only the count of leads
+        page: Page number (1-indexed)
+        limit: Number of leads per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict containing paginated leads data and metadata
+    """
+    def apply_filters(query):
+        return query\
+            .eq('company_id', str(company_id))\
+            .neq('phone_number', None)\
+            .neq('phone_number', '')\
+            .eq('do_not_contact', False)
+    
+    if count:
+        # Get count using the filter chain
+        response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
+        return response.count
+    else:
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total count for pagination metadata
+        count_response = apply_filters(
+            supabase.from_('leads').select('*', count='exact')
+        ).execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Get paginated data
+        response = apply_filters(
+            supabase.from_('leads').select('*')
+        ).range(offset, offset + limit - 1).execute()
+        
+        return {
+            'items': response.data,
+            'total': total,
+            'page': page,
+            'page_size': limit,
+            'total_pages': math.ceil(total / limit) if total > 0 else 1
+        }
 
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
@@ -1793,7 +1867,9 @@ async def update_queue_item_status(
     queue_id: UUID, 
     status: str, 
     processed_at: Optional[datetime] = None, 
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    subject: Optional[str] = None,
+    body: Optional[str] = None
 ) -> dict:
     """
     Update the status of a queue item
@@ -1814,6 +1890,12 @@ async def update_queue_item_status(
         
     if error_message:
         update_data['error_message'] = error_message
+    
+    if subject:
+        update_data['subject'] = subject
+    
+    if body:
+        update_data['email_body'] = body
     
     try:    
         response = supabase.table('email_queue')\
@@ -2845,20 +2927,20 @@ async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
         logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
         return None
 
-async def get_campaigns(campaign_type: Optional[str] = None):
+async def get_campaigns(campaign_types: Optional[List[str]] = None):
     """
-    Get all campaigns, optionally filtered by type
+    Get all campaigns, optionally filtered by multiple types
     
     Args:
-        campaign_type: Optional type filter ('email', 'call', or None for all)
+        campaign_types: Optional list of types to filter (['email', 'call'], etc.)
         
     Returns:
         List of campaigns
     """
     query = supabase.table('campaigns').select('*')
     
-    if campaign_type and campaign_type != 'all':
-        query = query.eq('type', campaign_type)
+    if campaign_types:
+        query = query.in_('type', campaign_types)    
     
     response = query.execute()
     return response.data
@@ -2889,11 +2971,11 @@ async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int,
         # Build the base query
         query = supabase.table('calls')\
             .select(
-                'id, created_at, sentiment, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
+                'id, created_at, is_reminder_eligible, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
                 'campaigns!inner(id, name, company_id, companies!inner(id, name)), ' +
                 'leads!inner(phone_number,enriched_data)'
             )\
-            .eq('sentiment', 'not_connected')\
+            .eq('is_reminder_eligible', True)\
             .eq('campaigns.id', str(campaign_id))\
             .eq('campaigns.companies.deleted', False)
             

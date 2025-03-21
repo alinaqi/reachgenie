@@ -129,7 +129,7 @@ from src.utils.calendar_utils import book_appointment as calendar_book_appointme
 from src.utils.email_utils import add_tracking_pixel
 from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
-from src.services.email_generation import generate_company_insights, generate_email_content
+from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.services.call_generation import generate_call_script
 from src.routes.email_queues import router as email_queues_router
 # Configure logger
@@ -1434,6 +1434,7 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
         bland_call_id = payload.call_id
         duration = payload.corrected_duration
         sentiment = payload.analysis.get('sentiment', 'neutral')
+        reminder_eligible = payload.analysis.get('reminder_eligible', False)
         summary = payload.summary
         transcripts = payload.transcripts
         recording_url = payload.recording_url
@@ -1445,7 +1446,8 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             sentiment=sentiment,
             summary=summary,
             transcripts=transcripts,
-            recording_url=recording_url
+            recording_url=recording_url,
+            reminder_eligible=reminder_eligible
         )
         
         if not updated_call:
@@ -1515,28 +1517,32 @@ async def create_company_campaign(
         days_between_reminders=campaign.days_between_reminders,
         phone_number_of_reminders=campaign.phone_number_of_reminders,
         phone_days_between_reminders=campaign.phone_days_between_reminders,
-        auto_reply_enabled=campaign.auto_reply_enabled
+        auto_reply_enabled=campaign.auto_reply_enabled,
+        trigger_call_on=campaign.trigger_call_on
     )
 
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB], tags=["Campaigns & Emails"])
 async def get_company_campaigns(
     company_id: UUID,
-    type: str = Query('all', description="Filter campaigns by type: 'email', 'call', or 'all'"),
+    type: List[str] = Query(['all'], description="Filter campaigns by type: ['email', 'call', 'email_and_call'] or ['all']"),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get all campaigns for a company, optionally filtered by type
     """
-    # Validate campaign type
-    if type not in ['email', 'call', 'all']:
-        raise HTTPException(status_code=400, detail="Invalid campaign type. Must be 'email', 'call', or 'all'")
+    # Validate campaign types
+    valid_types = {'email', 'call', 'email_and_call', 'all'}
+    if not all(t in valid_types for t in type):
+        raise HTTPException(status_code=400, detail="Invalid campaign type. Must be 'email', 'call', 'email_and_call', or 'all'")
     
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return await get_campaigns_by_company(company_id, type)
+    # If 'all' is in the types list, don't filter by type
+    campaign_types = None if 'all' in type else type
+    return await get_campaigns_by_company(company_id, campaign_types)
 
 @app.get("/api/companies/{company_id}/emails", response_model=List[EmailLogResponse], tags=["Campaigns & Emails"])
 async def get_company_emails(
@@ -1616,8 +1622,8 @@ async def run_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Only validate email credentials if campaign type is email
-    if campaign['type'] == 'email':
+    # Only validate email credentials if campaign type is email or email_and_call
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
         if not company.get("account_email") or not company.get("account_password"):
             logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
             raise HTTPException(
@@ -1631,18 +1637,18 @@ async def run_campaign(
                 detail="Email provider type not configured. Please set up email provider type first."
             )
     # Get total leads count based on campaign type
-    if campaign['type'] == 'email':
-        leads = await get_leads_with_email(campaign['id'])
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
+        lead_count = await get_leads_with_email(campaign['id'], count=True)
     elif campaign['type'] == 'call':
-        leads = await get_leads_with_phone(company['id'])
+        lead_count = await get_leads_with_phone(company['id'], count=True)
     else:
-        leads = []
+        lead_count = 0
 
     # Create a new campaign run record
     campaign_run = await create_campaign_run(
         campaign_id=campaign_id,
         status="idle",
-        leads_total=len(leads)
+        leads_total=lead_count
     )
     
     if not campaign_run:
@@ -1651,7 +1657,7 @@ async def run_campaign(
             detail="Failed to create campaign run record"
         )
     
-    logger.info(f"Created campaign run {campaign_run['id']} with {len(leads)} leads")
+    logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
     # Add campaign execution to background tasks
     background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
     
@@ -2292,118 +2298,136 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
         return
     
-    # Get all leads having email addresses
-    leads = await get_leads_with_email(campaign['id'])
-    logger.info(f"Found {len(leads)} leads with emails for campaign {campaign['id']}")
+    # Get total count of leads with emails
+    total_leads = await get_leads_with_email(campaign['id'], count=True)
+    logger.info(f"Found {total_leads} total leads with emails for campaign {campaign['id']}")
 
-    # Update campaign run with status running
+    # Update campaign run with status running and total leads
     await update_campaign_run_status(
         campaign_run_id=campaign_run_id,
         status="running"
     )
     
-    # Set total leads count for the campaign run
     await update_campaign_run_progress(
         campaign_run_id=campaign_run_id,
         leads_processed=0,
-        leads_total=len(leads)
+        leads_total=total_leads
     )
 
-    # Queue emails for each lead instead of sending immediately
+    # Process leads in pages
+    page = 1
+    page_size = 50
     leads_queued = 0
-    for lead in leads:
-        try:
-            if lead.get('email'):  # Only queue if lead has email
-                logger.info(f"Queueing email for lead: {lead['email']}")
-                
-                # =============== Generate HTML subject and email - START ================================
-                try:
-                    # Check if lead already has enriched data
-                    insights = None
-                    if lead.get('enriched_data'):
-                        logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
-                        # We have enriched data, use it directly
-                        if isinstance(lead['enriched_data'], str):
-                            try:
-                                enriched_data = json.loads(lead['enriched_data'])
-                                insights = json.dumps(enriched_data)
-                            except json.JSONDecodeError:
-                                insights = lead['enriched_data']
-                        else:
-                            insights = json.dumps(lead['enriched_data'])
-                    
-                    # Generate company insights if we don't have any
-                    if not insights:
-                        logger.info(f"Generating new insights for lead: {lead['email']}")
-                        insights = await generate_company_insights(lead, perplexity_service)
-                        
-                        # Save the insights to the lead's enriched_data if we generated new ones
+    
+    while True:
+        # Get leads for current page
+        leads_response = await get_leads_with_email(campaign['id'], count=False, page=page, limit=page_size)
+        leads = leads_response['items']
+        
+        if not leads:
+            break  # No more leads to process
+            
+        # Queue emails for each lead in this page
+        for lead in leads:
+            try:
+                if lead.get('email'):  # Only queue if lead has email
+                    logger.info(f"Queueing email for lead: {lead['email']}")
+
+                    try:
+                        subject = ""
+                        body = ""
+
+                        insights = await get_or_generate_insights_for_lead(lead)
+                            
+                        # Generate personalized email content
                         if insights:
-                            try:
-                                # Parse the insights JSON if it's a string
-                                enriched_data = {}
-                                if isinstance(insights, str):
-                                    # Try to extract JSON from the string response
-                                    insights_str = insights.strip()
-                                    # Check if the response is already in JSON format
-                                    try:
-                                        enriched_data = json.loads(insights_str)
-                                    except json.JSONDecodeError:
-                                        # If not, look for JSON within the string (common with LLM responses)
-                                        import re
-                                        json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                        if json_match:
-                                            potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                            enriched_data = json.loads(potential_json)
-                                        else:
-                                            # If we can't extract structured JSON, store as raw text
-                                            enriched_data = {"raw_insights": insights_str}
-                                else:
-                                    enriched_data = insights
-                                
-                                # Update the lead with enriched data
-                                from src.database import update_lead_enrichment
-                                await update_lead_enrichment(lead['id'], enriched_data)
-                                logger.info(f"Updated lead {lead['email']} with new enriched data")
-                            except Exception as e:
-                                logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
-                    
-                    if not insights:
-                        logger.error(f"Failed to generate insights for lead {lead['email']}")
-                        return
-                        
-                    # Generate personalized email content
-                    subject, body = await generate_email_content(lead, campaign, company, insights)
-                    if not subject or not body:
-                        logger.error(f"Failed to generate email content for lead {lead['email']}")
-                        return
-                        
-                    logger.info(f"Generated email content for lead: {lead['email']}")
-                    logger.info(f"Email Subject: {subject}")
-                    
-                    # Replace {email_body} placeholder in template with generated body
-                    final_body = template.replace("{email_body}", body)
+                            subject, body = await generate_email_content(lead, campaign, company, insights)
+                        else:
+                            #logger.error(f"Failed to generate insights for lead {lead['email']}")
+                            response = await add_email_to_queue(
+                                company_id=campaign['company_id'],
+                                campaign_id=campaign['id'],
+                                campaign_run_id=campaign_run_id,
+                                lead_id=lead['id'],
+                                subject=subject,
+                                body=body
+                            )
 
-                except Exception as e:
-                    logger.error(f"Error processing email for {lead['email']}: {str(e)}")
-                # =============== Generate HTML subject and email - END ====================================
+                            await update_queue_item_status(
+                                queue_id=UUID(response['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate insights for lead"
+                            )
 
-                # Add to queue
-                await add_email_to_queue(
-                    company_id=campaign['company_id'],
-                    campaign_id=campaign['id'],
-                    campaign_run_id=campaign_run_id,
-                    lead_id=lead['id'],
-                    subject=subject,
-                    body=final_body
-                )
-                leads_queued += 1
-                logger.info(f"Email for lead {lead['email']} added to queue")
-            else:
-                logger.warning(f"Skipping lead with no email: {lead.get('id')}")
-        except Exception as e:
-            logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
-            continue
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=1,
+                                increment=True
+                            )
+
+                            leads_queued += 1
+                            continue
+                        
+                        if not subject or not body:
+                            logger.error(f"Failed to generate email content for lead {lead['email']}")
+
+                            response = await add_email_to_queue(
+                                company_id=campaign['company_id'],
+                                campaign_id=campaign['id'],
+                                campaign_run_id=campaign_run_id,
+                                lead_id=lead['id'],
+                                subject=subject,
+                                body=body
+                            )
+
+                            await update_queue_item_status(
+                                queue_id=UUID(response['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate email content for lead"
+                            )
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=1,
+                                increment=True
+                            )
+                            
+                            leads_queued += 1
+                            continue
+                            
+                        logger.info(f"Generated email content for lead: {lead['email']}")
+                        logger.info(f"Email Subject: {subject}")
+                        
+                        # Replace {email_body} placeholder in template with generated body
+                        final_body = template.replace("{email_body}", body)
+
+                    except Exception as e:
+                        logger.error(f"Error processing email for {lead['email']}: {str(e)}")
+                        continue
+
+                    # Add to queue
+                    await add_email_to_queue(
+                        company_id=campaign['company_id'],
+                        campaign_id=campaign['id'],
+                        campaign_run_id=campaign_run_id,
+                        lead_id=lead['id'],
+                        subject=subject,
+                        body=final_body
+                    )
+                    leads_queued += 1
+                    logger.info(f"Email for lead {lead['email']} added to queue")
+                else:
+                    logger.warning(f"Skipping lead with no email: {lead.get('id')}")
+            except Exception as e:
+                logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
+                continue
+        
+        # Move to next page
+        page += 1
     
     logger.info(f"Queued {leads_queued} emails for campaign {campaign['id']}")
     
@@ -2428,7 +2452,7 @@ async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
             return
         
         # Process campaign based on type
-        if campaign['type'] == 'email':
+        if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
             await run_email_campaign(campaign, company, campaign_run_id)
         elif campaign['type'] == 'call':
             await run_call_campaign(campaign, company, campaign_run_id)
@@ -2440,103 +2464,120 @@ async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
 async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle call campaign processing"""
     
-    # Get all leads having phone number
-    leads = await get_leads_with_phone(company['id'])
-    logger.info(f"Found {len(leads)} leads with phone number")
+    # Get total count of leads with phone numbers
+    total_leads = await get_leads_with_phone(company['id'], count=True)
+    logger.info(f"Found {total_leads} total leads with phone number")
 
-    # Update campaign run with status running
+    # Update campaign run with status running and total leads
     await update_campaign_run_status(
         campaign_run_id=campaign_run_id,
         status="running"
     )
-
+    # Process leads in pages
+    page = 1
+    page_size = 50
     leads_processed = 0
-    for lead in leads:
-        try:
-            if not lead.get('phone_number'):
-                continue  # Skip if no phone number
-                
-            logger.info(f"Processing call for lead: {lead['phone_number']}")
+    
+    while True:
+        # Get leads for current page
+        leads_response = await get_leads_with_phone(company['id'], count=False, page=page, limit=page_size)
+        leads = leads_response['items']
+        
+        if not leads:
+            break  # No more leads to process
             
-            # Check if lead already has enriched data
-            insights = None
-            if lead.get('enriched_data'):
-                logger.info(f"Lead {lead['phone_number']} already has enriched data, using existing insights")
-                # We have enriched data, use it directly
-                if isinstance(lead['enriched_data'], str):
-                    try:
-                        enriched_data = json.loads(lead['enriched_data'])
-                        insights = json.dumps(enriched_data)
-                    except json.JSONDecodeError:
-                        insights = lead['enriched_data']
-                else:
-                    insights = json.dumps(lead['enriched_data'])
-            
-            # Generate company insights if we don't have any
-            if not insights:
-                logger.info(f"Generating new insights for lead: {lead['phone_number']}")
-                insights = await generate_company_insights(lead, perplexity_service)
+        # Process each lead in this page
+        for lead in leads:
+            try:
+                if not lead.get('phone_number'):
+                    continue  # Skip if no phone number
+                    
+                logger.info(f"Processing call for lead: {lead['phone_number']}")
                 
-                # Save the insights to the lead's enriched_data if we generated new ones
+                # Check if lead already has enriched data
+                insights = None
+                if lead.get('enriched_data'):
+                    logger.info(f"Lead {lead['phone_number']} already has enriched data, using existing insights")
+                    # We have enriched data, use it directly
+                    if isinstance(lead['enriched_data'], str):
+                        try:
+                            enriched_data = json.loads(lead['enriched_data'])
+                            insights = json.dumps(enriched_data)
+                        except json.JSONDecodeError:
+                            insights = lead['enriched_data']
+                    else:
+                        insights = json.dumps(lead['enriched_data'])
+                
+                # Generate company insights if we don't have any
+                if not insights:
+                    logger.info(f"Generating new insights for lead: {lead['phone_number']}")
+                    insights = await generate_company_insights(lead, perplexity_service)
+                    
+                    # Save the insights to the lead's enriched_data if we generated new ones
+                    if insights:
+                        try:
+                            # Parse the insights JSON if it's a string
+                            enriched_data = {}
+                            if isinstance(insights, str):
+                                # Try to extract JSON from the string response
+                                insights_str = insights.strip()
+                                # Check if the response is already in JSON format
+                                try:
+                                    enriched_data = json.loads(insights_str)
+                                except json.JSONDecodeError:
+                                    # If not, look for JSON within the string (common with LLM responses)
+                                    import re
+                                    json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                                    if json_match:
+                                        potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                                        enriched_data = json.loads(potential_json)
+                                    else:
+                                        # If we can't extract structured JSON, store as raw text
+                                        enriched_data = {"raw_insights": insights_str}
+                            else:
+                                enriched_data = insights
+                            
+                            # Update the lead with enriched data
+                            await update_lead_enrichment(lead['id'], enriched_data)
+                            logger.info(f"Updated lead {lead['phone_number']} with new enriched data")
+                        except Exception as e:
+                            logger.error(f"Error storing insights for lead {lead['phone_number']}: {str(e)}")
+                
                 if insights:
-                    try:
-                        # Parse the insights JSON if it's a string
-                        enriched_data = {}
-                        if isinstance(insights, str):
-                            # Try to extract JSON from the string response
-                            insights_str = insights.strip()
-                            # Check if the response is already in JSON format
-                            try:
-                                enriched_data = json.loads(insights_str)
-                            except json.JSONDecodeError:
-                                # If not, look for JSON within the string (common with LLM responses)
-                                import re
-                                json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                if json_match:
-                                    potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                    enriched_data = json.loads(potential_json)
-                                else:
-                                    # If we can't extract structured JSON, store as raw text
-                                    enriched_data = {"raw_insights": insights_str}
-                        else:
-                            enriched_data = insights
-                        
-                        # Update the lead with enriched data
-                        await update_lead_enrichment(lead['id'], enriched_data)
-                        logger.info(f"Updated lead {lead['phone_number']} with new enriched data")
-                    except Exception as e:
-                        logger.error(f"Error storing insights for lead {lead['phone_number']}: {str(e)}")
-            
-            if insights:
-                logger.info(f"Using insights for lead: {lead['phone_number']}")
-                
-                # Generate personalized call script
-                call_script = await generate_call_script(lead, campaign, company, insights)
-                logger.info(f"Generated call script for lead: {lead['phone_number']}")
-                logger.info(f"Call Script: {call_script}")
+                    logger.info(f"Using insights for lead: {lead['phone_number']}")
 
-                if call_script:
-                    # Initiate call with Bland AI
-                    await initiate_call(campaign, lead, call_script, campaign_run_id)
+                    # Generate personalized call script
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    logger.info(f"Generated call script for lead: {lead['phone_number']}")
+                    logger.info(f"Call Script: {call_script}")
 
-                    # Update campaign run progress
-                    await update_campaign_run_progress(
-                        campaign_run_id=campaign_run_id,
-                        leads_processed=leads_processed + 1
-                    )
-                    leads_processed += 1
-                else:
-                    logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
+                    if call_script:
+                        # Initiate call with Bland AI
+                        await initiate_call(campaign, lead, call_script, campaign_run_id)
 
-        except Exception as e:
-            logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
-            continue
+                        # Update campaign run progress
+                        await update_campaign_run_progress(
+                            campaign_run_id=campaign_run_id,
+                            leads_processed=leads_processed + 1
+                        )
+                        leads_processed += 1
+                    else:
+                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
+
+            except Exception as e:
+                logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
+                continue
+        
+        # Move to next page
+        page += 1
     
     # Update campaign run with status completed
     await update_campaign_run_status(
         campaign_run_id=campaign_run_id,
         status="completed"
     )
+
+    logger.info(f"Processed {leads_processed} leads for campaign {campaign['id']}")
 
 async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Verify the Bland tool secret token"""
@@ -3275,8 +3316,8 @@ async def run_test_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    # Only validate email credentials if campaign type is email
-    if campaign['type'] == 'email':
+    # Only validate email credentials if campaign type is email or email_and_call
+    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
         if not company.get("account_email") or not company.get("account_password"):
             logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
             raise HTTPException(
@@ -3313,7 +3354,7 @@ async def run_company_test_campaign(campaign_id: UUID, lead_contact: str):
             return
         
         # Process campaign based on type
-        if campaign['type'] == 'email':
+        if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
             await run_test_email_campaign(campaign, company, lead_contact)
         elif campaign['type'] == 'call':
             await run_test_call_campaign(campaign, company, lead_contact)

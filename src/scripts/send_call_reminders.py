@@ -154,7 +154,7 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
 async def main():
     """Main function to process reminder calls for all companies"""
     try:
-        campaigns = await get_campaigns(campaign_type='call')
+        campaigns = await get_campaigns(campaign_types=["call", "email_and_call"])
         logger.info(f"Found {len(campaigns)} campaigns \n")
 
         for campaign in campaigns:

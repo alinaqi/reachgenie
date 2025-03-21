@@ -5,7 +5,6 @@ from typing import List, Dict, Optional, Any
 from uuid import UUID
 import asyncio
 
-from fastapi import HTTPException
 from src.database import (
     get_email_throttle_settings,
     get_next_emails_to_process,
@@ -23,9 +22,10 @@ from src.database import (
     get_email_queue_items,
     get_product_by_id,
     is_email_in_do_not_email_list,
-    add_to_do_not_email_list
+    add_to_do_not_email_list,
+    supabase
 )
-from src.services.email_generation import generate_company_insights, generate_email_content
+from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from src.utils.email_utils import add_tracking_pixel
@@ -61,25 +61,32 @@ async def process_email_queues():
     try:
         logger.info("Starting email queue processing")
         
-        # Get all companies with active email queues
-        # For now, simply get all unique company IDs from the queue
-        from src.database import supabase
-        response = supabase.table('email_queue')\
-            .select('company_id')\
-            .eq('status', 'pending')\
-            .execute()
-            
-        if not response.data:
-            logger.info("No pending emails in queue for any company")
-            return
-            
-        # Get unique company IDs
-        company_ids = list(set([item['company_id'] for item in response.data]))
-        logger.info(f"Found {len(company_ids)} companies with pending emails")
+        # Process companies in batches of 10
+        page_size = 10
+        start = 0
         
-        # Process queue for each company
-        for company_id in company_ids:
-            await process_company_email_queue(UUID(company_id))
+        while True:
+            # Get paginated list of companies with email credentials
+            response = supabase.from_('companies')\
+                .select('id')\
+                .not_.is_('account_email', 'null')\
+                .not_.is_('account_password', 'null')\
+                .eq('deleted', False)\
+                .range(start, start + page_size - 1)\
+                .execute()
+                
+            if not response.data:
+                logger.info("No more companies to process")
+                break
+                
+            logger.info(f"Processing batch of {len(response.data)} companies")
+            
+            # Process queue for each company in this batch
+            for company in response.data:
+                await process_company_email_queue(UUID(company['id']))
+            
+            # Move to next page
+            start += page_size
             
         logger.info("Email queue processing completed")
     except Exception as e:
@@ -164,6 +171,7 @@ async def process_queued_email(queue_item: dict, company: dict):
         campaign_id = UUID(queue_item['campaign_id'])
         lead_id = UUID(queue_item['lead_id'])
         campaign_run_id = UUID(queue_item['campaign_run_id'])
+        processed_at = queue_item['processed_at']
         
         campaign = await get_campaign_by_id(campaign_id)
         lead = await get_lead_by_id(lead_id)
@@ -176,6 +184,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign or lead not found"
             )
+            
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
         
         # Check for email addresses
@@ -187,6 +203,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Lead has no email address"
             )
+
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
             
         # Verify campaign template
@@ -199,6 +223,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign missing email template"
             )
+
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
         
         # Check if email is in do_not_email list before proceeding
@@ -210,12 +242,50 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Email {lead['email']} is in do_not_email list"
             )
+
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
 
         try:
             subject = queue_item['subject']
             body = queue_item['email_body']
 
+            # If the email body or subject is not set, generate insights
+            if not body or not subject:
+                insights = await get_or_generate_insights_for_lead(lead)
+
+                if insights:
+                    subject, body = await generate_email_content(lead, campaign, company, insights)
+
+                    if not body or not subject:
+                        await update_queue_item_status(
+                                queue_id=UUID(queue_item['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate email content for lead"
+                            )
+                        return
+                    else:
+                        await update_queue_item_status(
+                                queue_id=UUID(queue_item['id']),
+                                status='processing',
+                                subject=subject,
+                                body=body
+                            )
+                else:
+                    await update_queue_item_status(
+                            queue_id=UUID(queue_item['id']),
+                            status='failed',
+                            processed_at=datetime.now(timezone.utc),
+                            error_message="Failed to generate insights for lead"
+                        )
+                    return
             body_without_tracking_pixel = body
         
             # Create email log
@@ -242,6 +312,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                     processed_at=datetime.now(timezone.utc),
                     error_message=f"Failed to decrypt password: {str(e)}"
                 )
+
+                if processed_at is None:
+                    # Update campaign run progress only if the queue item was not processed before
+                    await update_campaign_run_progress(
+                        campaign_run_id=campaign_run_id,
+                        leads_processed=1,
+                        increment=True
+                    )
                 return
                 
             # Initialize SMTP client and send email
@@ -291,12 +369,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc)
             )
             
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             
         except Exception as e:
             logger.error(f"Error processing email for {lead.get('email')}: {str(e)}")
@@ -319,7 +398,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 
                 # Update retry count and reschedule
-                from src.database import supabase
                 await supabase.table('email_queue')\
                     .update({
                         'status': 'pending',
@@ -341,6 +419,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Unexpected error: {str(e)}"
             )
+            
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
         except:
             pass
 
@@ -357,7 +443,6 @@ async def check_campaign_runs_completion(company_id: UUID):
             
             if pending_count == 0:
                 # Get the campaign run details to check for complete processing
-                from src.database import supabase
                 campaign_run = supabase.table('campaign_runs')\
                     .select('*')\
                     .eq('id', str(run['id']))\

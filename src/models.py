@@ -360,6 +360,7 @@ class BlandWebhookPayload(BaseModel):
 class CampaignType(str, Enum):
     EMAIL = 'email'
     CALL = 'call'
+    EMAIL_AND_CALL = 'email_and_call'
 
 class EmailCampaignBase(BaseModel):
     name: str
@@ -372,6 +373,7 @@ class EmailCampaignBase(BaseModel):
     auto_reply_enabled: Optional[bool] = False
     phone_number_of_reminders: Optional[int] = 0
     phone_days_between_reminders: Optional[int] = 0
+    trigger_call_on: Optional[str] = Field(None, description="Condition to trigger a call", example="after_email_sent")
 
 class TaskResponse(BaseModel):
     task_id: UUID
