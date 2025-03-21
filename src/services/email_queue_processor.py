@@ -5,7 +5,6 @@ from typing import List, Dict, Optional, Any
 from uuid import UUID
 import asyncio
 
-from fastapi import HTTPException
 from src.database import (
     get_email_throttle_settings,
     get_next_emails_to_process,
@@ -23,7 +22,8 @@ from src.database import (
     get_email_queue_items,
     get_product_by_id,
     is_email_in_do_not_email_list,
-    add_to_do_not_email_list
+    add_to_do_not_email_list,
+    supabase
 )
 from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.utils.smtp_client import SMTPClient
@@ -61,22 +61,32 @@ async def process_email_queues():
     try:
         logger.info("Starting email queue processing")
         
-        # Get unique company IDs with pending emails using DISTINCT
-        from src.database import supabase
-        response = supabase.from_('email_queue')\
-            .select('company_id', distinct=True)\
-            .eq('status', 'pending')\
-            .execute()
+        # Process companies in batches of 10
+        page_size = 10
+        start = 0
+        
+        while True:
+            # Get paginated list of companies with email credentials
+            response = supabase.from_('companies')\
+                .select('id')\
+                .not_.is_('account_email', 'null')\
+                .not_.is_('account_password', 'null')\
+                .eq('deleted', False)\
+                .range(start, start + page_size - 1)\
+                .execute()
+                
+            if not response.data:
+                logger.info("No more companies to process")
+                break
+                
+            logger.info(f"Processing batch of {len(response.data)} companies")
             
-        if not response.data:
-            logger.info("No pending emails in queue for any company")
-            return
+            # Process queue for each company in this batch
+            for company in response.data:
+                await process_company_email_queue(UUID(company['id']))
             
-        logger.info(f"Found {len(response.data)} companies with pending emails")
-            
-        # Process queue for each company
-        for item in response.data:
-            await process_company_email_queue(UUID(item['company_id']))
+            # Move to next page
+            start += page_size
             
         logger.info("Email queue processing completed")
     except Exception as e:
@@ -381,7 +391,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 
                 # Update retry count and reschedule
-                from src.database import supabase
                 await supabase.table('email_queue')\
                     .update({
                         'status': 'pending',
@@ -426,7 +435,6 @@ async def check_campaign_runs_completion(company_id: UUID):
             
             if pending_count == 0:
                 # Get the campaign run details to check for complete processing
-                from src.database import supabase
                 campaign_run = supabase.table('campaign_runs')\
                     .select('*')\
                     .eq('id', str(run['id']))\
