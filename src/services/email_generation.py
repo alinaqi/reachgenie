@@ -8,6 +8,66 @@ import json
 import logging
 logger = logging.getLogger(__name__)
 
+async def get_or_generate_insights_for_lead(lead: dict):
+    """Get or generate insights for a lead"""
+    
+    # Check if lead already has enriched data
+    insights = None
+    if lead.get('enriched_data'):
+        logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
+        # We have enriched data, use it directly
+        if isinstance(lead['enriched_data'], str):
+            try:
+                enriched_data = json.loads(lead['enriched_data'])
+                insights = json.dumps(enriched_data)
+            except json.JSONDecodeError:
+                insights = lead['enriched_data']
+        else:
+            insights = json.dumps(lead['enriched_data'])
+    
+    # Generate company insights if we don't have any
+    if not insights:
+        logger.info(f"Generating new insights for lead: {lead['email']}")
+        insights = await generate_company_insights(lead, perplexity_service)
+        
+        # Save the insights to the lead's enriched_data if we generated new ones
+        if insights:
+            try:
+                # Parse the insights JSON if it's a string
+                enriched_data = {}
+                if isinstance(insights, str):
+                    # Try to extract JSON from the string response
+                    insights_str = insights.strip()
+                    # Check if the response is already in JSON format
+                    try:
+                        enriched_data = json.loads(insights_str)
+                    except json.JSONDecodeError:
+                        # If not, look for JSON within the string (common with LLM responses)
+                        import re
+                        json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
+                        if json_match:
+                            potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                            enriched_data = json.loads(potential_json)
+                        else:
+                            # If we can't extract structured JSON, store as raw text
+                            enriched_data = {"raw_insights": insights_str}
+                else:
+                    enriched_data = insights
+                
+                # Update the lead with enriched data
+                from src.database import update_lead_enrichment
+                await update_lead_enrichment(lead['id'], enriched_data)
+                logger.info(f"Updated lead {lead['email']} with new enriched data")
+            except Exception as e:
+                logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
+    
+    if not insights:
+        logger.error(f"Failed to generate insights for lead {lead['email']}")
+        return None
+    
+    return insights
+
+
 async def generate_company_insights(lead: dict, perplexity_service) -> dict:
     """Generate company insights using Perplexity API for a given lead"""
     try:

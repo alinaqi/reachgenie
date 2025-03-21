@@ -129,7 +129,7 @@ from src.utils.calendar_utils import book_appointment as calendar_book_appointme
 from src.utils.email_utils import add_tracking_pixel
 from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
-from src.services.email_generation import generate_company_insights, generate_email_content
+from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.services.call_generation import generate_call_script
 from src.routes.email_queues import router as email_queues_router
 # Configure logger
@@ -2332,67 +2332,55 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
             try:
                 if lead.get('email'):  # Only queue if lead has email
                     logger.info(f"Queueing email for lead: {lead['email']}")
-                    
-                    # =============== Generate HTML subject and email - START ================================
+
                     try:
-                        # Check if lead already has enriched data
-                        insights = None
-                        if lead.get('enriched_data'):
-                            logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
-                            # We have enriched data, use it directly
-                            if isinstance(lead['enriched_data'], str):
-                                try:
-                                    enriched_data = json.loads(lead['enriched_data'])
-                                    insights = json.dumps(enriched_data)
-                                except json.JSONDecodeError:
-                                    insights = lead['enriched_data']
-                            else:
-                                insights = json.dumps(lead['enriched_data'])
-                        
-                        # Generate company insights if we don't have any
-                        if not insights:
-                            logger.info(f"Generating new insights for lead: {lead['email']}")
-                            insights = await generate_company_insights(lead, perplexity_service)
-                            
-                            # Save the insights to the lead's enriched_data if we generated new ones
-                            if insights:
-                                try:
-                                    # Parse the insights JSON if it's a string
-                                    enriched_data = {}
-                                    if isinstance(insights, str):
-                                        # Try to extract JSON from the string response
-                                        insights_str = insights.strip()
-                                        # Check if the response is already in JSON format
-                                        try:
-                                            enriched_data = json.loads(insights_str)
-                                        except json.JSONDecodeError:
-                                            # If not, look for JSON within the string (common with LLM responses)
-                                            import re
-                                            json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                            if json_match:
-                                                potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                                enriched_data = json.loads(potential_json)
-                                            else:
-                                                # If we can't extract structured JSON, store as raw text
-                                                enriched_data = {"raw_insights": insights_str}
-                                    else:
-                                        enriched_data = insights
-                                    
-                                    # Update the lead with enriched data
-                                    from src.database import update_lead_enrichment
-                                    await update_lead_enrichment(lead['id'], enriched_data)
-                                    logger.info(f"Updated lead {lead['email']} with new enriched data")
-                                except Exception as e:
-                                    logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
-                        
-                        if not insights:
-                            logger.error(f"Failed to generate insights for lead {lead['email']}")
-                            continue
+                        subject = ""
+                        body = ""
+
+                        insights = await get_or_generate_insights_for_lead(lead)
                             
                         # Generate personalized email content
-                        subject, body = await generate_email_content(lead, campaign, company, insights)
+                        if insights:
+                            subject, body = await generate_email_content(lead, campaign, company, insights)
+                        else:
+                            #logger.error(f"Failed to generate insights for lead {lead['email']}")
+                            response = await add_email_to_queue(
+                                company_id=campaign['company_id'],
+                                campaign_id=campaign['id'],
+                                campaign_run_id=campaign_run_id,
+                                lead_id=lead['id'],
+                                subject=subject,
+                                body=body
+                            )
+
+                            await update_queue_item_status(
+                                queue_id=UUID(response['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate insights for lead"
+                            )
+                            leads_queued += 1
+                            continue
+                        
                         if not subject or not body:
                             logger.error(f"Failed to generate email content for lead {lead['email']}")
+
+                            response = await add_email_to_queue(
+                                company_id=campaign['company_id'],
+                                campaign_id=campaign['id'],
+                                campaign_run_id=campaign_run_id,
+                                lead_id=lead['id'],
+                                subject=subject,
+                                body=body
+                            )
+
+                            await update_queue_item_status(
+                                queue_id=UUID(response['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate email content for lead"
+                            )
+                            leads_queued += 1
                             continue
                             
                         logger.info(f"Generated email content for lead: {lead['email']}")
@@ -2404,7 +2392,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                     except Exception as e:
                         logger.error(f"Error processing email for {lead['email']}: {str(e)}")
                         continue
-                    # =============== Generate HTML subject and email - END ====================================
 
                     # Add to queue
                     await add_email_to_queue(
