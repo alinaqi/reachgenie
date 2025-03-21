@@ -171,6 +171,7 @@ async def process_queued_email(queue_item: dict, company: dict):
         campaign_id = UUID(queue_item['campaign_id'])
         lead_id = UUID(queue_item['lead_id'])
         campaign_run_id = UUID(queue_item['campaign_run_id'])
+        processed_at = queue_item['processed_at']
         
         campaign = await get_campaign_by_id(campaign_id)
         lead = await get_lead_by_id(lead_id)
@@ -183,13 +184,14 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign or lead not found"
             )
-
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
         
         # Check for email addresses
@@ -202,12 +204,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message="Lead has no email address"
             )
 
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
             
         # Verify campaign template
@@ -221,12 +224,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message="Campaign missing email template"
             )
 
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
         
         # Check if email is in do_not_email list before proceeding
@@ -239,12 +243,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message=f"Email {lead['email']} is in do_not_email list"
             )
 
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             return
 
         try:
@@ -308,12 +313,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                     error_message=f"Failed to decrypt password: {str(e)}"
                 )
 
-                # Update campaign run progress
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
+                if processed_at is None:
+                    # Update campaign run progress only if the queue item was not processed before
+                    await update_campaign_run_progress(
+                        campaign_run_id=campaign_run_id,
+                        leads_processed=1,
+                        increment=True
+                    )
                 return
                 
             # Initialize SMTP client and send email
@@ -363,12 +369,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc)
             )
             
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
             
         except Exception as e:
             logger.error(f"Error processing email for {lead.get('email')}: {str(e)}")
@@ -413,12 +420,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message=f"Unexpected error: {str(e)}"
             )
             
-            # Update campaign run progress
-            await update_campaign_run_progress(
-                campaign_run_id=campaign_run_id,
-                leads_processed=1,
-                increment=True
-            )
+            if processed_at is None:
+                # Update campaign run progress only if the queue item was not processed before
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
+                )
         except:
             pass
 
