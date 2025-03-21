@@ -2359,6 +2359,14 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                 processed_at=datetime.now(timezone.utc),
                                 error_message="Failed to generate insights for lead"
                             )
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=1,
+                                increment=True
+                            )
+
                             leads_queued += 1
                             continue
                         
@@ -2380,6 +2388,14 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                 processed_at=datetime.now(timezone.utc),
                                 error_message="Failed to generate email content for lead"
                             )
+
+                            # Update campaign run progress
+                            await update_campaign_run_progress(
+                                campaign_run_id=campaign_run_id,
+                                leads_processed=1,
+                                increment=True
+                            )
+                            
                             leads_queued += 1
                             continue
                             
