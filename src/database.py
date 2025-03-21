@@ -1867,7 +1867,9 @@ async def update_queue_item_status(
     queue_id: UUID, 
     status: str, 
     processed_at: Optional[datetime] = None, 
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    subject: Optional[str] = None,
+    body: Optional[str] = None
 ) -> dict:
     """
     Update the status of a queue item
@@ -1888,6 +1890,12 @@ async def update_queue_item_status(
         
     if error_message:
         update_data['error_message'] = error_message
+    
+    if subject:
+        update_data['subject'] = subject
+    
+    if body:
+        update_data['email_body'] = body
     
     try:    
         response = supabase.table('email_queue')\

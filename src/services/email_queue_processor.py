@@ -25,7 +25,7 @@ from src.database import (
     is_email_in_do_not_email_list,
     add_to_do_not_email_list
 )
-from src.services.email_generation import generate_company_insights, generate_email_content
+from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from src.utils.email_utils import add_tracking_pixel
@@ -173,6 +173,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign or lead not found"
             )
+
+            # Update campaign run progress
+            await update_campaign_run_progress(
+                campaign_run_id=campaign_run_id,
+                leads_processed=1,
+                increment=True
+            )
             return
         
         # Check for email addresses
@@ -183,6 +190,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 status='failed',
                 processed_at=datetime.now(timezone.utc),
                 error_message="Lead has no email address"
+            )
+
+            # Update campaign run progress
+            await update_campaign_run_progress(
+                campaign_run_id=campaign_run_id,
+                leads_processed=1,
+                increment=True
             )
             return
             
@@ -196,6 +210,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign missing email template"
             )
+
+            # Update campaign run progress
+            await update_campaign_run_progress(
+                campaign_run_id=campaign_run_id,
+                leads_processed=1,
+                increment=True
+            )
             return
         
         # Check if email is in do_not_email list before proceeding
@@ -207,12 +228,49 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Email {lead['email']} is in do_not_email list"
             )
+
+            # Update campaign run progress
+            await update_campaign_run_progress(
+                campaign_run_id=campaign_run_id,
+                leads_processed=1,
+                increment=True
+            )
             return
 
         try:
             subject = queue_item['subject']
             body = queue_item['email_body']
 
+            # If the email body or subject is not set, generate insights
+            if not body or not subject:
+                insights = await get_or_generate_insights_for_lead(lead)
+
+                if insights:
+                    subject, body = await generate_email_content(lead, campaign, company, insights)
+
+                    if not body or not subject:
+                        await update_queue_item_status(
+                                queue_id=UUID(queue_item['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate email content for lead"
+                            )
+                        return
+                    else:
+                        await update_queue_item_status(
+                                queue_id=UUID(queue_item['id']),
+                                status='processing',
+                                subject=subject,
+                                body=body
+                            )
+                else:
+                    await update_queue_item_status(
+                            queue_id=UUID(queue_item['id']),
+                            status='failed',
+                            processed_at=datetime.now(timezone.utc),
+                            error_message="Failed to generate insights for lead"
+                        )
+                    return
             body_without_tracking_pixel = body
         
             # Create email log
@@ -238,6 +296,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                     status='failed',
                     processed_at=datetime.now(timezone.utc),
                     error_message=f"Failed to decrypt password: {str(e)}"
+                )
+
+                # Update campaign run progress
+                await update_campaign_run_progress(
+                    campaign_run_id=campaign_run_id,
+                    leads_processed=1,
+                    increment=True
                 )
                 return
                 
@@ -337,6 +402,13 @@ async def process_queued_email(queue_item: dict, company: dict):
                 status='failed',
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Unexpected error: {str(e)}"
+            )
+            
+            # Update campaign run progress
+            await update_campaign_run_progress(
+                campaign_run_id=campaign_run_id,
+                leads_processed=1,
+                increment=True
             )
         except:
             pass
