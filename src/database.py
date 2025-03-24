@@ -3048,3 +3048,97 @@ async def update_call_reminder_sent_status(call_log_id: UUID, reminder_type: str
     except Exception as e:
         logger.error(f"Error updating reminder status for log {call_log_id}: {str(e)}")
         return False
+    
+async def add_call_to_queue(
+    company_id: UUID, 
+    campaign_id: UUID, 
+    campaign_run_id: UUID, 
+    lead_id: UUID,
+    call_script: str,
+    priority: int = 1, 
+    scheduled_for: Optional[datetime] = None
+) -> dict:
+    """
+    Add a call to the processing queue
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        call_script: Script of the call
+        priority: Priority of the call (higher number = higher priority)
+        scheduled_for: When to process this call (defaults to now)
+        
+    Returns:
+        The created queue item
+    """
+    if scheduled_for is None:
+        scheduled_for = datetime.now(timezone.utc)
+        
+    queue_data = {
+        'company_id': str(company_id),
+        'campaign_id': str(campaign_id),
+        'campaign_run_id': str(campaign_run_id),
+        'lead_id': str(lead_id),
+        'status': 'pending',
+        'priority': priority,
+        'scheduled_for': scheduled_for.isoformat(),
+        'retry_count': 0,
+        'max_retries': 3,
+        'call_script': call_script
+    }
+    
+    try:
+        response = supabase.table('call_queue').insert(queue_data).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error adding call to queue: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add call to queue: {str(e)}")
+
+async def update_call_queue_item_status(
+    queue_id: UUID, 
+    status: str, 
+    processed_at: Optional[datetime] = None, 
+    error_message: Optional[str] = None,
+    call_script: Optional[str] = None
+) -> dict:
+    """
+    Update the status of a call queue item
+    
+    Args:
+        queue_id: UUID of the call queue item
+        status: New status (pending, processing, sent, failed)
+        processed_at: When the item was processed
+        error_message: Error message if any
+        call_script: Script of the call
+    Returns:
+        Updated call queue item
+    """
+    update_data = {'status': status}
+    
+    if processed_at:
+        update_data['processed_at'] = processed_at.isoformat()
+        
+    if error_message:
+        update_data['error_message'] = error_message
+    
+    if call_script:
+        update_data['call_script'] = call_script
+
+    try:    
+        response = supabase.table('call_queue')\
+            .update(update_data)\
+            .eq('id', str(queue_id))\
+            .execute()
+            
+        if not response.data:
+            logger.error(f"Failed to update queue item {queue_id}")
+            raise HTTPException(status_code=404, detail="Queue item not found")
+            
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating call queue item status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update call queue item: {str(e)}")

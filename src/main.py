@@ -103,7 +103,9 @@ from src.database import (
     clear_company_cronofy_data,
     update_company_cronofy_profile,
     get_email_queues_by_campaign_run,
-    get_campaign_run
+    get_campaign_run,
+    add_call_to_queue,
+    update_call_queue_item_status
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -2474,10 +2476,17 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         campaign_run_id=campaign_run_id,
         status="running"
     )
+
+    await update_campaign_run_progress(
+        campaign_run_id=campaign_run_id,
+        leads_processed=0,
+        leads_total=total_leads
+    )
+
     # Process leads in pages
     page = 1
     page_size = 50
-    leads_processed = 0
+    leads_queued = 0
     
     while True:
         # Get leads for current page
@@ -2487,83 +2496,96 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         if not leads:
             break  # No more leads to process
             
-        # Process each lead in this page
+        # Queue records for each lead in this page
         for lead in leads:
+            call_script = ""
+            
             try:
                 if not lead.get('phone_number'):
                     continue  # Skip if no phone number
-                    
-                logger.info(f"Processing call for lead: {lead['phone_number']}")
                 
-                # Check if lead already has enriched data
-                insights = None
-                if lead.get('enriched_data'):
-                    logger.info(f"Lead {lead['phone_number']} already has enriched data, using existing insights")
-                    # We have enriched data, use it directly
-                    if isinstance(lead['enriched_data'], str):
-                        try:
-                            enriched_data = json.loads(lead['enriched_data'])
-                            insights = json.dumps(enriched_data)
-                        except json.JSONDecodeError:
-                            insights = lead['enriched_data']
-                    else:
-                        insights = json.dumps(lead['enriched_data'])
+                logger.info(f"Queueing call for lead: {lead['phone_number']}")
                 
-                # Generate company insights if we don't have any
-                if not insights:
-                    logger.info(f"Generating new insights for lead: {lead['phone_number']}")
-                    insights = await generate_company_insights(lead, perplexity_service)
-                    
-                    # Save the insights to the lead's enriched_data if we generated new ones
-                    if insights:
-                        try:
-                            # Parse the insights JSON if it's a string
-                            enriched_data = {}
-                            if isinstance(insights, str):
-                                # Try to extract JSON from the string response
-                                insights_str = insights.strip()
-                                # Check if the response is already in JSON format
-                                try:
-                                    enriched_data = json.loads(insights_str)
-                                except json.JSONDecodeError:
-                                    # If not, look for JSON within the string (common with LLM responses)
-                                    import re
-                                    json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                    if json_match:
-                                        potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                        enriched_data = json.loads(potential_json)
-                                    else:
-                                        # If we can't extract structured JSON, store as raw text
-                                        enriched_data = {"raw_insights": insights_str}
-                            else:
-                                enriched_data = insights
-                            
-                            # Update the lead with enriched data
-                            await update_lead_enrichment(lead['id'], enriched_data)
-                            logger.info(f"Updated lead {lead['phone_number']} with new enriched data")
-                        except Exception as e:
-                            logger.error(f"Error storing insights for lead {lead['phone_number']}: {str(e)}")
-                
+                insights = await get_or_generate_insights_for_lead(lead)
+
                 if insights:
                     logger.info(f"Using insights for lead: {lead['phone_number']}")
 
                     # Generate personalized call script
                     call_script = await generate_call_script(lead, campaign, company, insights)
+                    
                     logger.info(f"Generated call script for lead: {lead['phone_number']}")
                     logger.info(f"Call Script: {call_script}")
 
                     if call_script:
+
+                        # Add to queue
+                        await add_call_to_queue(
+                            company_id=campaign['company_id'],
+                            campaign_id=campaign['id'],
+                            campaign_run_id=campaign_run_id,
+                            lead_id=lead['id'],
+                            call_script=call_script
+                        )
+                        leads_queued += 1
+                        logger.info(f"Call for lead {lead['phone_number']} added to queue")
+
                         # Initiate call with Bland AI
-                        await initiate_call(campaign, lead, call_script, campaign_run_id)
+                        #await initiate_call(campaign, lead, call_script, campaign_run_id)
+                    else:
+                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
+
+                        response = await add_call_to_queue(
+                                company_id=campaign['company_id'],
+                                campaign_id=campaign['id'],
+                                campaign_run_id=campaign_run_id,
+                                lead_id=lead['id'],
+                                call_script=call_script
+                            )
+
+                        await update_call_queue_item_status(
+                            queue_id=UUID(response['id']),
+                            status='failed',
+                            processed_at=datetime.now(timezone.utc),
+                            error_message="Failed to generate call script for lead"
+                        )
 
                         # Update campaign run progress
                         await update_campaign_run_progress(
                             campaign_run_id=campaign_run_id,
-                            leads_processed=leads_processed + 1
+                            leads_processed=1,
+                            increment=True
                         )
-                        leads_processed += 1
-                    else:
-                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
+                        
+                        leads_queued += 1
+                        continue
+
+                else:
+                    #logger.error(f"Failed to generate insights for lead {lead['phone_number']}")
+                    response = await add_call_to_queue(
+                        company_id=campaign['company_id'],
+                        campaign_id=campaign['id'],
+                        campaign_run_id=campaign_run_id,
+                        lead_id=lead['id'],
+                        call_script=call_script
+                    )
+
+                    await update_call_queue_item_status(
+                        queue_id=UUID(response['id']),
+                        status='failed',
+                        processed_at=datetime.now(timezone.utc),
+                        error_message="Failed to generate insights for lead"
+                    )
+
+                    # Update campaign run progress
+                    await update_campaign_run_progress(
+                        campaign_run_id=campaign_run_id,
+                        leads_processed=1,
+                        increment=True
+                    )
+
+                    leads_queued += 1
+                    continue
 
             except Exception as e:
                 logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
@@ -2571,14 +2593,11 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         
         # Move to next page
         page += 1
-    
-    # Update campaign run with status completed
-    await update_campaign_run_status(
-        campaign_run_id=campaign_run_id,
-        status="completed"
-    )
 
-    logger.info(f"Processed {leads_processed} leads for campaign {campaign['id']}")
+    logger.info(f"Queued {leads_queued} calls for campaign {campaign['id']}")
+
+    # Note: We don't mark the campaign as completed here
+    # It will be done by the queue processor when all calls have been processed
 
 async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Verify the Bland tool secret token"""
