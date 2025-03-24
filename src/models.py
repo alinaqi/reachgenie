@@ -1062,4 +1062,19 @@ class PaginatedEmailQueueResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+class CampaignRetryResponse(BaseModel):
+    """Response model for campaign retry endpoint"""
+    message: str
+    campaign_run_id: UUID
+    status: str = "initiated"
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Campaign retry initiated successfully",
+                "campaign_run_id": "123e4567-e89b-12d3-a456-426614174000",
+                "status": "initiated"
+            }
+        }
  
