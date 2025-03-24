@@ -11,6 +11,7 @@ from src.database import (
     get_companies_by_user_id,
     update_queue_item_status
 )
+from src.models import CampaignRetryResponse
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ router = APIRouter(
     tags=["Campaigns & Emails"]
 )
 
-@router.post("/{campaign_run_id}/retry", response_model=Dict[str, str])
+@router.post("/{campaign_run_id}/retry", response_model=CampaignRetryResponse)
 async def retry_failed_campaign_emails(
     campaign_run_id: UUID,
     background_tasks: BackgroundTasks,
@@ -36,7 +37,7 @@ async def retry_failed_campaign_emails(
         current_user: Current authenticated user
         
     Returns:
-        Dict with success message
+        CampaignRetryResponse with status and details
     """
     # Get the campaign run to verify it exists
     campaign_run = await get_campaign_run(campaign_run_id)
@@ -56,7 +57,11 @@ async def retry_failed_campaign_emails(
     # Add the retry task to background tasks
     background_tasks.add_task(retry_failed_emails, campaign_run_id)
     
-    return {"message": "Campaign retry initiated successfully"}
+    return CampaignRetryResponse(
+        message="Campaign retry initiated successfully",
+        campaign_run_id=campaign_run_id,
+        status="initiated"
+    )
 
 async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 50):
     """
