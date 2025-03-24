@@ -135,13 +135,7 @@ class BlandClient:
             if not payload["request_data"].get("bland_secret_key"):
                 logger.warning("bland_secret_key still missing in request_data, adding it directly")
                 payload["request_data"]["bland_secret_key"] = self.bland_secret_key
-            
-            # Log the final payload structure (without sensitive values)
-            payload_log = payload.copy()
-            if "request_data" in payload_log and "bland_secret_key" in payload_log["request_data"]:
-                payload_log["request_data"]["bland_secret_key"] = "[REDACTED]"
-            logger.info(f"Final API payload structure: {payload_log}")
-            
+                        
             # Add optional parameters if they exist
             if transfer_phone_number:
                 payload["transfer_phone_number"] = transfer_phone_number
@@ -151,7 +145,13 @@ class BlandClient:
                 payload["noise_cancellations"] = noise_cancellations
             if custom_phone_number:
                 payload["from_number"] = custom_phone_number
-                
+
+            # Log the final payload structure (without sensitive values)
+            payload_log = payload.copy()
+            if "request_data" in payload_log and "bland_secret_key" in payload_log["request_data"]:
+                payload_log["request_data"]["bland_secret_key"] = "[REDACTED]"
+            logger.info(f"Final API payload structure: {payload_log}")
+
             try:
                 response = await client.post(
                     f"{self.base_url}/v1/calls",
