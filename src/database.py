@@ -2057,21 +2057,22 @@ async def get_pending_emails_count(campaign_run_id: UUID) -> int:
         return 0
 
 
-async def get_running_campaign_runs(company_id: UUID) -> List[dict]:
+async def get_running_campaign_runs(company_id: UUID, campaign_type: str) -> List[dict]:
     """
     Get all campaign runs with status 'running' for a company
     
     Args:
         company_id: UUID of the company
-        
+        campaign_type: Type of campaign (email, call, email_and_call)
     Returns:
         List of running campaign runs
     """
     try:
-        # Join campaign_runs with campaigns to filter by company_id
+        # Join campaign_runs with campaigns to filter by company_id and campaign_type
         response = supabase.table('campaign_runs')\
-            .select('*, campaigns!inner(company_id)')\
+            .select('*, campaigns!inner(company_id, type)')\
             .eq('campaigns.company_id', str(company_id))\
+            .eq('campaigns.type', campaign_type)\
             .eq('status', 'running')\
             .execute()
             
@@ -3142,3 +3143,78 @@ async def update_call_queue_item_status(
     except Exception as e:
         logger.error(f"Error updating call queue item status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update call queue item: {str(e)}")
+    
+async def get_calls_initiated_count(start_time: datetime) -> int:
+    """
+    Get the count of calls initiated since the start time
+    
+    Args:
+        start_time: Datetime to count from
+        
+    Returns:
+        Number of calls initiated
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('id', count='exact')\
+            .eq('status', 'sent')\
+            .gte('processed_at', start_time.isoformat())\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting calls initiated count: {str(e)}")
+        return 0
+
+async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
+    """
+    Get the next batch of calls to process for a company
+    
+    Args:
+        company_id: UUID of the company
+        limit: Maximum number of calls to retrieve
+        
+    Returns:
+        List of call queue items to process
+    """
+    # Get the current time
+    now = datetime.now(timezone.utc)
+    
+    try:
+        # Get pending calls that are scheduled for now or earlier, ordered by priority and creation time
+        response = supabase.table('call_queue')\
+            .select('*')\
+            .eq('company_id', str(company_id))\
+            .eq('status', 'pending')\
+            .lte('scheduled_for', now.isoformat())\
+            .order('priority', desc=True)\
+            .order('created_at')\
+            .limit(limit)\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        logger.error(f"Error getting next calls to process: {str(e)}")
+        return []
+
+async def get_pending_calls_count(campaign_run_id: UUID) -> int:
+    """
+    Get the count of pending calls for a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        Number of pending calls
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .in_('status', ['pending', 'processing'])\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting pending calls count: {str(e)}")
+        return 0
