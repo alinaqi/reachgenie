@@ -23,6 +23,8 @@ from src.services.campaigns import run_test_email_campaign, run_test_call_campai
 from src.routes.web_agent import router as web_agent_router
 from src.routes.partner_applications import router as partner_applications_router
 from src.routes.do_not_email import router as do_not_email_router, check_router as do_not_email_check_router
+from src.routes.email_queues import router as email_queues_router
+from src.routes.campaign_retry import router as campaign_retry_router
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password,
@@ -131,7 +133,6 @@ from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.services.call_generation import generate_call_script
-from src.routes.email_queues import router as email_queues_router
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -3783,6 +3784,9 @@ app.include_router(partner_applications_router)
 app.include_router(do_not_email_router)
 app.include_router(do_not_email_check_router)
 app.include_router(email_queues_router)
+
+# Include campaign retry router
+app.include_router(campaign_retry_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
