@@ -63,7 +63,7 @@ async def retry_failed_campaign_emails(
         status="initiated"
     )
 
-async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 50):
+async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 500):
     """
     Background task to retry failed emails for a campaign run.
     Processes emails in batches to avoid memory issues with large campaigns.
