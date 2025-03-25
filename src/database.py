@@ -3218,3 +3218,46 @@ async def get_pending_calls_count(campaign_run_id: UUID) -> int:
     except Exception as e:
         logger.error(f"Error getting pending calls count: {str(e)}")
         return 0
+
+async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20):
+    """
+    Get paginated call queues for a specific campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        
+    Returns:
+        Dictionary containing paginated call queues and metadata
+    """
+    # Modify the base query to select fields from call_queue and join with leads
+    base_query = supabase.table('call_queue')\
+        .select('*, leads!inner(name, phone)')\
+        .eq('campaign_run_id', str(campaign_run_id))
+
+    # Get total count
+    total_count_query = supabase.table('call_queue')\
+        .select('id', count='exact')\
+        .eq('campaign_run_id', str(campaign_run_id))
+    count_response = total_count_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data
+    response = base_query.range(offset, offset + limit - 1).order('created_at', desc=True).execute()
+
+    # Map leads fields to lead_name and lead_phone
+    items = [
+        {**item, 'lead_name': item['leads']['name'], 'lead_phone': item['leads']['phone']} for item in response.data
+    ]
+
+    return {
+        'items': items,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }

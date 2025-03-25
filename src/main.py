@@ -109,7 +109,6 @@ from src.database import (
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
-from src.services.bland_calls import initiate_call
 from src.models import (
     UserBase, UserCreate, UserInDB, Token, UserUpdate, 
     CompanyBase, CompanyCreate, CompanyInDB, ProductCreate, ProductInDB,
@@ -135,6 +134,7 @@ from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.services.call_generation import generate_call_script
+from src.routes import email_queues, call_queues
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -3806,6 +3806,10 @@ app.include_router(email_queues_router)
 
 # Include campaign retry router
 app.include_router(campaign_retry_router)
+
+# Include routers
+app.include_router(email_queues.router)
+app.include_router(call_queues.router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
