@@ -3233,7 +3233,7 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
     """
     # Modify the base query to select fields from call_queue and join with leads
     base_query = supabase.table('call_queue')\
-        .select('*, leads!inner(name, phone)')\
+        .select('*, leads!inner(name, phone_number)')\
         .eq('campaign_run_id', str(campaign_run_id))
 
     # Get total count
@@ -3251,7 +3251,7 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
 
     # Map leads fields to lead_name and lead_phone
     items = [
-        {**item, 'lead_name': item['leads']['name'], 'lead_phone': item['leads']['phone']} for item in response.data
+        {**item, 'lead_name': item['leads']['name'], 'lead_phone': item['leads']['phone_number']} for item in response.data
     ]
 
     return {
