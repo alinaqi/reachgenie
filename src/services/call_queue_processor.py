@@ -238,6 +238,13 @@ async def process_queued_call(queue_item: dict, company: dict):
                     processed_at=datetime.now(timezone.utc),
                     error_message=str(e)
                 )
+
+                supabase.table('call_queue')\
+                    .update({
+                        'retry_count': retry_count
+                    })\
+                    .eq('id', str(queue_item['id']))\
+                    .execute()
             else:
                 # Schedule for retry with exponential backoff
                 retry_delay = 2 ** retry_count  # 2, 4, 8, 16... minutes
@@ -249,11 +256,20 @@ async def process_queued_call(queue_item: dict, company: dict):
                         'status': 'pending',
                         'retry_count': retry_count,
                         'scheduled_for': next_attempt.isoformat(),
+                        'processed_at': datetime.now(timezone.utc),
                         'error_message': str(e)
                     })\
                     .eq('id', str(queue_item['id']))\
                     .execute()
-                    
+                
+                if processed_at is None:
+                    # Update campaign run progress only if the queue item was not processed before
+                    await update_campaign_run_progress(
+                        campaign_run_id=campaign_run_id,
+                        leads_processed=1,
+                        increment=True
+                    )
+
     except Exception as e:
         logger.error(f"Error processing queued call {queue_item.get('id')}: {str(e)}")
         
