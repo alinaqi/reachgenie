@@ -61,7 +61,7 @@ async def initiate_call(
                 # Check if a call record already exists for this lead, campaign, and campaign run
                 try:
                     from src.database import supabase
-                    existing_call = await supabase.table('calls')\
+                    existing_call = supabase.table('calls')\
                         .select('*')\
                         .eq('lead_id', str(lead['id']))\
                         .eq('campaign_id', str(campaign['id']))\
