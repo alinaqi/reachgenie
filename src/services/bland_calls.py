@@ -58,14 +58,35 @@ async def initiate_call(
         # Create call record in database with script
         if campaign_run_id is not None:
             try:
-                call = await create_call(
-                    lead_id=lead['id'], 
-                    product_id=campaign['product_id'], 
-                    campaign_id=campaign['id'], 
-                    script=call_script, 
-                    campaign_run_id=campaign_run_id if campaign_run_id is not None else None
-                )
-                logger.info(f"Created call record with ID: {call['id']}")
+                # Check if a call record already exists for this lead, campaign, and campaign run
+                try:
+                    from src.database import supabase
+                    existing_call = await supabase.table('calls')\
+                        .select('*')\
+                        .eq('lead_id', str(lead['id']))\
+                        .eq('campaign_id', str(campaign['id']))\
+                        .eq('campaign_run_id', str(campaign_run_id))\
+                        .execute()
+                    
+                    if existing_call.data and len(existing_call.data) > 0:
+                        logger.info(f"Found existing call record with ID: {existing_call.data[0]['id']}")
+                        call = existing_call.data[0]
+                        # Skip the create_call function below since we already have a record
+                        logger.info("Using existing call record instead of creating a new one")
+                except Exception as lookup_error:
+                    logger.warning(f"Error checking for existing call record: {str(lookup_error)}")
+                    return
+                
+                # Only create a new call record if we didn't find an existing one
+                if not (existing_call and existing_call.data and len(existing_call.data) > 0):
+                    call = await create_call(
+                        lead_id=lead['id'], 
+                        product_id=campaign['product_id'], 
+                        campaign_id=campaign['id'], 
+                        script=call_script, 
+                        campaign_run_id=campaign_run_id if campaign_run_id is not None else None
+                    )
+                    logger.info(f"Created call record with ID: {call['id']}")
             except Exception as db_error:
                 logger.error(f"Error creating call record: {str(db_error)}")
                 logger.exception("Database error traceback:")
