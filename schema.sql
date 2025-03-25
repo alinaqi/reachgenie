@@ -284,3 +284,20 @@ CREATE INDEX IF NOT EXISTS partner_application_notes_application_id_idx ON partn
 
 COMMENT ON TABLE partner_applications IS 'Stores partner program applications from potential partners';
 COMMENT ON TABLE partner_application_notes IS 'Stores internal notes related to partner applications';
+
+CREATE TABLE IF NOT EXISTS call_queue (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    campaign_id UUID REFERENCES campaigns(id) NOT NULL,
+    campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
+    lead_id UUID REFERENCES leads(id) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
+    priority INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    error_message TEXT,
+    call_script TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    scheduled_for TIMESTAMP WITH TIME ZONE,
+    processed_at TIMESTAMP WITH TIME ZONE
+);

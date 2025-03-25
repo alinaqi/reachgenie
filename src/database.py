@@ -2057,21 +2057,22 @@ async def get_pending_emails_count(campaign_run_id: UUID) -> int:
         return 0
 
 
-async def get_running_campaign_runs(company_id: UUID) -> List[dict]:
+async def get_running_campaign_runs(company_id: UUID, campaign_type: str) -> List[dict]:
     """
     Get all campaign runs with status 'running' for a company
     
     Args:
         company_id: UUID of the company
-        
+        campaign_type: Type of campaign (email, call, email_and_call)
     Returns:
         List of running campaign runs
     """
     try:
-        # Join campaign_runs with campaigns to filter by company_id
+        # Join campaign_runs with campaigns to filter by company_id and campaign_type
         response = supabase.table('campaign_runs')\
-            .select('*, campaigns!inner(company_id)')\
+            .select('*, campaigns!inner(company_id, type)')\
             .eq('campaigns.company_id', str(company_id))\
+            .eq('campaigns.type', campaign_type)\
             .eq('status', 'running')\
             .execute()
             
@@ -3048,3 +3049,215 @@ async def update_call_reminder_sent_status(call_log_id: UUID, reminder_type: str
     except Exception as e:
         logger.error(f"Error updating reminder status for log {call_log_id}: {str(e)}")
         return False
+    
+async def add_call_to_queue(
+    company_id: UUID, 
+    campaign_id: UUID, 
+    campaign_run_id: UUID, 
+    lead_id: UUID,
+    call_script: str,
+    priority: int = 1, 
+    scheduled_for: Optional[datetime] = None
+) -> dict:
+    """
+    Add a call to the processing queue
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        call_script: Script of the call
+        priority: Priority of the call (higher number = higher priority)
+        scheduled_for: When to process this call (defaults to now)
+        
+    Returns:
+        The created queue item
+    """
+    if scheduled_for is None:
+        scheduled_for = datetime.now(timezone.utc)
+        
+    queue_data = {
+        'company_id': str(company_id),
+        'campaign_id': str(campaign_id),
+        'campaign_run_id': str(campaign_run_id),
+        'lead_id': str(lead_id),
+        'status': 'pending',
+        'priority': priority,
+        'scheduled_for': scheduled_for.isoformat(),
+        'retry_count': 0,
+        'max_retries': 3,
+        'call_script': call_script
+    }
+    
+    try:
+        response = supabase.table('call_queue').insert(queue_data).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error adding call to queue: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add call to queue: {str(e)}")
+
+async def update_call_queue_item_status(
+    queue_id: UUID, 
+    status: str, 
+    processed_at: Optional[datetime] = None, 
+    error_message: Optional[str] = None,
+    call_script: Optional[str] = None
+) -> dict:
+    """
+    Update the status of a call queue item
+    
+    Args:
+        queue_id: UUID of the call queue item
+        status: New status (pending, processing, sent, failed)
+        processed_at: When the item was processed
+        error_message: Error message if any
+        call_script: Script of the call
+    Returns:
+        Updated call queue item
+    """
+    update_data = {'status': status}
+    
+    if processed_at:
+        update_data['processed_at'] = processed_at.isoformat()
+        
+    if error_message:
+        update_data['error_message'] = error_message
+    
+    if call_script:
+        update_data['call_script'] = call_script
+
+    try:    
+        response = supabase.table('call_queue')\
+            .update(update_data)\
+            .eq('id', str(queue_id))\
+            .execute()
+            
+        if not response.data:
+            logger.error(f"Failed to update queue item {queue_id}")
+            raise HTTPException(status_code=404, detail="Queue item not found")
+            
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating call queue item status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update call queue item: {str(e)}")
+    
+async def get_calls_initiated_count(start_time: datetime) -> int:
+    """
+    Get the count of calls initiated since the start time
+    
+    Args:
+        start_time: Datetime to count from
+        
+    Returns:
+        Number of calls initiated
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('id', count='exact')\
+            .eq('status', 'sent')\
+            .gte('processed_at', start_time.isoformat())\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting calls initiated count: {str(e)}")
+        return 0
+
+async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
+    """
+    Get the next batch of calls to process for a company
+    
+    Args:
+        company_id: UUID of the company
+        limit: Maximum number of calls to retrieve
+        
+    Returns:
+        List of call queue items to process
+    """
+    # Get the current time
+    now = datetime.now(timezone.utc)
+    
+    try:
+        # Get pending calls that are scheduled for now or earlier, ordered by priority and creation time
+        response = supabase.table('call_queue')\
+            .select('*')\
+            .eq('company_id', str(company_id))\
+            .eq('status', 'pending')\
+            .lte('scheduled_for', now.isoformat())\
+            .order('priority', desc=True)\
+            .order('created_at')\
+            .limit(limit)\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        logger.error(f"Error getting next calls to process: {str(e)}")
+        return []
+
+async def get_pending_calls_count(campaign_run_id: UUID) -> int:
+    """
+    Get the count of pending calls for a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        Number of pending calls
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .in_('status', ['pending', 'processing'])\
+            .execute()
+            
+        return response.count
+    except Exception as e:
+        logger.error(f"Error getting pending calls count: {str(e)}")
+        return 0
+
+async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20):
+    """
+    Get paginated call queues for a specific campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        
+    Returns:
+        Dictionary containing paginated call queues and metadata
+    """
+    # Modify the base query to select fields from call_queue and join with leads
+    base_query = supabase.table('call_queue')\
+        .select('*, leads!inner(name, phone_number)')\
+        .eq('campaign_run_id', str(campaign_run_id))
+
+    # Get total count
+    total_count_query = supabase.table('call_queue')\
+        .select('id', count='exact')\
+        .eq('campaign_run_id', str(campaign_run_id))
+    count_response = total_count_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data
+    response = base_query.range(offset, offset + limit - 1).order('created_at', desc=True).execute()
+
+    # Map leads fields to lead_name and lead_phone
+    items = [
+        {**item, 'lead_name': item['leads']['name'], 'lead_phone': item['leads']['phone_number']} for item in response.data
+    ]
+
+    return {
+        'items': items,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }

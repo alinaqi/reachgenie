@@ -205,3 +205,48 @@ The function will schedule a 30-minute meeting at the specified time.""",
     formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
     
     return formatted_reply
+
+async def fetch_timezone(phone_number: str) -> str:
+    """
+    Fetches the timezone for a given phone number in E.164 format using OpenAI.
+    
+    Args:
+        phone_number (str): Phone number in E.164 format (e.g., +14155552671)
+        
+    Returns:
+        str: Timezone in IANA format (e.g., America/Los_Angeles, Europe/Berlin)
+    """
+    settings = get_settings()
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    
+    messages = [
+        {
+            "role": "system",
+            "content": """You are a timezone expert. Your task is to identify the most likely timezone for a given phone number in E.164 format.
+            Return ONLY the IANA timezone identifier (e.g., America/Los_Angeles, Europe/Berlin, Asia/Singapore).
+            Do not include any additional text or explanation."""
+        },
+        {
+            "role": "user",
+            "content": f"What is the most likely timezone for the phone number {phone_number}?"
+        }
+    ]
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=50
+        )
+        
+        timezone = response.choices[0].message.content.strip()
+        logger.info(f"Identified timezone {timezone} for phone number {phone_number}")
+        return timezone
+        
+    except Exception as e:
+        logger.error(f"Error fetching timezone for {phone_number}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to identify timezone for phone number: {str(e)}"
+        )
