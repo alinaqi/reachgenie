@@ -244,7 +244,7 @@ async def process_queued_call(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 
                 # Update retry count and reschedule
-                await supabase.table('call_queue')\
+                supabase.table('call_queue')\
                     .update({
                         'status': 'pending',
                         'retry_count': retry_count,
