@@ -1886,7 +1886,7 @@ async def update_queue_item_status(
     """
     update_data = {'status': status}
     
-    if retry_count:
+    if retry_count is not None:
         update_data['retry_count'] = retry_count
     
     if processed_at:
@@ -3123,7 +3123,7 @@ async def update_call_queue_item_status(
     """
     update_data = {'status': status}
     
-    if retry_count:
+    if retry_count is not None:
         update_data['retry_count'] = retry_count
     
     if processed_at:
