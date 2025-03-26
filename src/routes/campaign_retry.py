@@ -135,7 +135,8 @@ async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 500):
                 try:
                     await update_queue_item_status(
                         queue_id=UUID(email['id']),
-                        status='pending'
+                        status='pending',
+                        retry_count=0
                     )
                     logger.info(f"Reset status to pending for email queue item {email['id']}")
                 except Exception as e:
@@ -178,7 +179,8 @@ async def retry_failed_calls(campaign_run_id: UUID, batch_size: int = 500):
                 try:
                     await update_call_queue_item_status(
                         queue_id=UUID(call['id']),
-                        status='pending'
+                        status='pending',
+                        retry_count=0
                     )
                     logger.info(f"Reset status to pending for call queue item {call['id']}")
                 except Exception as e:

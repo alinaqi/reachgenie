@@ -1869,7 +1869,8 @@ async def update_queue_item_status(
     processed_at: Optional[datetime] = None, 
     error_message: Optional[str] = None,
     subject: Optional[str] = None,
-    body: Optional[str] = None
+    body: Optional[str] = None,
+    retry_count: Optional[int] = None
 ) -> dict:
     """
     Update the status of a queue item
@@ -1884,6 +1885,9 @@ async def update_queue_item_status(
         Updated queue item
     """
     update_data = {'status': status}
+    
+    if retry_count:
+        update_data['retry_count'] = retry_count
     
     if processed_at:
         update_data['processed_at'] = processed_at.isoformat()
@@ -3102,7 +3106,8 @@ async def update_call_queue_item_status(
     status: str, 
     processed_at: Optional[datetime] = None, 
     error_message: Optional[str] = None,
-    call_script: Optional[str] = None
+    call_script: Optional[str] = None,
+    retry_count: Optional[int] = None
 ) -> dict:
     """
     Update the status of a call queue item
@@ -3117,6 +3122,9 @@ async def update_call_queue_item_status(
         Updated call queue item
     """
     update_data = {'status': status}
+    
+    if retry_count:
+        update_data['retry_count'] = retry_count
     
     if processed_at:
         update_data['processed_at'] = processed_at.isoformat()
