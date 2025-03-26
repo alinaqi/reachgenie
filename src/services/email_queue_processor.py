@@ -365,7 +365,9 @@ async def process_queued_email(queue_item: dict, company: dict):
 
                 if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_sent' and lead.get('phone_number'):
                     
-                    logger.info(f"Adding call to queue for lead {lead['name']} ({lead['phone_number']})")
+                    logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
+
+                    insights = await get_or_generate_insights_for_lead(lead)
 
                     # Add to call queue
                     call_script = await generate_call_script(lead, campaign, company, insights)
@@ -414,7 +416,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 
                 # Update retry count and reschedule
-                await supabase.table('email_queue')\
+                supabase.table('email_queue')\
                     .update({
                         'status': 'pending',
                         'retry_count': retry_count,
