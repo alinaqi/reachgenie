@@ -3261,3 +3261,7 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
         'page_size': limit,
         'total_pages': (total + limit - 1) // limit if total > 0 else 1
     }
+
+async def get_email_log_by_id(email_log_id: UUID):
+    response = supabase.table('email_logs').select('*').eq('id', str(email_log_id)).execute()
+    return response.data[0] if response.data else None
