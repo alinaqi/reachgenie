@@ -452,8 +452,8 @@ async def process_queued_email(queue_item: dict, company: dict):
 async def check_campaign_runs_completion(company_id: UUID):
     """Check if any campaign runs for this company are complete"""
     try:
-        # Get all running 'email' campaign runs for the company
-        running_runs = await get_running_campaign_runs(company_id, 'email')
+        # Get all running 'email' or 'email_and_call' campaign runs for the company
+        running_runs = await get_running_campaign_runs(company_id, ['email', 'email_and_call'])
         
         for run in running_runs:
             # Check if any pending emails remain for this run

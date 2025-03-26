@@ -297,7 +297,7 @@ async def check_calls_campaign_runs_completion(company_id: UUID):
     """Check if any campaign runs for this company are complete"""
     try:
         # Get all running 'call' campaign runs for the company
-        running_runs = await get_running_campaign_runs(company_id, 'call')
+        running_runs = await get_running_campaign_runs(company_id, ['call'])
         
         for run in running_runs:
             # Check if any pending calls remain for this run

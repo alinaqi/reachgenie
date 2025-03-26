@@ -2057,13 +2057,13 @@ async def get_pending_emails_count(campaign_run_id: UUID) -> int:
         return 0
 
 
-async def get_running_campaign_runs(company_id: UUID, campaign_type: str) -> List[dict]:
+async def get_running_campaign_runs(company_id: UUID, campaign_type: List[str]) -> List[dict]:
     """
     Get all campaign runs with status 'running' for a company
     
     Args:
         company_id: UUID of the company
-        campaign_type: Type of campaign (email, call, email_and_call)
+        campaign_type: List of campaign types (email, call, email_and_call)
     Returns:
         List of running campaign runs
     """
@@ -2072,7 +2072,7 @@ async def get_running_campaign_runs(company_id: UUID, campaign_type: str) -> Lis
         response = supabase.table('campaign_runs')\
             .select('*, campaigns!inner(company_id, type)')\
             .eq('campaigns.company_id', str(company_id))\
-            .eq('campaigns.type', campaign_type)\
+            .in_('campaigns.type', campaign_type)\
             .eq('status', 'running')\
             .execute()
             
