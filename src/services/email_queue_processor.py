@@ -23,13 +23,14 @@ from src.database import (
     get_product_by_id,
     is_email_in_do_not_email_list,
     add_to_do_not_email_list,
+    add_call_to_queue,
     supabase
 )
-from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
+from src.services.call_generation import generate_call_script
+from src.services.email_generation import generate_email_content, get_or_generate_insights_for_lead
 from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from src.utils.email_utils import add_tracking_pixel
-from src.services.perplexity_service import perplexity_service
 from src.config import get_settings
 
 settings = get_settings()
@@ -361,6 +362,23 @@ async def process_queued_email(queue_item: dict, company: dict):
                     to_email=lead['email']
                 )
                 logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+
+                if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_sent' and lead.get('phone_number'):
+                    
+                    logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
+
+                    insights = await get_or_generate_insights_for_lead(lead)
+
+                    # Add to call queue
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+
+                    await add_call_to_queue(
+                        company_id=campaign['company_id'],
+                        campaign_id=campaign['id'],
+                        campaign_run_id=campaign_run_id,
+                        lead_id=lead['id'],
+                        call_script=call_script
+                    )
             
             # Mark as sent
             await update_queue_item_status(
@@ -398,7 +416,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 
                 # Update retry count and reschedule
-                await supabase.table('email_queue')\
+                supabase.table('email_queue')\
                     .update({
                         'status': 'pending',
                         'retry_count': retry_count,
@@ -434,8 +452,8 @@ async def process_queued_email(queue_item: dict, company: dict):
 async def check_campaign_runs_completion(company_id: UUID):
     """Check if any campaign runs for this company are complete"""
     try:
-        # Get all running 'email' campaign runs for the company
-        running_runs = await get_running_campaign_runs(company_id, 'email')
+        # Get all running 'email' or 'email_and_call' campaign runs for the company
+        running_runs = await get_running_campaign_runs(company_id, ['email', 'email_and_call'])
         
         for run in running_runs:
             # Check if any pending emails remain for this run
