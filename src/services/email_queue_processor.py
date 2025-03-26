@@ -410,10 +410,18 @@ async def process_queued_email(queue_item: dict, company: dict):
                     processed_at=datetime.now(timezone.utc),
                     error_message=str(e)
                 )
+
+                supabase.table('email_queue')\
+                    .update({
+                        'retry_count': retry_count
+                    })\
+                    .eq('id', str(queue_item['id']))\
+                    .execute()
             else:
                 # Schedule for retry with exponential backoff
                 retry_delay = 2 ** retry_count  # 2, 4, 8, 16... minutes
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
+                current_time = datetime.now(timezone.utc)
                 
                 # Update retry count and reschedule
                 supabase.table('email_queue')\
@@ -421,10 +429,19 @@ async def process_queued_email(queue_item: dict, company: dict):
                         'status': 'pending',
                         'retry_count': retry_count,
                         'scheduled_for': next_attempt.isoformat(),
+                        'processed_at': current_time.isoformat(),
                         'error_message': str(e)
                     })\
                     .eq('id', str(queue_item['id']))\
                     .execute()
+                
+                if processed_at is None:
+                    # Update campaign run progress only if the queue item was not processed before
+                    await update_campaign_run_progress(
+                        campaign_run_id=campaign_run_id,
+                        leads_processed=1,
+                        increment=True
+                    )
                     
     except Exception as e:
         logger.error(f"Error processing queued email {queue_item.get('id')}: {str(e)}")
