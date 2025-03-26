@@ -3265,3 +3265,35 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
 async def get_email_log_by_id(email_log_id: UUID):
     response = supabase.table('email_logs').select('*').eq('id', str(email_log_id)).execute()
     return response.data[0] if response.data else None
+
+async def check_existing_call_queue_record(
+    company_id: UUID,
+    campaign_id: UUID,
+    campaign_run_id: UUID,
+    lead_id: UUID
+) -> bool:
+    """
+    Check if a record with the given parameters already exists in the call_queue table
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        
+    Returns:
+        bool: True if record exists, False otherwise
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('id', count='exact')\
+            .eq('company_id', str(company_id))\
+            .eq('campaign_id', str(campaign_id))\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .eq('lead_id', str(lead_id))\
+            .execute()
+            
+        return response.count > 0
+    except Exception as e:
+        logger.error(f"Error checking existing call queue record: {str(e)}")
+        return False

@@ -106,7 +106,8 @@ from src.database import (
     get_campaign_run,
     add_call_to_queue,
     update_call_queue_item_status,
-    get_email_log_by_id
+    get_email_log_by_id,
+    check_existing_call_queue_record
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -3048,20 +3049,28 @@ async def track_email(email_log_id: UUID):
         # If the campaign is an "email_and_call" campaign and the trigger_call_on is after_email_open, add the call to the queue
         if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_open' and lead.get('phone_number'):
             
-            logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
+            call_queue_exists = await check_existing_call_queue_record(
+                        company_id=campaign['company_id'],
+                        campaign_id=campaign['id'],
+                        campaign_run_id=email_log['campaign_run_id'],
+                        lead_id=lead['id']
+                    )
+            
+            if not call_queue_exists:
+                logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
 
-            insights = await get_or_generate_insights_for_lead(lead)
+                insights = await get_or_generate_insights_for_lead(lead)
 
-            call_script = await generate_call_script(lead, campaign, company, insights)
+                call_script = await generate_call_script(lead, campaign, company, insights)
 
-            # Add to call queue
-            await add_call_to_queue(
-                company_id=campaign['company_id'],
-                campaign_id=campaign['id'],
-                campaign_run_id=email_log['campaign_run_id'],
-                lead_id=lead['id'],
-                call_script=call_script
-            )
+                # Add to call queue
+                await add_call_to_queue(
+                    company_id=campaign['company_id'],
+                    campaign_id=campaign['id'],
+                    campaign_run_id=email_log['campaign_run_id'],
+                    lead_id=lead['id'],
+                    call_script=call_script
+                )
         
         # Return a 1x1 transparent pixel with cache control headers
         headers = {
