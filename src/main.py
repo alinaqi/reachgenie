@@ -107,7 +107,9 @@ from src.database import (
     add_call_to_queue,
     update_call_queue_item_status,
     get_email_log_by_id,
-    check_existing_call_queue_record
+    check_existing_call_queue_record,
+    update_email_reminder_eligibility,
+    get_call_log_by_bland_id
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1460,7 +1462,22 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
                 status_code=404,
                 detail="Call record not found"
             )
-            
+
+        call_log = await get_call_log_by_bland_id(bland_call_id)
+        campaign = await get_campaign_by_id(call_log['campaign_id'])
+        lead = await get_lead_by_id(call_log['lead_id'])
+
+        # If the campaign is an "email_and_call" campaign, update the has_replied to True in the 'email_logs' table for that particular lead, so that the email reminder is not sent, 
+        # since the person has already been contacted via call
+        if campaign['type'] == 'email_and_call' and not reminder_eligible:
+            await update_email_reminder_eligibility(
+                campaign_id=campaign['id'],
+                campaign_run_id=call_log['campaign_run_id'],
+                lead_id=lead['id'],
+                has_replied=True
+            )
+
+
         return {"status": "success", "message": "Call details updated"}
         
     except Exception as e:
