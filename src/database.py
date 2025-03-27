@@ -3305,3 +3305,69 @@ async def check_existing_call_queue_record(
     except Exception as e:
         logger.error(f"Error checking existing call queue record: {str(e)}")
         return False
+
+async def update_call_reminder_eligibility(
+    campaign_id: UUID,
+    campaign_run_id: UUID,
+    lead_id: UUID,
+    is_reminder_eligible: bool = False
+) -> bool:
+    """
+    Update the is_reminder_eligible column for a specific call record
+    
+    Args:
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        is_reminder_eligible: Boolean value to set (default: False)
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('calls')\
+            .update({'is_reminder_eligible': is_reminder_eligible})\
+            .eq('campaign_id', str(campaign_id))\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .eq('lead_id', str(lead_id))\
+            .execute()
+            
+        return len(response.data) > 0
+    except Exception as e:
+        logger.error(f"Error updating call reminder eligibility: {str(e)}")
+        return False
+
+async def update_email_reminder_eligibility(
+    campaign_id: UUID,
+    campaign_run_id: UUID,
+    lead_id: UUID,
+    has_replied: bool = False
+) -> bool:
+    """
+    Update the has_replied column for a specific email record
+    
+    Args:
+        campaign_id: UUID of the campaign
+        campaign_run_id: UUID of the campaign run
+        lead_id: UUID of the lead
+        has_replied: Boolean value to set (default: False)
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('email_logs')\
+            .update({'has_replied': has_replied})\
+            .eq('campaign_id', str(campaign_id))\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .eq('lead_id', str(lead_id))\
+            .execute()
+            
+        return len(response.data) > 0
+    except Exception as e:
+        logger.error(f"Error updating email reminder eligibility: {str(e)}")
+        return False
+
+async def get_call_log_by_bland_id(bland_id: str):
+    response = supabase.table('calls').select('*').eq('bland_call_id', bland_id).execute()
+    return response.data[0] if response.data else None
