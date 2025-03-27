@@ -16,7 +16,11 @@ from src.database import (
     update_email_log_has_replied,
     update_last_processed_uid,
     get_campaign_from_email_log,
-    add_to_do_not_email_list
+    add_to_do_not_email_list,
+    update_call_reminder_eligibility,
+    get_email_log_by_id,
+    get_campaign_by_id,
+    get_lead_by_id
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -233,6 +237,22 @@ async def process_emails(
 
         # Update has_replied status to True
         success = await update_email_log_has_replied(email_log_id)
+
+        # Get the campaign and lead
+        email_log_obj = await get_email_log_by_id(email_log_id)
+        campaign_obj = await get_campaign_by_id(email_log_obj['campaign_id'])
+        lead_obj = await get_lead_by_id(email_log_obj['lead_id'])
+
+        # If the campaign is an "email_and_call" campaign, update the is_reminder_eligible to False in the 'calls' table, so that the call reminder/retry is not sent, 
+        # since the person has already replied to the email
+        if campaign_obj['type'] == 'email_and_call':
+            await update_call_reminder_eligibility(
+                campaign_id=campaign_obj['id'],
+                campaign_run_id=email_log_obj['campaign_run_id'],
+                lead_id=lead_obj['id'],
+                is_reminder_eligible=False
+            )
+        
         if success:
             logger.info(f"Successfully updated has_replied status for email_log_id: {email_log_id}")
         else:
