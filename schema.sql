@@ -233,6 +233,8 @@ CREATE TABLE IF NOT EXISTS email_queue (
     retry_count INTEGER NOT NULL DEFAULT 0,
     max_retries INTEGER NOT NULL DEFAULT 3,
     error_message TEXT,
+    message_id TEXT,
+    reference_ids TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     scheduled_for TIMESTAMP WITH TIME ZONE,
     processed_at TIMESTAMP WITH TIME ZONE
@@ -243,6 +245,8 @@ COMMENT ON COLUMN email_queue.subject IS 'Subject line of the email to be sent';
 COMMENT ON COLUMN email_queue.email_body IS 'Body content of the email to be sent';
 COMMENT ON COLUMN email_queue.status IS 'Status of the queued email: pending (default), processing, sent, or failed';
 COMMENT ON COLUMN email_queue.processed_at IS 'Timestamp when the email was processed (sent or failed)';
+COMMENT ON COLUMN email_queue.message_id IS 'Message ID of the email';
+COMMENT ON COLUMN email_queue.reference_ids IS 'References header value for email threading';
 
 -- Create index for faster querying of pending emails
 CREATE INDEX IF NOT EXISTS email_queue_status_idx ON email_queue(status);
