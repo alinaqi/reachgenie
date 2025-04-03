@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS email_queue (
     campaign_id UUID REFERENCES campaigns(id) NOT NULL,
     campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
     lead_id UUID REFERENCES leads(id) NOT NULL,
+    email_log_id UUID REFERENCES email_logs(id),
     subject TEXT NOT NULL,
     email_body TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
