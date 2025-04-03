@@ -175,6 +175,8 @@ async def process_queued_email(queue_item: dict, company: dict):
         campaign_run_id = UUID(queue_item['campaign_run_id'])
         processed_at = queue_item['processed_at']
         email_log_id = queue_item['email_log_id']
+        message_id = queue_item['message_id']
+        reference_ids = queue_item['reference_ids']
 
         campaign = await get_campaign_by_id(campaign_id)
         lead = await get_lead_by_id(lead_id)
@@ -350,7 +352,9 @@ async def process_queued_email(queue_item: dict, company: dict):
                     subject=subject,
                     html_content=final_body_with_tracking,
                     from_name=sender_name,  # Use extracted name or company name
-                    email_log_id=email_log['id']
+                    email_log_id=email_log['id'],
+                    in_reply_to=message_id if message_id else None,
+                    references=f"{reference_ids} {message_id}" if reference_ids else (message_id if message_id is not None else None)
                 )
                 logger.info(f"Successfully sent email to {lead['email']} from {sender_name}")
                 
