@@ -5,17 +5,13 @@ from uuid import UUID
 from openai import AsyncOpenAI
 from src.config import get_settings
 from datetime import datetime, timezone
-from src.utils.email_utils import add_tracking_pixel
-from src.utils.smtp_client import SMTPClient
 from src.database import (
     get_email_logs_reminder, 
     get_first_email_detail,
-    create_email_log_detail,
     update_reminder_sent_status,
     get_campaigns
 )
 from src.utils.encryption import decrypt_password
-from src.utils.string_utils import _extract_name_from_email
 from src.database import add_email_to_queue, get_email_log_by_id, get_campaign_by_id
 
 # Configure logging
