@@ -1789,7 +1789,9 @@ async def add_email_to_queue(
     body: str,
     priority: int = 1, 
     scheduled_for: Optional[datetime] = None,
-    email_log_id: Optional[UUID] = None
+    email_log_id: Optional[UUID] = None,
+    message_id: Optional[str] = None,
+    reference_ids: Optional[str] = None
 ) -> dict:
     """
     Add an email to the processing queue
@@ -1822,7 +1824,9 @@ async def add_email_to_queue(
         'max_retries': 3,
         'subject': subject,
         'email_body': body,
-        'email_log_id': str(email_log_id) if email_log_id else None
+        'email_log_id': str(email_log_id) if email_log_id else None,
+        'message_id': message_id,
+        'reference_ids': reference_ids
     }
     
     try:

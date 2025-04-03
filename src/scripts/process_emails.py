@@ -20,7 +20,8 @@ from src.database import (
     update_call_reminder_eligibility,
     get_email_log_by_id,
     get_campaign_by_id,
-    get_lead_by_id
+    get_lead_by_id,
+    add_email_to_queue
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -347,44 +348,60 @@ async def process_emails(
         ai_reply = await generate_ai_reply(email_log_id, email_data)
 
         if ai_reply:
-            logger.info(f"Creating email_log_detail for the AI reply")
+            # Process the AI reply
             response_subject = f"Re: {email_data['subject']}" if not email_data['subject'].startswith('Re:') else email_data['subject']
             
             # Replace {email_body} placeholder in template with generated AI reply
             final_body = template.replace("{email_body}", ai_reply)
 
-            if company["account_email"]:
-                sender_name = _extract_name_from_email(company["account_email"])
+            #if company["account_email"]:
+                #sender_name = _extract_name_from_email(company["account_email"])
 
-            await create_email_log_detail(
-                email_logs_id=email_log_id,
-                message_id=None,
-                email_subject=response_subject,
-                email_body=final_body, # Use the template with AI reply
-                sender_type='assistant',
-                sent_at=datetime.now(timezone.utc),
-                from_name=sender_name,
-                from_email=company['account_email'],
-                to_email=email_data['from']
-            )
-            logger.info("Successfully created email_log_detail for the AI reply")
+            email_log = await get_email_log_by_id(email_log_id)
+            campaign = await get_campaign_by_id(email_log['campaign_id'])
 
-            async with SMTPClient(
-                account_email=company['account_email'],
-                account_password=decrypted_password,
-                provider=company['account_type']
-            ) as smtp_client:
-                # Send email with reply-to header
-                await smtp_client.send_email(
-                    to_email=email_data['from'],
+            # Add email to queue
+            await add_email_to_queue(
+                    company_id=campaign['company_id'],
+                    campaign_id=email_log['campaign_id'],
+                    campaign_run_id=email_log['campaign_run_id'],
+                    lead_id=email_log['lead_id'],
                     subject=response_subject,
-                    html_content=final_body, # Use the template with AI reply
-                    from_name=sender_name,
+                    body=final_body,
                     email_log_id=email_log_id,
-                    in_reply_to=email_data['message_id'],
-                    references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
+                    message_id=email_data['message_id'],
+                    reference_ids=email_data['references']
                 )
-                logger.info(f"Successfully sent AI reply email to {email_data['from']}")
+
+            #await create_email_log_detail(
+            #    email_logs_id=email_log_id,
+            #    message_id=None,
+            #    email_subject=response_subject,
+            #    email_body=final_body, # Use the template with AI reply
+            #    sender_type='assistant',
+            #    sent_at=datetime.now(timezone.utc),
+            #    from_name=sender_name,
+            #    from_email=company['account_email'],
+            #    to_email=email_data['from']
+            #)
+            #logger.info("Successfully created email_log_detail for the AI reply")
+
+            #async with SMTPClient(
+            #    account_email=company['account_email'],
+            #    account_password=decrypted_password,
+            #    provider=company['account_type']
+            #) as smtp_client:
+                # Send email with reply-to header
+                #await smtp_client.send_email(
+                    #to_email=email_data['from'],
+                    #subject=response_subject,
+                    #html_content=final_body, # Use the template with AI reply
+                    #from_name=sender_name,
+                    #email_log_id=email_log_id,
+                    #in_reply_to=email_data['message_id'],
+                    #references=f"{email_data['references']} {email_data['message_id']}" if email_data['references'] else email_data['message_id']
+                #)
+                #logger.info(f"Successfully sent AI reply email to {email_data['from']}")
 
     # After processing all emails, find the maximum uid and update the company's last_processed_uid
     if emails:
