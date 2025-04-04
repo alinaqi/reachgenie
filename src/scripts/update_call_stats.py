@@ -22,7 +22,10 @@ async def update_call_record(bland_call_id: str, bland_client: BlandClient) -> N
 
         # Extract relevant information
         duration = str(call_data.get("corrected_duration", 0))  # Convert to string as expected by update_call_webhook_data
-        sentiment = call_data.get("analysis", {}).get("sentiment", "neutral")
+        
+        # Handle the case where analysis is null
+        analysis = call_data.get("analysis")
+        sentiment = analysis.get("sentiment", "neutral") if analysis is not None else None
         summary = call_data.get("summary", "")
 
         transcripts = call_data.get("transcripts", [])
