@@ -3014,7 +3014,6 @@ async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int,
             flattened_record = {
                 'call_log_id': record['id'],
                 'created_at': record['created_at'],
-                'sentiment': record['sentiment'],
                 'last_reminder_sent': record['last_reminder_sent'],
                 'last_reminder_sent_at': record['last_reminder_sent_at'],
                 'lead_id': record['lead_id'],
