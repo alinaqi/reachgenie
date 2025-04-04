@@ -143,9 +143,20 @@ async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: in
         'total_pages': (total + limit - 1) // limit if total > 0 else 1
     }
 
-async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None, campaign_run_id: Optional[UUID] = None):
+async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script: Optional[str] = None, campaign_run_id: Optional[UUID] = None, last_called_at: Optional[datetime] = None):
     """
     Create a call record in the database
+    
+    Args:
+        lead_id: UUID of the lead to call
+        product_id: UUID of the product associated with the call
+        campaign_id: UUID of the campaign associated with the call
+        script: Optional script to use for the call
+        campaign_run_id: Optional UUID of the campaign run
+        last_called_at: Optional timestamp of when the call was initiated
+        
+    Returns:
+        The created call record
     """
     try:
         # Prepare call data
@@ -159,6 +170,10 @@ async def create_call(lead_id: UUID, product_id: UUID, campaign_id: UUID, script
         # Only add campaign_run_id if it exists
         if campaign_run_id is not None:
             call_data['campaign_run_id'] = str(campaign_run_id)
+            
+        # Add last_called_at if provided
+        if last_called_at is not None:
+            call_data['last_called_at'] = last_called_at.isoformat() if isinstance(last_called_at, datetime) else last_called_at
         
         # Insert the record
         response = supabase.table('calls').insert(call_data).execute()
@@ -222,13 +237,14 @@ async def get_product_by_id(product_id: UUID):
         return None
     return response.data[0]
 
-async def update_call_details(call_id: UUID, bland_call_id: str):
+async def update_call_details(call_id: UUID, bland_call_id: str, last_called_at: Optional[datetime] = None):
     """
-    Update call record with Bland call ID
+    Update call record with Bland call ID and optionally the last called timestamp
     
     Args:
         call_id: UUID of the call record
         bland_call_id: Bland AI call ID
+        last_called_at: Optional timestamp of when the call was last initiated
     
     Returns:
         Updated call record or None if update fails
@@ -248,6 +264,11 @@ async def update_call_details(call_id: UUID, bland_call_id: str):
         call_data = {
             'bland_call_id': bland_call_id
         }
+        
+        # Add last_called_at if provided
+        if last_called_at is not None:
+            call_data['last_called_at'] = last_called_at.isoformat() if isinstance(last_called_at, datetime) else last_called_at
+            logger.info(f"Including last_called_at: {call_data['last_called_at']}")
         
         # Log the request data
         logger.info(f"Supabase update request: table('calls').update({call_data}).eq('id', {str(call_id)})")
