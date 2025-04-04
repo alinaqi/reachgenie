@@ -21,11 +21,13 @@ async def update_call_record(bland_call_id: str, bland_client: BlandClient) -> N
         call_data = await bland_client.get_call_details(bland_call_id)
 
         # Extract relevant information
-        duration = str(call_data.get("corrected_duration", 0))  # Convert to string as expected by update_call_webhook_data
+        # Handle case where corrected_duration is None
+        corrected_duration = call_data.get("corrected_duration")
+        duration = str(0 if corrected_duration is None else corrected_duration)  # Convert to string as expected by update_call_webhook_data
         
         # Handle the case where analysis is null
         analysis = call_data.get("analysis")
-        sentiment = analysis.get("sentiment", "neutral") if analysis is not None else None
+        sentiment = analysis.get("sentiment") if analysis is not None else None  # Use "neutral" instead of None to avoid conversion issues
         reminder_eligible = analysis.get("reminder_eligible") if analysis is not None else False
         summary = call_data.get("summary", "")
 
