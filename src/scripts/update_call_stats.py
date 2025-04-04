@@ -26,13 +26,14 @@ async def update_call_record(bland_call_id: str, bland_client: BlandClient) -> N
         # Handle the case where analysis is null
         analysis = call_data.get("analysis")
         sentiment = analysis.get("sentiment", "neutral") if analysis is not None else None
+        reminder_eligible = analysis.get("reminder_eligible") if analysis is not None else False
         summary = call_data.get("summary", "")
 
         transcripts = call_data.get("transcripts", [])
         recording_url = call_data.get("recording_url", "")
 
         # Update the database using the existing webhook function
-        result = await update_call_webhook_data(bland_call_id, duration, sentiment, summary, transcripts, recording_url)
+        result = await update_call_webhook_data(bland_call_id, duration, sentiment, summary, transcripts, recording_url, reminder_eligible)
         if result:
             logger.info(f"Updated call record for bland_call_id {bland_call_id} with call data")
         else:
