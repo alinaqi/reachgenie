@@ -3228,6 +3228,7 @@ async def get_pending_calls_count(campaign_run_id: UUID) -> int:
             .select('id', count='exact')\
             .eq('campaign_run_id', str(campaign_run_id))\
             .in_('status', ['pending', 'processing'])\
+            .is_('call_log_id', 'null')\
             .execute()
             
         return response.count
