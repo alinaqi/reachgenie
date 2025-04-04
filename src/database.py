@@ -324,9 +324,11 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
     Returns:
         Updated call record or None if update fails
     """
+    if duration is not None:
+        duration = int(float(duration))
     try:
         call_data = {
-            'duration': int(float(duration)),
+            'duration': duration,
             'sentiment': sentiment,
             'summary': summary,
             'transcripts': transcripts,
