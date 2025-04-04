@@ -4,6 +4,7 @@ from src.bland_client import BlandClient
 import logging
 from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason, get_call_by_id
 from typing import Optional
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +80,16 @@ async def initiate_call(
                 
                 # Only create a new call record if we didn't find an existing one
                 if not (existing_call and existing_call.data and len(existing_call.data) > 0):
+                    current_time = datetime.now(timezone.utc)
                     call = await create_call(
                         lead_id=lead['id'], 
                         product_id=campaign['product_id'], 
                         campaign_id=campaign['id'], 
                         script=call_script, 
-                        campaign_run_id=campaign_run_id if campaign_run_id is not None else None
+                        campaign_run_id=campaign_run_id if campaign_run_id is not None else None,
+                        last_called_at=current_time
                     )
-                    logger.info(f"Created call record with ID: {call['id']}")
+                    logger.info(f"Created call record with ID: {call['id']} and last_called_at: {current_time}")
             except Exception as db_error:
                 logger.error(f"Error creating call record: {str(db_error)}")
                 logger.exception("Database error traceback:")
@@ -125,12 +128,13 @@ async def initiate_call(
         
         logger.info(f"Bland Call ID: {bland_response.get('call_id', 'Not provided')}")
 
-        # Update call record in database with bland_call_id
+        # Update call record in database with bland_call_id and last_called_at timestamp
         if bland_response and bland_response.get('call_id'):
             try:
-                db_update_result = await update_call_details(call['id'], bland_response['call_id'])
+                current_time = datetime.now(timezone.utc)
+                db_update_result = await update_call_details(call['id'], bland_response['call_id'], last_called_at=current_time)
                 if db_update_result:
-                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']}")
+                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']} and last_called_at: {current_time}")
                 else:
                     logger.warning(f"Failed to update call record in database, but call was initiated. Call ID: {call['id']}, Bland Call ID: {bland_response['call_id']}")
             except Exception as db_error:
@@ -192,6 +196,9 @@ async def initiate_test_call(
         )
         
         logger.info(f"Bland Call ID: {bland_response['call_id']}")
+        
+        # Note: For test calls, we don't update a call record in the database
+        # If in the future we want to save test calls, we would add the last_called_at timestamp here
         
     except Exception as e:
         logger.error(f"Failed to initiate test call: {str(e)}")

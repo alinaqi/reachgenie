@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS calls (
     last_reminder_sent VARCHAR(2),
     last_reminder_sent_at TIMESTAMP WITH TIME ZONE,
     is_reminder_eligible BOOLEAN DEFAULT FALSE,
+    last_called_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -102,6 +103,9 @@ COMMENT ON COLUMN calls.last_reminder_sent_at IS 'Timestamp of when the last rem
 
 -- Add comment to explain the is_reminder_eligible column
 COMMENT ON COLUMN calls.is_reminder_eligible IS 'Indicates whether the call is eligible for reminders';
+
+-- Add comment to explain the last_called_at column
+COMMENT ON COLUMN calls.last_called_at IS 'Timestamp of when the call was last initiated';
 
 -- Email Campaigns table
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -225,6 +229,7 @@ CREATE TABLE IF NOT EXISTS email_queue (
     campaign_id UUID REFERENCES campaigns(id) NOT NULL,
     campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
     lead_id UUID REFERENCES leads(id) NOT NULL,
+    email_log_id UUID REFERENCES email_logs(id),
     subject TEXT NOT NULL,
     email_body TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
@@ -232,6 +237,8 @@ CREATE TABLE IF NOT EXISTS email_queue (
     retry_count INTEGER NOT NULL DEFAULT 0,
     max_retries INTEGER NOT NULL DEFAULT 3,
     error_message TEXT,
+    message_id TEXT,
+    reference_ids TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     scheduled_for TIMESTAMP WITH TIME ZONE,
     processed_at TIMESTAMP WITH TIME ZONE
@@ -242,6 +249,8 @@ COMMENT ON COLUMN email_queue.subject IS 'Subject line of the email to be sent';
 COMMENT ON COLUMN email_queue.email_body IS 'Body content of the email to be sent';
 COMMENT ON COLUMN email_queue.status IS 'Status of the queued email: pending (default), processing, sent, or failed';
 COMMENT ON COLUMN email_queue.processed_at IS 'Timestamp when the email was processed (sent or failed)';
+COMMENT ON COLUMN email_queue.message_id IS 'Message ID of the email';
+COMMENT ON COLUMN email_queue.reference_ids IS 'References header value for email threading';
 
 -- Create index for faster querying of pending emails
 CREATE INDEX IF NOT EXISTS email_queue_status_idx ON email_queue(status);
@@ -291,6 +300,7 @@ CREATE TABLE IF NOT EXISTS call_queue (
     campaign_id UUID REFERENCES campaigns(id) NOT NULL,
     campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
     lead_id UUID REFERENCES leads(id) NOT NULL,
+    call_log_id UUID REFERENCES calls(id),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
     priority INTEGER NOT NULL DEFAULT 0,
     retry_count INTEGER NOT NULL DEFAULT 0,

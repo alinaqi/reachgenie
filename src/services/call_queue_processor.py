@@ -130,6 +130,7 @@ async def process_queued_call(queue_item: dict, company: dict):
         lead_id = UUID(queue_item['lead_id'])
         campaign_run_id = UUID(queue_item['campaign_run_id'])
         processed_at = queue_item['processed_at']
+        call_log_id = queue_item['call_log_id']
         
         campaign = await get_campaign_by_id(campaign_id)
         lead = await get_lead_by_id(lead_id)
@@ -143,8 +144,8 @@ async def process_queued_call(queue_item: dict, company: dict):
                 error_message="Campaign or lead not found"
             )
             
-            if processed_at is None and campaign['type'] != 'email_and_call':
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign
+            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
+                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
                 await update_campaign_run_progress(
                     campaign_run_id=campaign_run_id,
                     leads_processed=1,
@@ -162,8 +163,8 @@ async def process_queued_call(queue_item: dict, company: dict):
                 error_message="Lead has no phone number"
             )
 
-            if processed_at is None and campaign['type'] != 'email_and_call':
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign
+            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
+                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
                 await update_campaign_run_progress(
                     campaign_run_id=campaign_run_id,
                     leads_processed=1,
@@ -215,8 +216,8 @@ async def process_queued_call(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc)
             )
             
-            if processed_at is None and campaign['type'] != 'email_and_call':
-                # Update campaign run progress only if the queue item was not processed before
+            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
+                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
                 await update_campaign_run_progress(
                     campaign_run_id=campaign_run_id,
                     leads_processed=1,
@@ -262,8 +263,8 @@ async def process_queued_call(queue_item: dict, company: dict):
                     .eq('id', str(queue_item['id']))\
                     .execute()
                 
-                if processed_at is None and campaign['type'] != 'email_and_call':
-                    # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign
+                if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
+                    # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
                     await update_campaign_run_progress(
                         campaign_run_id=campaign_run_id,
                         leads_processed=1,
@@ -282,7 +283,7 @@ async def process_queued_call(queue_item: dict, company: dict):
                 error_message=f"Unexpected error: {str(e)}"
             )
             
-            if processed_at is None and campaign['type'] != 'email_and_call':
+            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
                 # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign
                 await update_campaign_run_progress(
                     campaign_run_id=campaign_run_id,

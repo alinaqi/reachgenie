@@ -1378,8 +1378,9 @@ async def start_call(
     try:
         # Create call record in database with company_id and script
         try:
-            call = await create_call(lead_id, product_id, campaign_id, script=script)
-            logger.info(f"Created call record with ID: {call['id']}")
+            current_time = datetime.now(timezone.utc)
+            call = await create_call(lead_id, product_id, campaign_id, script=script, last_called_at=current_time)
+            logger.info(f"Created call record with ID: {call['id']} and last_called_at: {current_time}")
         except Exception as db_error:
             logger.error(f"Error creating call record in database: {str(db_error)}")
             logger.exception("Database error traceback:")
@@ -1400,8 +1401,8 @@ async def start_call(
             # Update call with Bland call ID if the call was successfully initiated
             if bland_response and bland_response.get('call_id'):
                 try:
-                    await update_call_details(call['id'], bland_call_id=bland_response['call_id'])
-                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']}")
+                    await update_call_details(call['id'], bland_call_id=bland_response['call_id'], last_called_at=current_time)
+                    logger.info(f"Updated call record with Bland call ID: {bland_response['call_id']} and last_called_at: {current_time}")
                 except Exception as update_error:
                     # If database update fails, just log the error
                     logger.error(f"Failed to update call record with Bland call ID: {str(update_error)}")

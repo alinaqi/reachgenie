@@ -13,7 +13,9 @@ from src.database import (
     get_lead_by_id,
     update_lead_enrichment,
     get_campaign_by_id,
-    get_company_by_id
+    get_company_by_id,
+    add_call_to_queue,
+    get_call_by_id
 )
 from src.services.perplexity_service import perplexity_service
 from src.services.email_generation import generate_company_insights
@@ -117,16 +119,28 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                     campaign_id = log['campaign_id']
                     campaign = await get_campaign_by_id(campaign_id)
 
-                    company = await get_company_by_id(company_id)
+                    company_obj = await get_company_by_id(company_id)
                     
+                    call_obj = await get_call_by_id(call_log_id)
+
                     # Generate personalized call script
-                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    call_script = await generate_call_script(lead, campaign, company_obj, insights)
                     logger.info(f"Generated call script for lead: {lead['phone_number']}")
                     logger.info(f"Call Script: {call_script}")
 
                     if call_script:
                         # Initiate call with Bland AI
-                        await initiate_call(campaign=campaign, lead=lead, call_script=call_script, call_log_id=call_log_id)
+                        #await initiate_call(campaign=campaign, lead=lead, call_script=call_script, call_log_id=call_log_id)
+
+                        # Add call to queue
+                        await add_call_to_queue(
+                            company_id=campaign['company_id'],
+                            campaign_id=campaign['id'],
+                            campaign_run_id=call_obj['campaign_run_id'],
+                            lead_id=lead['id'],
+                            call_script=call_script,
+                            call_log_id=call_log_id
+                        )
 
                         # Update the reminder status in database with current timestamp
                         current_time = datetime.now(timezone.utc)
@@ -140,7 +154,7 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                         else:
                             logger.error(f"Failed to update reminder status for log {call_log_id}")
                         
-                        logger.info(f"Successfully sent reminder call for log {call_log_id} to {lead['phone_number']}")
+                        logger.info(f"Successfully added to queue for reminder call for log {call_log_id} to {lead['phone_number']}")
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
                 

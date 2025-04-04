@@ -5,17 +5,14 @@ from uuid import UUID
 from openai import AsyncOpenAI
 from src.config import get_settings
 from datetime import datetime, timezone
-from src.utils.email_utils import add_tracking_pixel
-from src.utils.smtp_client import SMTPClient
 from src.database import (
     get_email_logs_reminder, 
     get_first_email_detail,
-    create_email_log_detail,
     update_reminder_sent_status,
     get_campaigns
 )
 from src.utils.encryption import decrypt_password
-from src.utils.string_utils import _extract_name_from_email
+from src.database import add_email_to_queue, get_email_log_by_id, get_campaign_by_id
 
 # Configure logging
 logging.basicConfig(
@@ -109,90 +106,69 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
         except Exception as e:
             logger.error(f"Failed to decrypt password for company {company_id}: {str(e)}")
             return
-            
-        # Initialize SMTP client
-        async with SMTPClient(
-            account_email=company['account_email'],
-            account_password=decrypted_password,
-            provider=company['account_type']
-        ) as smtp_client:
-            # Process each email log for the company
-            for log in company['logs']:
-                try:
-                    email_log_id = UUID(log['email_log_id'])
-                    
-                    # Set the next reminder type based on current type
-                    # This will be used to determine the next reminder in sequence
-                    if reminder_type is None:
-                        next_reminder = 'r1'
-                    else:
-                        current_num = int(reminder_type[1])  # Extract number from 'r1', 'r2', etc.
-                        next_reminder = f'r{current_num + 1}'
-                    
-                    # Get the original email content
-                    original_email = await get_first_email_detail(email_log_id)
-                    if not original_email:
-                        logger.warning(f"No email detail found for email log {email_log_id}")
-                        continue
-                    
-                    # Generate reminder content using LLM
-                    reminder_content = await get_reminder_content(original_email['email_body'], reminder_type)
-                    if not reminder_content:
-                        logger.error(f"Failed to generate reminder content for email log {email_log_id}")
-                        continue
-                    
-                    logger.info(f"Generated reminder content for email log {email_log_id}")
-                    logger.info(f"Generated reminder: {reminder_content}")
-                    
-                    # Create subject line for reminder
-                    subject = f"Re: {original_email['email_subject']}" if not original_email['email_subject'].startswith('Re:') else original_email['email_subject']
-                    
-                    if company["account_email"]:
-                        sender_name = _extract_name_from_email(company["account_email"])
 
-                    # Create email log detail for the reminder
-                    await create_email_log_detail(
-                        email_logs_id=email_log_id,
-                        message_id=None,  # New message, no ID yet
-                        email_subject=subject,
-                        email_body=reminder_content,
-                        sender_type='assistant',
-                        sent_at=datetime.now(timezone.utc),
-                        from_name=sender_name,
-                        from_email=company['account_email'],
-                        to_email=log['lead_email'],  # Using lead's email address
-                        reminder_type=next_reminder
-                    )
-                    
-                    # Add tracking pixel to the email body
-                    reminder_content = add_tracking_pixel(reminder_content, email_log_id)
-                    
-                    # Send the reminder email
-                    await smtp_client.send_email(
-                        to_email=log['lead_email'],  # Using lead's email address
+        # Process each email log for the company
+        for log in company['logs']:
+            try:
+                email_log_id = UUID(log['email_log_id'])
+                
+                # Set the next reminder type based on current type
+                # This will be used to determine the next reminder in sequence
+                if reminder_type is None:
+                    next_reminder = 'r1'
+                else:
+                    current_num = int(reminder_type[1])  # Extract number from 'r1', 'r2', etc.
+                    next_reminder = f'r{current_num + 1}'
+                
+                # Get the original email content
+                original_email = await get_first_email_detail(email_log_id)
+                if not original_email:
+                    logger.warning(f"No email detail found for email log {email_log_id}")
+                    continue
+                
+                # Generate reminder content using LLM
+                reminder_content = await get_reminder_content(original_email['email_body'], reminder_type)
+                if not reminder_content:
+                    logger.error(f"Failed to generate reminder content for email log {email_log_id}")
+                    continue
+                
+                logger.info(f"Generated reminder content for email log {email_log_id}")
+                logger.info(f"Generated reminder: {reminder_content}")
+                
+                # Create subject line for reminder
+                subject = f"Re: {original_email['email_subject']}" if not original_email['email_subject'].startswith('Re:') else original_email['email_subject']
+
+                email_log = await get_email_log_by_id(email_log_id)
+                campaign = await get_campaign_by_id(email_log['campaign_id'])
+
+                # Add email to queue
+                await add_email_to_queue(
+                        company_id=campaign['company_id'],
+                        campaign_id=email_log['campaign_id'],
+                        campaign_run_id=email_log['campaign_run_id'],
+                        lead_id=email_log['lead_id'],
                         subject=subject,
-                        html_content=reminder_content, # add tracking pixel to the email body
-                        from_name=sender_name,
+                        body=reminder_content,
                         email_log_id=email_log_id
                     )
-                    
-                    # Update the reminder status in database with current timestamp
-                    current_time = datetime.now(timezone.utc)
-                    success = await update_reminder_sent_status(
-                        email_log_id=email_log_id,
-                        reminder_type=next_reminder,
-                        last_reminder_sent_at=current_time
-                    )
-                    if success:
-                        logger.info(f"Successfully updated reminder status for log {email_log_id}")
-                    else:
-                        logger.error(f"Failed to update reminder status for log {email_log_id}")
-                    
-                    logger.info(f"Successfully sent reminder email for log {email_log_id} to {log['lead_email']}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing log {log['email_log_id']}: {str(e)}")
-                    continue
+                
+                # Update the reminder status in database with current timestamp, the definition of reminder sent here means that the email was added to the queue
+                current_time = datetime.now(timezone.utc)
+                success = await update_reminder_sent_status(
+                    email_log_id=email_log_id,
+                    reminder_type=next_reminder,
+                    last_reminder_sent_at=current_time
+                )
+                if success:
+                    logger.info(f"Successfully updated reminder status for log {email_log_id}")
+                else:
+                    logger.error(f"Failed to update reminder status for log {email_log_id}")
+                
+                logger.info(f"Successfully added reminder email to queue for log {email_log_id} to {log['lead_email']}")
+                
+            except Exception as e:
+                logger.error(f"Error processing log {log['email_log_id']}: {str(e)}")
+                continue
         
     except Exception as e:
         logger.error(f"Error processing reminders for company {company['name']}: {str(e)}")
