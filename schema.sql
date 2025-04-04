@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS call_queue (
     campaign_id UUID REFERENCES campaigns(id) NOT NULL,
     campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
     lead_id UUID REFERENCES leads(id) NOT NULL,
+    call_log_id UUID REFERENCES calls(id),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
     priority INTEGER NOT NULL DEFAULT 0,
     retry_count INTEGER NOT NULL DEFAULT 0,

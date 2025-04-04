@@ -117,10 +117,10 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                     campaign_id = log['campaign_id']
                     campaign = await get_campaign_by_id(campaign_id)
 
-                    company = await get_company_by_id(company_id)
+                    company_obj = await get_company_by_id(company_id)
                     
                     # Generate personalized call script
-                    call_script = await generate_call_script(lead, campaign, company, insights)
+                    call_script = await generate_call_script(lead, campaign, company_obj, insights)
                     logger.info(f"Generated call script for lead: {lead['phone_number']}")
                     logger.info(f"Call Script: {call_script}")
 
