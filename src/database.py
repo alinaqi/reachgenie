@@ -3068,7 +3068,8 @@ async def add_call_to_queue(
     lead_id: UUID,
     call_script: str,
     priority: int = 1, 
-    scheduled_for: Optional[datetime] = None
+    scheduled_for: Optional[datetime] = None,
+    call_log_id: Optional[UUID] = None
 ) -> dict:
     """
     Add a call to the processing queue
@@ -3098,7 +3099,8 @@ async def add_call_to_queue(
         'scheduled_for': scheduled_for.isoformat(),
         'retry_count': 0,
         'max_retries': 3,
-        'call_script': call_script
+        'call_script': call_script,
+        'call_log_id': str(call_log_id) if call_log_id else None
     }
     
     try:
