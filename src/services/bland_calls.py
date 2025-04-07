@@ -2,7 +2,13 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 import logging
-from src.database import create_call, get_product_by_id, get_company_by_id, update_call_details, update_call_failure_reason, get_call_by_id
+from src.database import (
+    create_call, get_product_by_id, get_company_by_id, update_call_details, 
+    update_call_failure_reason, 
+    get_call_by_id, get_call_by_bland_id, 
+    check_call_queue_exists,
+    get_campaign_by_id
+)
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -203,3 +209,44 @@ async def initiate_test_call(
     except Exception as e:
         logger.error(f"Failed to initiate test call: {str(e)}")
         raise Exception(f"Failed to initiate test call: {str(e)}")
+
+async def update_call_queue_on_error(bland_call_id: str, error_message: str) -> Optional[dict]:
+    """
+    Handle call errors by updating the call queue status.
+    
+    Args:
+        bland_call_id (str): The Bland call ID
+        error_message (str): The error message to be recorded
+        
+    Returns:
+        Optional[dict]: The updated call queue record if successful, None otherwise
+    """
+    if not error_message:
+        return None
+        
+    # Get the call record
+    call_record = await get_call_by_bland_id(bland_call_id)
+    if not call_record:
+        return None
+    
+    campaign = await get_campaign_by_id(call_record['campaign_id'])
+
+    # Check if record exists in call_queue
+    queue_record = await check_call_queue_exists(
+        company_id=campaign['company_id'],
+        campaign_id=call_record['campaign_id'],
+        campaign_run_id=call_record['campaign_run_id'],
+        lead_id=call_record['lead_id']
+    )
+    
+    # if the record exists in call_queue, update the status to failed and set error message
+    if queue_record:
+        # Update the status to failed and set error message
+        response = supabase.table('call_queue').update({
+            'status': 'failed',
+            'error_message': error_message
+        }).eq('id', queue_record['id']).execute()
+        
+        return response.data[0] if response.data else None
+            
+    return None
