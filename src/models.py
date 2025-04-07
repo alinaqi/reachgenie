@@ -357,6 +357,7 @@ class BlandWebhookPayload(BaseModel):
     analysis: Optional[dict] = None
     transcripts: list[dict]
     recording_url: Optional[str] = None
+    error_message: Optional[str] = None
 
 class CampaignType(str, Enum):
     EMAIL = 'email'
