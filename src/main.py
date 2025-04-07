@@ -1441,8 +1441,11 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
         # Extract required fields from the payload
         bland_call_id = payload.call_id
         duration = payload.corrected_duration
-        sentiment = payload.analysis.get('sentiment', 'neutral')
-        reminder_eligible = payload.analysis.get('reminder_eligible', False)
+        #sentiment = payload.analysis.get('sentiment', 'neutral')
+        #reminder_eligible = payload.analysis.get('reminder_eligible', False)
+        analysis = payload.analysis
+        sentiment = analysis.get('sentiment') if analysis is not None else None
+        reminder_eligible = analysis.get('reminder_eligible') if analysis is not None else False
         summary = payload.summary
         transcripts = payload.transcripts
         recording_url = payload.recording_url
