@@ -3404,3 +3404,13 @@ async def update_email_reminder_eligibility(
 async def get_call_log_by_bland_id(bland_id: str):
     response = supabase.table('calls').select('*').eq('bland_call_id', bland_id).execute()
     return response.data[0] if response.data else None
+
+async def get_call_by_bland_id(bland_call_id: str) -> Optional[dict]:
+    """Get a call record by its Bland call ID."""
+    response = supabase.table('calls').select('*').eq('bland_call_id', bland_call_id).execute()
+    return response.data[0] if response.data else None
+
+async def check_call_queue_exists(company_id: UUID, campaign_id: UUID, campaign_run_id: UUID, lead_id: UUID) -> Optional[dict]:
+    """Check if a record exists in call_queue table with the given parameters."""
+    response = supabase.table('call_queue').select('*').eq('company_id', str(company_id)).eq('campaign_id', str(campaign_id)).eq('campaign_run_id', str(campaign_run_id)).eq('lead_id', str(lead_id)).execute()
+    return response.data[0] if response.data else None
