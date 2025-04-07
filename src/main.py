@@ -139,6 +139,7 @@ from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
 from src.services.call_generation import generate_call_script
 from src.routes import email_queues, call_queues
+from src.services.bland_calls import update_call_queue_on_error
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -1460,7 +1461,11 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             reminder_eligible=reminder_eligible,
             error_message=error_message
         )
-        
+
+        # If there is an error message, update the call queue on error, so it can be retried again if needed
+        if error_message:
+            await update_call_queue_on_error(bland_call_id=bland_call_id, error_message=error_message)
+
         if not updated_call:
             raise HTTPException(
                 status_code=404,

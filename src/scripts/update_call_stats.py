@@ -4,6 +4,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.bland_client import BlandClient
 from src.database import get_incomplete_calls, update_call_webhook_data
+from src.services.bland_calls import update_call_queue_on_error
 
 # Configure logging
 logging.basicConfig(
@@ -44,6 +45,11 @@ async def update_call_record(bland_call_id: str, bland_client: BlandClient) -> N
         result = await update_call_webhook_data(bland_call_id=bland_call_id, duration=duration, sentiment=sentiment, 
                                                 summary=summary, transcripts=transcripts, recording_url=recording_url, 
                                                 reminder_eligible=reminder_eligible, error_message=error_message)
+        
+        # If there is an error message, update the call queue on error, so it can be retried again if needed
+        if error_message:
+            await update_call_queue_on_error(bland_call_id=bland_call_id, error_message=error_message)
+
         if result:
             logger.info(f"Updated call record for bland_call_id {bland_call_id} with call data")
         else:

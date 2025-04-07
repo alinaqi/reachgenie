@@ -7,7 +7,8 @@ from src.database import (
     update_call_failure_reason, 
     get_call_by_id, get_call_by_bland_id, 
     check_call_queue_exists,
-    get_campaign_by_id
+    get_campaign_by_id,
+    update_call_queue_item_status
 )
 from typing import Optional
 from datetime import datetime, timezone
@@ -242,11 +243,13 @@ async def update_call_queue_on_error(bland_call_id: str, error_message: str) -> 
     # if the record exists in call_queue, update the status to failed and set error message
     if queue_record:
         # Update the status to failed and set error message
-        response = supabase.table('call_queue').update({
-            'status': 'failed',
-            'error_message': error_message
-        }).eq('id', queue_record['id']).execute()
+        response = await update_call_queue_item_status(
+                queue_id=UUID(queue_record['id']),
+                status='failed',
+                processed_at=datetime.now(timezone.utc),
+                error_message=error_message
+            )
         
-        return response.data[0] if response.data else None
+        return response
             
     return None
