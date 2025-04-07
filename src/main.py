@@ -1446,6 +1446,7 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
         summary = payload.summary
         transcripts = payload.transcripts
         recording_url = payload.recording_url
+        error_message = payload.error_message
         
         # Update the call record in the database
         updated_call = await update_call_webhook_data(
@@ -1455,7 +1456,8 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             summary=summary,
             transcripts=transcripts,
             recording_url=recording_url,
-            reminder_eligible=reminder_eligible
+            reminder_eligible=reminder_eligible,
+            error_message=error_message
         )
         
         if not updated_call:
@@ -1470,14 +1472,13 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 
         # If the campaign is an "email_and_call" campaign, update the has_replied to True in the 'email_logs' table for that particular lead, so that the email reminder is not sent, 
         # since the person has already been contacted via call
-        if campaign['type'] == 'email_and_call' and not reminder_eligible:
+        if campaign['type'] == 'email_and_call' and not reminder_eligible and not error_message:
             await update_email_reminder_eligibility(
                 campaign_id=campaign['id'],
                 campaign_run_id=call_log['campaign_run_id'],
                 lead_id=lead['id'],
                 has_replied=True
             )
-
 
         return {"status": "success", "message": "Call details updated"}
         
