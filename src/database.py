@@ -414,7 +414,7 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
 
     # Get total count
     total_count_query = supabase.table('calls').select(
-        'id', count='exact'
+        'id,leads(*),campaigns!inner(*)', count='exact'
     ).eq('campaigns.company_id', str(company_id))
     
     if campaign_id:
