@@ -1,9 +1,7 @@
-import os
 import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any, Tuple
-import uuid
+from typing import List, Dict, Optional, Any
 import logging
 import math
 import csv
@@ -380,26 +378,58 @@ async def get_calls_by_companies(company_ids: List[str]):
     
     return unique_calls 
 
-async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None):
+async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
+    """
+    Get paginated calls for a company, optionally filtered by campaign ID, campaign run ID, or lead ID
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter by
+        campaign_run_id: Optional UUID of the campaign run to filter by
+        lead_id: Optional UUID of the lead to filter by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        
+    Returns:
+        Dictionary containing paginated calls and metadata
+    """
     # Get calls with their related data using a join with campaigns
-    query = supabase.table('calls').select(
+    base_query = supabase.table('calls').select(
         'id,lead_id,product_id,duration,sentiment,summary,bland_call_id,has_meeting_booked,transcripts,recording_url,last_called_at,failure_reason,created_at,campaign_id,leads(*),campaigns!inner(*)'
     ).eq('campaigns.company_id', str(company_id))
     
     # Add campaign filter if provided
     if campaign_id:
-        query = query.eq('campaign_id', str(campaign_id))
+        base_query = base_query.eq('campaign_id', str(campaign_id))
     
     # Add campaign run filter if provided
     if campaign_run_id:
-        query = query.eq('campaign_run_id', str(campaign_run_id))
+        base_query = base_query.eq('campaign_run_id', str(campaign_run_id))
     
     # Add lead filter if provided
     if lead_id:
-        query = query.eq('lead_id', str(lead_id))
+        base_query = base_query.eq('lead_id', str(lead_id))
+
+    # Get total count
+    total_count_query = supabase.table('calls').select(
+        'id,leads(*),campaigns!inner(*)', count='exact'
+    ).eq('campaigns.company_id', str(company_id))
     
-    # Execute query with ordering
-    response = query.order('created_at', desc=True).execute()
+    if campaign_id:
+        total_count_query = total_count_query.eq('campaign_id', str(campaign_id))
+    if campaign_run_id:
+        total_count_query = total_count_query.eq('campaign_run_id', str(campaign_run_id))
+    if lead_id:
+        total_count_query = total_count_query.eq('lead_id', str(lead_id))
+        
+    count_response = total_count_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+
+    # Get paginated data
+    response = base_query.range(offset, offset + limit - 1).order('created_at', desc=True).execute()
     
     # Add lead_name, lead_phone_number and campaign_name to each call record
     calls = []
@@ -409,7 +439,13 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
         call['campaign_name'] = call['campaigns']['name'] if call.get('campaigns') else None
         calls.append(call)
     
-    return calls
+    return {
+        'items': calls,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }
 
 async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None):
     campaign_data = {
@@ -933,7 +969,7 @@ async def get_user_by_id(user_id: UUID):
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None):
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
     """
     Get email logs for a company, optionally filtered by campaign_id and/or lead_id
     
@@ -941,11 +977,15 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
         lead_id: Optional UUID of the lead to filter by
+        campaign_run_id: Optional UUID of the campaign run to filter by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
         
     Returns:
-        List of email logs with campaign and lead information
+        Dictionary containing paginated email logs and metadata
     """
-    query = supabase.table('email_logs')\
+    # Build base query
+    base_query = supabase.table('email_logs')\
         .select(
             'id, campaign_id, lead_id, sent_at, has_opened, has_replied, has_meeting_booked, ' +
             'campaigns!inner(name, company_id), ' +  # Using inner join to ensure campaign exists
@@ -953,17 +993,47 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
         )\
         .eq('campaigns.company_id', str(company_id))  # Filter by company_id in the join
     
+    # Add filters if provided
     if campaign_id:
-        query = query.eq('campaign_id', str(campaign_id))
+        base_query = base_query.eq('campaign_id', str(campaign_id))
     
     if lead_id:
-        query = query.eq('lead_id', str(lead_id))
+        base_query = base_query.eq('lead_id', str(lead_id))
     
     if campaign_run_id:
-        query = query.eq('campaign_run_id', str(campaign_run_id))
+        base_query = base_query.eq('campaign_run_id', str(campaign_run_id))
     
-    response = query.execute()
-    return response.data
+    # Get total count
+    total_count_query = supabase.table('email_logs')\
+        .select('id,campaigns!inner(name, company_id)', count='exact')\
+        .eq('campaigns.company_id', str(company_id))
+    
+    # Add the same filters to the count query
+    if campaign_id:
+        total_count_query = total_count_query.eq('campaign_id', str(campaign_id))
+    
+    if lead_id:
+        total_count_query = total_count_query.eq('lead_id', str(lead_id))
+    
+    if campaign_run_id:
+        total_count_query = total_count_query.eq('campaign_run_id', str(campaign_run_id))
+    
+    count_response = total_count_query.execute()
+    total = count_response.count if count_response.count is not None else 0
+    
+    # Calculate offset from page_number
+    offset = (page_number - 1) * limit
+    
+    # Get paginated data
+    response = base_query.range(offset, offset + limit - 1).order('sent_at', desc=True).execute()
+    
+    return {
+        'items': response.data,
+        'total': total,
+        'page': page_number,
+        'page_size': limit,
+        'total_pages': (total + limit - 1) // limit if total > 0 else 1
+    }
 
 async def soft_delete_company(company_id: UUID) -> bool:
     """
@@ -1738,37 +1808,68 @@ async def update_campaign_run_progress(
         logger.error(f"Error updating campaign run progress: {str(e)}")
         return None
 
-async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20) -> Dict[str, Any]:
     """
-    Get campaign runs for a company, optionally filtered by campaign_id.
+    Get paginated campaign runs for a company, optionally filtered by campaign_id.
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter runs by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
         
     Returns:
-        List of campaign run records including campaign name
+        Dictionary containing paginated campaign runs and metadata
     """
     try:
         if campaign_id:
             # If campaign_id is provided, directly filter campaign_runs and join with campaigns for the name
-            query = supabase.table('campaign_runs').select(
+            base_query = supabase.table('campaign_runs').select(
                 '*,campaigns!inner(name,type)'
+            ).eq('campaign_id', str(campaign_id))
+            
+            # Get total count
+            total_count_query = supabase.table('campaign_runs').select(
+                'id', count='exact'
             ).eq('campaign_id', str(campaign_id))
         else:
             # If only company_id is provided, join with campaigns to get all runs for the company
-            query = supabase.table('campaign_runs').select(
+            base_query = supabase.table('campaign_runs').select(
                 '*,campaigns!inner(name,type,company_id)'
             ).eq('campaigns.company_id', str(company_id))
             
+            # Get total count
+            total_count_query = supabase.table('campaign_runs').select(
+                'id,campaigns!inner(name,type,company_id)', count='exact'
+            ).eq('campaigns.company_id', str(company_id))
+            
+        # Get total count
+        count_response = total_count_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset from page_number
+        offset = (page_number - 1) * limit
+            
         # Execute query and sort by run_at in descending order
-        response = query.order('run_at', desc=True).execute()
-        logger.info(f"Campaign runs: {response.data}")
-        return response.data if response.data else []
+        response = base_query.order('run_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        return {
+            'items': response.data if response.data else [],
+            'total': total,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': (total + limit - 1) // limit if total > 0 else 1
+        }
         
     except Exception as e:
         logger.error(f"Error fetching campaign runs: {str(e)}")
-        return []
+        return {
+            'items': [],
+            'total': 0,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': 0
+        }
 
 async def update_lead_enrichment(lead_id: UUID, enriched_data: dict) -> Dict:
     """

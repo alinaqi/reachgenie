@@ -343,6 +343,15 @@ class CallInDB(BaseModel):
     campaign_name: Optional[str] = None
     failure_reason: Optional[str] = None
     last_called_at: Optional[datetime] = None
+    
+
+class PaginatedCallResponse(BaseModel):
+    items: List[CallInDB]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -673,6 +682,13 @@ class EmailLogResponse(BaseModel):
     has_opened: bool
     has_replied: bool
     has_meeting_booked: bool
+
+class PaginatedEmailLogResponse(BaseModel):
+    items: List[EmailLogResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 class EmailLogDetailResponse(BaseModel):
     message_id: Optional[str]
@@ -1100,6 +1116,13 @@ class CallQueueItem(BaseModel):
 
 class PaginatedCallQueueResponse(BaseModel):
     items: List[CallQueueItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+class PaginatedCampaignRunResponse(BaseModel):
+    items: List[CampaignRunResponse]
     total: int
     page: int
     page_size: int
