@@ -1810,37 +1810,68 @@ async def update_campaign_run_progress(
         logger.error(f"Error updating campaign run progress: {str(e)}")
         return None
 
-async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20) -> Dict[str, Any]:
     """
-    Get campaign runs for a company, optionally filtered by campaign_id.
+    Get paginated campaign runs for a company, optionally filtered by campaign_id.
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter runs by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
         
     Returns:
-        List of campaign run records including campaign name
+        Dictionary containing paginated campaign runs and metadata
     """
     try:
         if campaign_id:
             # If campaign_id is provided, directly filter campaign_runs and join with campaigns for the name
-            query = supabase.table('campaign_runs').select(
+            base_query = supabase.table('campaign_runs').select(
                 '*,campaigns!inner(name,type)'
+            ).eq('campaign_id', str(campaign_id))
+            
+            # Get total count
+            total_count_query = supabase.table('campaign_runs').select(
+                'id', count='exact'
             ).eq('campaign_id', str(campaign_id))
         else:
             # If only company_id is provided, join with campaigns to get all runs for the company
-            query = supabase.table('campaign_runs').select(
+            base_query = supabase.table('campaign_runs').select(
                 '*,campaigns!inner(name,type,company_id)'
             ).eq('campaigns.company_id', str(company_id))
             
+            # Get total count
+            total_count_query = supabase.table('campaign_runs').select(
+                'id,campaigns!inner(name,type,company_id)', count='exact'
+            ).eq('campaigns.company_id', str(company_id))
+            
+        # Get total count
+        count_response = total_count_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset from page_number
+        offset = (page_number - 1) * limit
+            
         # Execute query and sort by run_at in descending order
-        response = query.order('run_at', desc=True).execute()
-        logger.info(f"Campaign runs: {response.data}")
-        return response.data if response.data else []
+        response = base_query.order('run_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        return {
+            'items': response.data if response.data else [],
+            'total': total,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': (total + limit - 1) // limit if total > 0 else 1
+        }
         
     except Exception as e:
         logger.error(f"Error fetching campaign runs: {str(e)}")
-        return []
+        return {
+            'items': [],
+            'total': 0,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': 0
+        }
 
 async def update_lead_enrichment(lead_id: UUID, enriched_data: dict) -> Dict:
     """
