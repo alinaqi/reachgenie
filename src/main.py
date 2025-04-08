@@ -17,7 +17,6 @@ import uuid
 from pydantic import BaseModel
 from supabase import create_client, Client
 from src.utils.smtp_client import SMTPClient
-from src.utils.encryption import decrypt_password
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.services.campaigns import run_test_email_campaign, run_test_call_campaign
 from src.routes.web_agent import router as web_agent_router
@@ -115,7 +114,7 @@ from src.models import (
     ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest, ResetPasswordResponse,
     CampaignGenerationRequest, CampaignGenerationResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
-    EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
+    EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
     EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse, PaginatedCallResponse, PaginatedEmailLogResponse  # Add these imports
 )
