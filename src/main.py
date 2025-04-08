@@ -33,7 +33,6 @@ from src.auth import (
 from src.database import (
     create_user,
     get_user_by_email,
-    create_email_log_detail,
     update_campaign_run_progress,
     get_campaign_runs,
     get_email_conversation_history,
@@ -44,12 +43,10 @@ from src.database import (
     get_user_company_profile_by_id,
     get_user_company_profile,
     get_company_email_logs,
-    get_company_id_from_email_log,
     get_company_users,
     delete_user_company_profile,
     get_company_users,
     get_company_users,
-    create_email_log,
     get_leads_with_email,
     get_leads_with_phone,
     create_campaign_run,
@@ -84,7 +81,6 @@ from src.database import (
     create_upload_task,
     get_task_status,
     delete_lead,
-    update_email_log_has_replied,
     update_email_log_has_opened,
     update_lead_enrichment, update_campaign_run_status,get_leads_with_email,get_leads_with_phone,create_campaign_run, get_campaign_by_id,
     get_user_company_profile,
@@ -92,9 +88,6 @@ from src.database import (
     add_email_to_queue,
     get_email_throttle_settings,
     update_email_throttle_settings,
-    get_emails_sent_count,
-    get_pending_emails_count,
-    get_running_campaign_runs,
     update_queue_item_status,
     create_unverified_user,
     create_invite_token,
@@ -114,17 +107,17 @@ from src.database import (
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
 from src.models import (
-    UserBase, UserCreate, UserInDB, Token, UserUpdate, 
-    CompanyBase, CompanyCreate, CompanyInDB, ProductCreate, ProductInDB,
-    LeadBase, LeadCreate, LeadInDB, PaginatedLeadResponse, LeadResponse, LeadDetail,
-    CallBase, CallCreate, CallInDB, BlandWebhookPayload, EmailCampaignBase, EmailCampaignCreate,
+    UserCreate, UserInDB, Token, UserUpdate, 
+    CompanyCreate, CompanyInDB, ProductCreate, ProductInDB,
+    PaginatedLeadResponse, LeadResponse,
+    CallInDB, BlandWebhookPayload, EmailCampaignCreate,
     EmailCampaignInDB, AccountCredentialsUpdate, EmailVerificationRequest, EmailVerificationResponse,
     ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest, ResetPasswordResponse,
     CampaignGenerationRequest, CampaignGenerationResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogResponse, EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse, PaginatedCallResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -133,7 +126,6 @@ from src.services.perplexity_service import perplexity_service
 import os
 from src.utils.file_parser import FileParser
 from src.utils.calendar_utils import book_appointment as calendar_book_appointment
-from src.utils.email_utils import add_tracking_pixel
 from bugsnag.handlers import BugsnagHandler
 from src.perplexity_enrichment import PerplexityEnricher
 from src.services.email_generation import generate_company_insights, generate_email_content, get_or_generate_insights_for_lead
@@ -1494,16 +1486,30 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             detail=f"Failed to process webhook: {str(e)}"
         ) 
 
-@app.get("/api/companies/{company_id}/calls", response_model=List[CallInDB], tags=["Calls"])
+@app.get("/api/companies/{company_id}/calls", response_model=PaginatedCallResponse, tags=["Calls"])
 async def get_company_calls(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
     campaign_run_id: Optional[UUID] = Query(None, description="Filter calls by campaign run ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter calls by lead ID"),
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get all calls for a company, optionally filtered by campaign ID.
+    Get paginated list of calls for a company, optionally filtered by campaign ID, campaign run ID, or lead ID
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter by
+        campaign_run_id: Optional UUID of the campaign run to filter by
+        lead_id: Optional UUID of the lead to filter by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        current_user: Current authenticated user
+        
+    Returns:
+        Paginated list of calls
     """
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
@@ -1516,7 +1522,7 @@ async def get_company_calls(
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id, lead_id)
+    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id, lead_id, page_number, limit)
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
