@@ -115,7 +115,7 @@ from src.models import (
     CampaignGenerationRequest, CampaignGenerationResponse, CronofyAuthResponse,
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
-    CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
+    VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
     EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse, PaginatedCallResponse, PaginatedEmailLogResponse, PaginatedCampaignRunResponse  # Add these imports
 )
 from src.config import get_settings
