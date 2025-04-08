@@ -683,6 +683,13 @@ class EmailLogResponse(BaseModel):
     has_replied: bool
     has_meeting_booked: bool
 
+class PaginatedEmailLogResponse(BaseModel):
+    items: List[EmailLogResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
 class EmailLogDetailResponse(BaseModel):
     message_id: Optional[str]
     email_subject: Optional[str]
