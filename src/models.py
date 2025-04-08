@@ -343,6 +343,15 @@ class CallInDB(BaseModel):
     campaign_name: Optional[str] = None
     failure_reason: Optional[str] = None
     last_called_at: Optional[datetime] = None
+    
+
+class PaginatedCallResponse(BaseModel):
+    items: List[CallInDB]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
 class Token(BaseModel):
     access_token: str
     token_type: str
