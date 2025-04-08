@@ -116,7 +116,7 @@ from src.models import (
     CompanyInviteRequest, CompanyInviteResponse, InvitePasswordRequest, InviteTokenResponse,
     EmailLogDetailResponse, LeadSearchResponse, CompanyUserResponse,
     CampaignRunResponse, VoiceAgentSettings, CreateLeadRequest, CallScriptResponse, EmailScriptResponse, TestRunCampaignRequest,
-    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse, PaginatedCallResponse, PaginatedEmailLogResponse  # Add these imports
+    EmailThrottleSettings,TaskResponse, PaginatedEmailQueueResponse, PaginatedCallResponse, PaginatedEmailLogResponse, PaginatedCampaignRunResponse  # Add these imports
 )
 from src.config import get_settings
 from src.bland_client import BlandClient
@@ -3372,14 +3372,26 @@ async def delete_all_product_icps(
             detail=f"Failed to delete ICPs: {str(e)}"
         )
 
-@app.get("/api/companies/{company_id}/campaign-runs", response_model=List[CampaignRunResponse], tags=["Campaigns & Emails"])
+@app.get("/api/companies/{company_id}/campaign-runs", response_model=PaginatedCampaignRunResponse, tags=["Campaigns & Emails"])
 async def get_company_campaign_runs(
     company_id: UUID,
     campaign_id: Optional[UUID] = Query(None, description="Filter runs by campaign ID"),
+    page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get all campaign runs for a company, optionally filtered by campaign ID.
+    Get paginated campaign runs for a company, optionally filtered by campaign ID.
+    
+    Args:
+        company_id: UUID of the company
+        campaign_id: Optional UUID of the campaign to filter runs by
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
+        current_user: Current authenticated user
+        
+    Returns:
+        Paginated list of campaign runs
     """
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
@@ -3391,14 +3403,9 @@ async def get_company_campaign_runs(
         campaign = await get_campaign_by_id(campaign_id)
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        # Get campaign runs for the specific campaign
-        campaign_runs = await get_campaign_runs(company_id, campaign_id)
-    else:
-        # Get all campaigns for the company
-        campaign_runs = await get_campaign_runs(company_id)
     
-    return campaign_runs
+    # Get paginated campaign runs
+    return await get_campaign_runs(company_id, campaign_id, page_number, limit)
 
 @app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"])
 async def run_test_campaign(
