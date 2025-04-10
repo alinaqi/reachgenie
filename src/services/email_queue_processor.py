@@ -1,9 +1,6 @@
 import logging
-import json
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any
 from uuid import UUID
-import asyncio
 
 from src.database import (
     get_email_throttle_settings,
@@ -16,15 +13,12 @@ from src.database import (
     get_lead_by_id,
     get_company_by_id,
     update_campaign_run_status,
-    update_campaign_run_progress,
     create_email_log,
     create_email_log_detail,
-    get_email_queue_items,
-    get_product_by_id,
     is_email_in_do_not_email_list,
-    add_to_do_not_email_list,
     add_call_to_queue,
     get_email_log_by_id,
+    get_processed_leads_count,
     supabase
 )
 from src.services.call_generation import generate_call_script
@@ -139,7 +133,6 @@ async def process_company_email_queue(company_id: UUID):
         
         if not queue_items:
             logger.info(f"No pending emails in queue for company {company_id}")
-            return
         
         logger.info(f"Processing {len(queue_items)} emails for company {company_id}")
         
@@ -189,14 +182,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign or lead not found"
             )
-            
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
+
             return
         
         # Check for email addresses
@@ -209,13 +195,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message="Lead has no email address"
             )
 
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
             return
             
         # Verify campaign template
@@ -229,13 +208,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message="Campaign missing email template"
             )
 
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
             return
         
         # Check if email is in do_not_email list before proceeding
@@ -248,13 +220,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 error_message=f"Email {lead['email']} is in do_not_email list"
             )
 
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
             return
 
         try:
@@ -321,13 +286,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                     error_message=f"Failed to decrypt password: {str(e)}"
                 )
 
-                if processed_at is None and email_log_id is None:
-                    # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                    await update_campaign_run_progress(
-                        campaign_run_id=campaign_run_id,
-                        leads_processed=1,
-                        increment=True
-                    )
                 return
                 
             # Initialize SMTP client and send email
@@ -397,14 +355,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc)
             )
             
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
-            
         except Exception as e:
             logger.error(f"Error processing email for {lead.get('email')}: {str(e)}")
             
@@ -444,14 +394,6 @@ async def process_queued_email(queue_item: dict, company: dict):
                     })\
                     .eq('id', str(queue_item['id']))\
                     .execute()
-                
-                if processed_at is None and email_log_id is None:
-                    # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                    await update_campaign_run_progress(
-                        campaign_run_id=campaign_run_id,
-                        leads_processed=1,
-                        increment=True
-                    )
                     
     except Exception as e:
         logger.error(f"Error processing queued email {queue_item.get('id')}: {str(e)}")
@@ -464,14 +406,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Unexpected error: {str(e)}"
             )
-            
-            if processed_at is None and email_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and email log id is not set
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
+
         except:
             pass
 
@@ -495,7 +430,9 @@ async def check_campaign_runs_completion(company_id: UUID):
                     
                 if campaign_run.data and len(campaign_run.data) > 0:
                     campaign_run_data = campaign_run.data[0]
-                    leads_processed = campaign_run_data.get('leads_processed', 0) or 0
+
+                    # Get processed leads count based on campaign type
+                    leads_processed = await get_processed_leads_count(UUID(run['id']), "email")
                     leads_total = campaign_run_data.get('leads_total', 0) or 0
                     
                     # If we have processed all leads or there are no more pending emails,

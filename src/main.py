@@ -2373,7 +2373,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
     
     await update_campaign_run_progress(
         campaign_run_id=campaign_run_id,
-        leads_processed=0,
         leads_total=total_leads
     )
 
@@ -2423,13 +2422,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                 error_message="Failed to generate insights for lead"
                             )
 
-                            # Update campaign run progress
-                            await update_campaign_run_progress(
-                                campaign_run_id=campaign_run_id,
-                                leads_processed=1,
-                                increment=True
-                            )
-
                             leads_queued += 1
                             continue
                         
@@ -2450,13 +2442,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                 status='failed',
                                 processed_at=datetime.now(timezone.utc),
                                 error_message="Failed to generate email content for lead"
-                            )
-
-                            # Update campaign run progress
-                            await update_campaign_run_progress(
-                                campaign_run_id=campaign_run_id,
-                                leads_processed=1,
-                                increment=True
                             )
                             
                             leads_queued += 1
@@ -2539,7 +2524,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
 
     await update_campaign_run_progress(
         campaign_run_id=campaign_run_id,
-        leads_processed=0,
         leads_total=total_leads
     )
 
@@ -2590,8 +2574,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
                         leads_queued += 1
                         logger.info(f"Call for lead {lead['phone_number']} added to queue")
 
-                        # Initiate call with Bland AI
-                        #await initiate_call(campaign, lead, call_script, campaign_run_id)
                     else:
                         logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
 
@@ -2608,13 +2590,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
                             status='failed',
                             processed_at=datetime.now(timezone.utc),
                             error_message="Failed to generate call script for lead"
-                        )
-
-                        # Update campaign run progress
-                        await update_campaign_run_progress(
-                            campaign_run_id=campaign_run_id,
-                            leads_processed=1,
-                            increment=True
                         )
                         
                         leads_queued += 1
@@ -2635,13 +2610,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
                         status='failed',
                         processed_at=datetime.now(timezone.utc),
                         error_message="Failed to generate insights for lead"
-                    )
-
-                    # Update campaign run progress
-                    await update_campaign_run_progress(
-                        campaign_run_id=campaign_run_id,
-                        leads_processed=1,
-                        increment=True
                     )
 
                     leads_queued += 1

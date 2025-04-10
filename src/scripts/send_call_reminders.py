@@ -129,8 +129,6 @@ async def send_reminder_calls(company: Dict, reminder_type: str) -> None:
                     logger.info(f"Call Script: {call_script}")
 
                     if call_script:
-                        # Initiate call with Bland AI
-                        #await initiate_call(campaign=campaign, lead=lead, call_script=call_script, call_log_id=call_log_id)
 
                         # Add call to queue
                         await add_call_to_queue(

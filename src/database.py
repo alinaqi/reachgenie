@@ -1692,7 +1692,7 @@ async def get_lead_communication_history(lead_id: UUID):
         'call_history': call_history
     }
 
-async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0, leads_processed: int = 0):
+async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0):
     """
     Create a new campaign run record
     
@@ -1700,7 +1700,6 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
         campaign_id: UUID of the campaign
         status: Status of the run ('idle', 'running', 'completed')
         leads_total: Total number of leads available for this run
-        leads_processed: Number of leads processed so far (defaults to 0)
         
     Returns:
         Dict containing the created campaign run record
@@ -1710,7 +1709,6 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
             'campaign_id': str(campaign_id),
             'status': status,
             'leads_total': leads_total,
-            'leads_processed': leads_processed,
             'run_at': datetime.now(timezone.utc).isoformat()
         }
         
@@ -1756,18 +1754,14 @@ async def update_campaign_run_status(campaign_run_id: UUID, status: str):
 
 async def update_campaign_run_progress(
     campaign_run_id: UUID, 
-    leads_processed: int,
-    leads_total: Optional[int] = None,
-    increment: bool = False
+    leads_total: Optional[int] = None
 ):
     """
     Update the progress of a campaign run
     
     Args:
         campaign_run_id: UUID of the campaign run
-        leads_processed: Number of leads processed so far
         leads_total: Optional total number of leads for the campaign run
-        increment: If True, increment the leads_processed count instead of setting it
         
     Returns:
         Dict containing the updated campaign run record or None if update failed
@@ -1775,18 +1769,6 @@ async def update_campaign_run_progress(
     try:
         # Prepare update data
         update_data = {}
-        
-        if increment:
-            # Get current progress first
-            current = supabase.table('campaign_runs').select('leads_processed').eq('id', str(campaign_run_id)).execute()
-            if current.data and len(current.data) > 0:
-                current_count = current.data[0].get('leads_processed', 0) or 0
-                update_data['leads_processed'] = current_count + leads_processed
-            else:
-                # Fallback to setting value directly if we can't get current value
-                update_data['leads_processed'] = leads_processed
-        else:
-            update_data['leads_processed'] = leads_processed
             
         # Set total leads if provided
         if leads_total is not None:
@@ -1797,11 +1779,6 @@ async def update_campaign_run_progress(
         if not response.data:
             logger.error(f"Failed to update progress for campaign run {campaign_run_id}")
             return None
-            
-        # Check if leads_processed equals leads_total and update status if needed
-        if not increment and leads_total is not None and leads_processed >= leads_total:
-            # All leads have been processed, mark as completed
-            await update_campaign_run_status(campaign_run_id, "completed")
         
         return response.data[0]
     except Exception as e:
@@ -1853,8 +1830,37 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
         # Execute query and sort by run_at in descending order
         response = base_query.order('run_at', desc=True).range(offset, offset + limit - 1).execute()
         
+        # Get leads_processed count for each campaign run
+        campaign_runs_with_counts = []
+        for run in response.data if response.data else []:
+            campaign_type = run['campaigns']['type']
+            
+            # Determine which queue table to use based on campaign type
+            queue_table = None
+            if campaign_type == 'call':
+                queue_table = 'call_queue'
+            elif campaign_type in ['email', 'email_and_call']:
+                queue_table = 'email_queue'
+                
+            if queue_table:
+                # Get count of processed leads from appropriate queue
+                processed_count_query = supabase.table(queue_table).select(
+                    'id', count='exact'
+                ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent'])
+                
+                processed_count_response = processed_count_query.execute()
+                leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
+                
+                # Add leads_processed to the run data
+                run['leads_processed'] = leads_processed
+            else:
+                # Handle unknown campaign types
+                run['leads_processed'] = 0
+                
+            campaign_runs_with_counts.append(run)
+        
         return {
-            'items': response.data if response.data else [],
+            'items': campaign_runs_with_counts,
             'total': total,
             'page': page_number,
             'page_size': limit,
@@ -3515,3 +3521,39 @@ async def check_call_queue_exists(company_id: UUID, campaign_id: UUID, campaign_
     """Check if a record exists in call_queue table with the given parameters."""
     response = supabase.table('call_queue').select('*').eq('company_id', str(company_id)).eq('campaign_id', str(campaign_id)).eq('campaign_run_id', str(campaign_run_id)).eq('lead_id', str(lead_id)).execute()
     return response.data[0] if response.data else None
+
+async def get_processed_leads_count(campaign_run_id: UUID, campaign_type: str = 'email') -> int:
+    """
+    Get the count of processed leads (failed or sent) for a campaign run based on campaign type
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        campaign_type: Type of campaign ('email' or 'call')
+        
+    Returns:
+        int: Count of processed leads
+        
+    Raises:
+        ValueError: If campaign_type is not 'email' or 'call'
+    """
+    try:
+        # Determine which queue table to use based on campaign type
+        if campaign_type == 'call':
+            queue_table = 'call_queue'
+        elif campaign_type == 'email':
+            queue_table = 'email_queue'
+        else:
+            raise ValueError(f"Invalid campaign type: {campaign_type}. Must be 'email' or 'call'")
+        
+        # Get count from the appropriate queue
+        response = supabase.from_(queue_table)\
+            .select('*', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .in_('status', ['failed', 'sent'])\
+            .execute()
+            
+        return response.count if response.count is not None else 0
+        
+    except Exception as e:
+        logger.error(f"Error getting processed leads count: {str(e)}")
+        return 0
