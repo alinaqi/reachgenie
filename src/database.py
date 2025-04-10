@@ -1846,7 +1846,7 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
                 # Get count of processed leads from appropriate queue
                 processed_count_query = supabase.table(queue_table).select(
                     'id', count='exact'
-                ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent'])
+                ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent', 'skipped'])
                 
                 processed_count_response = processed_count_query.execute()
                 leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
@@ -3549,7 +3549,7 @@ async def get_processed_leads_count(campaign_run_id: UUID, campaign_type: str = 
         response = supabase.from_(queue_table)\
             .select('*', count='exact')\
             .eq('campaign_run_id', str(campaign_run_id))\
-            .in_('status', ['failed', 'sent'])\
+            .in_('status', ['failed', 'sent', 'skipped'])\
             .execute()
             
         return response.count if response.count is not None else 0
