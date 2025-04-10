@@ -6,6 +6,11 @@ from src.config import get_settings
 from src.prompts.company_info_prompt import COMPANY_INFO_PROMPT
 from src.prompts.company_insights_prompt import COMPANY_INSIGHTS_PROMPT
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 logger = logging.getLogger(__name__)
 
 class PerplexityService:
@@ -81,11 +86,11 @@ class PerplexityService:
                     if result and "choices" in result and result["choices"]:
                         try:
                             content = result["choices"][0]["message"]["content"]
-                            logger.debug(f"Raw content from Perplexity: {content}")
+                            logger.info(f"Raw content from Perplexity: {content}")
                             
                             # Clean the content before parsing
                             cleaned_content = self._clean_json_string(content)
-                            logger.debug(f"Cleaned content: {cleaned_content}")
+                            logger.info(f"Cleaned content: {cleaned_content}")
                             
                             company_info = json.loads(cleaned_content)
                             
@@ -170,7 +175,7 @@ class PerplexityService:
                     result = response.json()
                     if result and "choices" in result and result["choices"]:
                         content = result["choices"][0]["message"]["content"]
-                        logger.debug(f"Raw content from Perplexity: {content}")
+                        logger.info(f"Raw content from Perplexity: {content}")
                         return content.strip()
                 else:
                     logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
