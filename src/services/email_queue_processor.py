@@ -13,7 +13,6 @@ from src.database import (
     get_lead_by_id,
     get_company_by_id,
     update_campaign_run_status,
-    update_campaign_run_progress,
     create_email_log,
     create_email_log_detail,
     is_email_in_do_not_email_list,
