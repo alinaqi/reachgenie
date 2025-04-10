@@ -164,7 +164,7 @@ async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 500):
 
 async def retry_failed_calls(campaign_run_id: UUID, batch_size: int = 500):
     """
-    Background task to retry failed calls for a campaign run.
+    Background task to retry failed calls for a campaign run using keyset pagination.
     Processes calls in batches to avoid memory issues with large campaigns.
     
     Args:
@@ -181,15 +181,21 @@ async def retry_failed_calls(campaign_run_id: UUID, batch_size: int = 500):
         )
         logger.info(f"Updated campaign run {campaign_run_id} status to running")
 
-        offset = 0
+        last_seen_id = None
         while True:
-            # Get a batch of failed calls
-            response = supabase.table('call_queue')\
+            # Build base query
+            query = supabase.table('call_queue')\
                 .select('id')\
                 .eq('campaign_run_id', str(campaign_run_id))\
                 .eq('status', 'failed')\
-                .range(offset, offset + batch_size - 1)\
-                .execute()
+                .order('id')\
+                .limit(batch_size)
+            
+            # Add keyset condition if we have a last_seen_id
+            if last_seen_id:
+                query = query.gt('id', str(last_seen_id))
+                
+            response = query.execute()
             
             if not response.data:
                 break  # No more failed calls to process
@@ -206,7 +212,8 @@ async def retry_failed_calls(campaign_run_id: UUID, batch_size: int = 500):
                 except Exception as e:
                     logger.error(f"Failed to update status for call queue item {call['id']}: {str(e)}")
             
-            offset += batch_size
+            # Update last_seen_id for next iteration
+            last_seen_id = response.data[-1]['id']
             
         logger.info(f"Completed retrying failed calls for campaign run {campaign_run_id}")
         
