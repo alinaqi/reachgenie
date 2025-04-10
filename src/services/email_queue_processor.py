@@ -18,6 +18,7 @@ from src.database import (
     is_email_in_do_not_email_list,
     add_call_to_queue,
     get_email_log_by_id,
+    get_processed_leads_count,
     supabase
 )
 from src.services.call_generation import generate_call_script
@@ -430,7 +431,9 @@ async def check_campaign_runs_completion(company_id: UUID):
                     
                 if campaign_run.data and len(campaign_run.data) > 0:
                     campaign_run_data = campaign_run.data[0]
-                    leads_processed = campaign_run_data.get('leads_processed', 0) or 0
+
+                    # Get processed leads count based on campaign type
+                    leads_processed = await get_processed_leads_count(UUID(run['id']), "email")
                     leads_total = campaign_run_data.get('leads_total', 0) or 0
                     
                     # If we have processed all leads or there are no more pending emails,
