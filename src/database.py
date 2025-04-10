@@ -1692,7 +1692,7 @@ async def get_lead_communication_history(lead_id: UUID):
         'call_history': call_history
     }
 
-async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0, leads_processed: int = 0):
+async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_total: int = 0):
     """
     Create a new campaign run record
     
@@ -1700,7 +1700,6 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
         campaign_id: UUID of the campaign
         status: Status of the run ('idle', 'running', 'completed')
         leads_total: Total number of leads available for this run
-        leads_processed: Number of leads processed so far (defaults to 0)
         
     Returns:
         Dict containing the created campaign run record
@@ -1710,7 +1709,6 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
             'campaign_id': str(campaign_id),
             'status': status,
             'leads_total': leads_total,
-            'leads_processed': leads_processed,
             'run_at': datetime.now(timezone.utc).isoformat()
         }
         
@@ -1781,11 +1779,6 @@ async def update_campaign_run_progress(
         if not response.data:
             logger.error(f"Failed to update progress for campaign run {campaign_run_id}")
             return None
-            
-        # Check if leads_processed equals leads_total and update status if needed
-        #if not increment and leads_total is not None and leads_processed >= leads_total:
-            # All leads have been processed, mark as completed
-            #await update_campaign_run_status(campaign_run_id, "completed")
         
         return response.data[0]
     except Exception as e:
