@@ -1756,18 +1756,14 @@ async def update_campaign_run_status(campaign_run_id: UUID, status: str):
 
 async def update_campaign_run_progress(
     campaign_run_id: UUID, 
-    leads_processed: int,
-    leads_total: Optional[int] = None,
-    increment: bool = False
+    leads_total: Optional[int] = None
 ):
     """
     Update the progress of a campaign run
     
     Args:
         campaign_run_id: UUID of the campaign run
-        leads_processed: Number of leads processed so far
         leads_total: Optional total number of leads for the campaign run
-        increment: If True, increment the leads_processed count instead of setting it
         
     Returns:
         Dict containing the updated campaign run record or None if update failed
@@ -1775,18 +1771,6 @@ async def update_campaign_run_progress(
     try:
         # Prepare update data
         update_data = {}
-        
-        if increment:
-            # Get current progress first
-            current = supabase.table('campaign_runs').select('leads_processed').eq('id', str(campaign_run_id)).execute()
-            if current.data and len(current.data) > 0:
-                current_count = current.data[0].get('leads_processed', 0) or 0
-                update_data['leads_processed'] = current_count + leads_processed
-            else:
-                # Fallback to setting value directly if we can't get current value
-                update_data['leads_processed'] = leads_processed
-        else:
-            update_data['leads_processed'] = leads_processed
             
         # Set total leads if provided
         if leads_total is not None:
@@ -1799,9 +1783,9 @@ async def update_campaign_run_progress(
             return None
             
         # Check if leads_processed equals leads_total and update status if needed
-        if not increment and leads_total is not None and leads_processed >= leads_total:
+        #if not increment and leads_total is not None and leads_processed >= leads_total:
             # All leads have been processed, mark as completed
-            await update_campaign_run_status(campaign_run_id, "completed")
+            #await update_campaign_run_status(campaign_run_id, "completed")
         
         return response.data[0]
     except Exception as e:
