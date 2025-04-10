@@ -3521,3 +3521,39 @@ async def check_call_queue_exists(company_id: UUID, campaign_id: UUID, campaign_
     """Check if a record exists in call_queue table with the given parameters."""
     response = supabase.table('call_queue').select('*').eq('company_id', str(company_id)).eq('campaign_id', str(campaign_id)).eq('campaign_run_id', str(campaign_run_id)).eq('lead_id', str(lead_id)).execute()
     return response.data[0] if response.data else None
+
+async def get_processed_leads_count(campaign_run_id: UUID, campaign_type: str = 'email') -> int:
+    """
+    Get the count of processed leads (failed or sent) for a campaign run based on campaign type
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        campaign_type: Type of campaign ('email' or 'call')
+        
+    Returns:
+        int: Count of processed leads
+        
+    Raises:
+        ValueError: If campaign_type is not 'email' or 'call'
+    """
+    try:
+        # Determine which queue table to use based on campaign type
+        if campaign_type == 'call':
+            queue_table = 'call_queue'
+        elif campaign_type == 'email':
+            queue_table = 'email_queue'
+        else:
+            raise ValueError(f"Invalid campaign type: {campaign_type}. Must be 'email' or 'call'")
+        
+        # Get count from the appropriate queue
+        response = supabase.from_(queue_table)\
+            .select('*', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .in_('status', ['failed', 'sent'])\
+            .execute()
+            
+        return response.count if response.count is not None else 0
+        
+    except Exception as e:
+        logger.error(f"Error getting processed leads count: {str(e)}")
+        return 0
