@@ -1830,8 +1830,23 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
         # Execute query and sort by run_at in descending order
         response = base_query.order('run_at', desc=True).range(offset, offset + limit - 1).execute()
         
+        # Get leads_processed count for each campaign run
+        campaign_runs_with_counts = []
+        for run in response.data if response.data else []:
+            # Get count of processed leads from call_queue
+            processed_count_query = supabase.table('call_queue').select(
+                'id', count='exact'
+            ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent'])
+            
+            processed_count_response = processed_count_query.execute()
+            leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
+            
+            # Add leads_processed to the run data
+            run['leads_processed'] = leads_processed
+            campaign_runs_with_counts.append(run)
+        
         return {
-            'items': response.data if response.data else [],
+            'items': campaign_runs_with_counts,
             'total': total,
             'page': page_number,
             'page_size': limit,
