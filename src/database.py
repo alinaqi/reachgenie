@@ -1833,16 +1833,30 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
         # Get leads_processed count for each campaign run
         campaign_runs_with_counts = []
         for run in response.data if response.data else []:
-            # Get count of processed leads from call_queue
-            processed_count_query = supabase.table('call_queue').select(
-                'id', count='exact'
-            ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent'])
+            campaign_type = run['campaigns']['type']
             
-            processed_count_response = processed_count_query.execute()
-            leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
-            
-            # Add leads_processed to the run data
-            run['leads_processed'] = leads_processed
+            # Determine which queue table to use based on campaign type
+            queue_table = None
+            if campaign_type == 'call':
+                queue_table = 'call_queue'
+            elif campaign_type in ['email', 'email_and_call']:
+                queue_table = 'email_queue'
+                
+            if queue_table:
+                # Get count of processed leads from appropriate queue
+                processed_count_query = supabase.table(queue_table).select(
+                    'id', count='exact'
+                ).eq('campaign_run_id', str(run['id'])).in_('status', ['failed', 'sent'])
+                
+                processed_count_response = processed_count_query.execute()
+                leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
+                
+                # Add leads_processed to the run data
+                run['leads_processed'] = leads_processed
+            else:
+                # Handle unknown campaign types
+                run['leads_processed'] = 0
+                
             campaign_runs_with_counts.append(run)
         
         return {
