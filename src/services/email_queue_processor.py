@@ -133,7 +133,6 @@ async def process_company_email_queue(company_id: UUID):
         
         if not queue_items:
             logger.info(f"No pending emails in queue for company {company_id}")
-            return
         
         logger.info(f"Processing {len(queue_items)} emails for company {company_id}")
         
