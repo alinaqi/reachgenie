@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict
 from uuid import UUID
 import logging
-from datetime import datetime, timezone
 
 from src.auth import get_current_user
 from src.database import (
@@ -10,7 +9,8 @@ from src.database import (
     get_campaign_by_id,
     get_companies_by_user_id,
     update_queue_item_status,
-    update_call_queue_item_status
+    update_call_queue_item_status,
+    update_campaign_run_status
 )
 from src.models import CampaignRetryResponse
 
@@ -116,6 +116,13 @@ async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 500):
     """
     try:
         from src.database import supabase  # Import here to avoid circular imports
+
+        # Update campaign run status to running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+        logger.info(f"Updated campaign run {campaign_run_id} status to running")
         
         offset = 0
         while True:
