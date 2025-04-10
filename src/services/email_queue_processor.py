@@ -1,9 +1,6 @@
 import logging
-import json
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any
 from uuid import UUID
-import asyncio
 
 from src.database import (
     get_email_throttle_settings,
@@ -19,10 +16,7 @@ from src.database import (
     update_campaign_run_progress,
     create_email_log,
     create_email_log_detail,
-    get_email_queue_items,
-    get_product_by_id,
     is_email_in_do_not_email_list,
-    add_to_do_not_email_list,
     add_call_to_queue,
     get_email_log_by_id,
     supabase
