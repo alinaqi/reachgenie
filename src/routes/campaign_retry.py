@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from typing import Dict
 from uuid import UUID
 import logging
 
