@@ -8,11 +8,11 @@ from src.database import (
     get_lead_by_id,
     get_company_by_id,
     update_campaign_run_status,
-    update_campaign_run_progress,
     get_calls_initiated_count,
     get_next_calls_to_process,
     update_call_queue_item_status,
     get_pending_calls_count,
+    get_processed_leads_count,
     supabase
 )
 from src.services.call_generation import generate_call_script
@@ -95,7 +95,6 @@ async def process_company_call_queue(company_id: UUID):
         
         if not queue_items:
             logger.info(f"No pending calls in queue for company {company_id}")
-            return
         
         logger.info(f"Processing {len(queue_items)} calls for company {company_id}")
         
@@ -143,14 +142,7 @@ async def process_queued_call(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message="Campaign or lead not found"
             )
-            
-            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
+
             return
         
         # Check for phone numbers
@@ -163,13 +155,6 @@ async def process_queued_call(queue_item: dict, company: dict):
                 error_message="Lead has no phone number"
             )
 
-            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
             return
 
         try:
@@ -216,14 +201,6 @@ async def process_queued_call(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc)
             )
             
-            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
-            
         except Exception as e:
             logger.error(f"Error processing call for {lead.get('phone_number')}: {str(e)}")
             
@@ -262,14 +239,6 @@ async def process_queued_call(queue_item: dict, company: dict):
                     })\
                     .eq('id', str(queue_item['id']))\
                     .execute()
-                
-                if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
-                    # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign and it's not a reminder call
-                    await update_campaign_run_progress(
-                        campaign_run_id=campaign_run_id,
-                        leads_processed=1,
-                        increment=True
-                    )
 
     except Exception as e:
         logger.error(f"Error processing queued call {queue_item.get('id')}: {str(e)}")
@@ -282,14 +251,7 @@ async def process_queued_call(queue_item: dict, company: dict):
                 processed_at=datetime.now(timezone.utc),
                 error_message=f"Unexpected error: {str(e)}"
             )
-            
-            if processed_at is None and campaign['type'] != 'email_and_call' and call_log_id is None:
-                # Update campaign run progress only if the queue item was not processed before and it's not an "email_and_call" campaign
-                await update_campaign_run_progress(
-                    campaign_run_id=campaign_run_id,
-                    leads_processed=1,
-                    increment=True
-                )
+
         except:
             pass
 
@@ -313,7 +275,9 @@ async def check_calls_campaign_runs_completion(company_id: UUID):
                     
                 if campaign_run.data and len(campaign_run.data) > 0:
                     campaign_run_data = campaign_run.data[0]
-                    leads_processed = campaign_run_data.get('leads_processed', 0) or 0
+                    
+                    # Get processed leads count based on campaign type
+                    leads_processed = await get_processed_leads_count(UUID(run['id']), "call")
                     leads_total = campaign_run_data.get('leads_total', 0) or 0
                     
                     # If we have processed all leads or there are no more pending emails,

@@ -123,7 +123,7 @@ async def retry_failed_emails(campaign_run_id: UUID, batch_size: int = 500):
             status="running"
         )
         logger.info(f"Updated campaign run {campaign_run_id} status to running")
-        
+
         offset = 0
         while True:
             # Get a batch of failed emails
@@ -168,6 +168,13 @@ async def retry_failed_calls(campaign_run_id: UUID, batch_size: int = 500):
     try:
         from src.database import supabase  # Import here to avoid circular imports
         
+        # Update campaign run status to running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+        logger.info(f"Updated campaign run {campaign_run_id} status to running")
+
         offset = 0
         while True:
             # Get a batch of failed calls
