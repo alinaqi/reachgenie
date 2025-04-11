@@ -8,6 +8,7 @@ import csv
 import io
 import logging
 import bugsnag
+from enum import Enum
 from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
 from openai import AsyncOpenAI
@@ -3937,11 +3938,18 @@ async def send_campaign_summary_email_endpoint(
             detail=f"Failed to send campaign summary email: {str(e)}"
         )
 
+class EmailQueueStatus(str, Enum):
+    all = "all"
+    sent = "sent"
+    failed = "failed"
+    skipped = "skipped"
+
 @app.get("/api/campaigns/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse, tags=["Campaigns & Emails"])
 async def get_campaign_run_email_queues(
     campaign_run_id: UUID,
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    status: Optional[EmailQueueStatus] = Query(default=EmailQueueStatus.all, description="Filter by email status"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -3975,5 +3983,6 @@ async def get_campaign_run_email_queues(
     return await get_email_queues_by_campaign_run(
         campaign_run_id=campaign_run_id,
         page_number=page_number,
-        limit=limit
+        limit=limit,
+        status=status.value if status != EmailQueueStatus.all else None
     )
