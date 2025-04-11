@@ -3015,7 +3015,7 @@ async def process_do_not_email_csv_upload(
         logger.error(f"Error processing do-not-email CSV upload: {str(e)}")
         await update_task_status(task_id, "failed", str(e))
 
-async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20):
+async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20, status: Optional[str] = None):
     """
     Get paginated email queues for a specific campaign run
     
@@ -3023,6 +3023,7 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
         campaign_run_id: UUID of the campaign run
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
+        status: Filter by email status (optional)
         
     Returns:
         Dictionary containing paginated email queues and metadata
@@ -3032,10 +3033,19 @@ async def get_email_queues_by_campaign_run(campaign_run_id: UUID, page_number: i
         .select('*, leads!inner(name, email)')\
         .eq('campaign_run_id', str(campaign_run_id))
 
-    # Get total count
+    # Add status filter if provided
+    if status:
+        base_query = base_query.eq('status', status)
+
+    # Get total count with the same filters
     total_count_query = supabase.table('email_queue')\
         .select('id', count='exact')\
         .eq('campaign_run_id', str(campaign_run_id))
+        
+    # Add status filter to count query if provided
+    if status:
+        total_count_query = total_count_query.eq('status', status)
+        
     count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
 
@@ -3377,7 +3387,7 @@ async def get_pending_calls_count(campaign_run_id: UUID) -> int:
         logger.error(f"Error getting pending calls count: {str(e)}")
         return 0
 
-async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20):
+async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: int = 1, limit: int = 20, status: Optional[str] = None):
     """
     Get paginated call queues for a specific campaign run
     
@@ -3385,6 +3395,7 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
         campaign_run_id: UUID of the campaign run
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
+        status: Filter by status (sent, failed, or None for all)
         
     Returns:
         Dictionary containing paginated call queues and metadata
@@ -3394,10 +3405,19 @@ async def get_call_queues_by_campaign_run(campaign_run_id: UUID, page_number: in
         .select('*, leads!inner(name, phone_number)')\
         .eq('campaign_run_id', str(campaign_run_id))
 
-    # Get total count
+    # Add status filter if provided
+    if status:
+        base_query = base_query.eq('status', status)
+
+    # Get total count with the same filters
     total_count_query = supabase.table('call_queue')\
         .select('id', count='exact')\
         .eq('campaign_run_id', str(campaign_run_id))
+    
+    # Add status filter to count query if provided
+    if status:
+        total_count_query = total_count_query.eq('status', status)
+
     count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
 

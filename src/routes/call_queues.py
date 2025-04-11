@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import logging
+from enum import Enum
 
 from src.models import PaginatedCallQueueResponse
 from src.database import (
@@ -21,11 +22,17 @@ router = APIRouter(
     tags=["Campaigns & Calls"]
 )
 
+class CallQueueStatus(str, Enum):
+    all = "all"
+    sent = "sent"
+    failed = "failed"
+
 @router.get("/{campaign_run_id}/call-queues", response_model=PaginatedCallQueueResponse)
 async def get_campaign_run_call_queues(
     campaign_run_id: UUID,
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    status: Optional[CallQueueStatus] = Query(default=CallQueueStatus.all, description="Filter by call status"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -35,6 +42,7 @@ async def get_campaign_run_call_queues(
         campaign_run_id: UUID of the campaign run
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
+        status: Filter by call status (default: all)
         current_user: Current authenticated user
         
     Returns:
@@ -59,5 +67,6 @@ async def get_campaign_run_call_queues(
     return await get_call_queues_by_campaign_run(
         campaign_run_id=campaign_run_id,
         page_number=page_number,
-        limit=limit
+        limit=limit,
+        status=status.value if status != CallQueueStatus.all else None
     ) 
