@@ -27,6 +27,8 @@ class EmailQueueStatus(str, Enum):
     sent = "sent"
     failed = "failed"
     skipped = "skipped"
+    pending = "pending"
+    processing = "processing"
 
 @router.get("/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse)
 async def get_campaign_run_email_queues(
