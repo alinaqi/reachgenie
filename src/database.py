@@ -1851,11 +1851,21 @@ async def get_campaign_runs(company_id: UUID, campaign_id: Optional[UUID] = None
                 processed_count_response = processed_count_query.execute()
                 leads_processed = processed_count_response.count if processed_count_response.count is not None else 0
                 
-                # Add leads_processed to the run data
+                # Get count of failed items
+                failed_count_query = supabase.table(queue_table).select(
+                    'id', count='exact'
+                ).eq('campaign_run_id', str(run['id'])).eq('status', 'failed')
+                
+                failed_count_response = failed_count_query.execute()
+                failed_count = failed_count_response.count if failed_count_response.count is not None else 0
+                
+                # Add leads_processed and has_failed_items to the run data
                 run['leads_processed'] = leads_processed
+                run['has_failed_items'] = failed_count > 0
             else:
                 # Handle unknown campaign types
                 run['leads_processed'] = 0
+                run['has_failed_items'] = False
                 
             campaign_runs_with_counts.append(run)
         
