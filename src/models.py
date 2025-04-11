@@ -405,6 +405,7 @@ class CampaignRunResponse(BaseModel):
     run_at: datetime
     leads_total: int
     leads_processed: int
+    has_failed_items: bool
     status: str
     created_at: datetime
     campaigns: Dict[str, Any] = Field(
@@ -419,6 +420,7 @@ class CampaignRunResponse(BaseModel):
                 "run_at": "2024-03-15T00:00:00Z",
                 "leads_total": 100,
                 "leads_processed": 50,
+                "has_failed_items": False,
                 "status": "running",
                 "created_at": "2024-03-15T00:00:00Z",
                 "campaigns": {
