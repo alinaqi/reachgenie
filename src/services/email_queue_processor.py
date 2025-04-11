@@ -19,7 +19,8 @@ from src.database import (
     add_call_to_queue,
     get_email_log_by_id,
     get_processed_leads_count,
-    supabase
+    supabase,
+    check_existing_email_log_record
 )
 from src.services.call_generation import generate_call_script
 from src.services.email_generation import generate_email_content, get_or_generate_insights_for_lead
@@ -258,17 +259,37 @@ async def process_queued_email(queue_item: dict, company: dict):
                     return
             body_without_tracking_pixel = body
         
-            if email_log_id is None:
-                # Create email log only if it doesn't exist already
-                email_log = await create_email_log(
+            # Create email log only if it doesn't exist already
+            if email_log_id is not None:
+                email_log = await get_email_log_by_id(email_log_id)
+            else:
+                existing_log = await check_existing_email_log_record(
                     campaign_id=campaign_id,
                     lead_id=lead_id,
-                    sent_at=datetime.now(timezone.utc),
                     campaign_run_id=campaign_run_id
                 )
-                logger.info(f"Created email_log with id: {email_log['id']}")
-            else:
-                email_log = await get_email_log_by_id(email_log_id)
+                
+                if not existing_log:
+                    email_log = await create_email_log(
+                        campaign_id=campaign_id,
+                        lead_id=lead_id,
+                        sent_at=datetime.now(timezone.utc),
+                        campaign_run_id=campaign_run_id
+                    )
+                    logger.info(f"Created email_log with id: {email_log['id']}")
+                else:
+                    # If log exists but we don't have the ID, fetch it
+                    response = supabase.table('email_logs')\
+                        .select('id')\
+                        .eq('campaign_id', str(campaign_id))\
+                        .eq('lead_id', str(lead_id))\
+                        .eq('campaign_run_id', str(campaign_run_id))\
+                        .execute()
+                    if response.data:
+                        email_log = await get_email_log_by_id(UUID(response.data[0]['id']))
+                    else:
+                        logger.error("Failed to retrieve existing email log")
+                        raise Exception("Failed to retrieve existing email log")
 
             # Add tracking pixel to the email body
             final_body_with_tracking = add_tracking_pixel(body, email_log['id'])

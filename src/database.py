@@ -3557,3 +3557,32 @@ async def get_processed_leads_count(campaign_run_id: UUID, campaign_type: str = 
     except Exception as e:
         logger.error(f"Error getting processed leads count: {str(e)}")
         return 0
+
+async def check_existing_email_log_record(
+    campaign_id: UUID,
+    lead_id: UUID,
+    campaign_run_id: UUID
+) -> bool:
+    """
+    Check if an email log record exists for the given campaign, lead, and campaign run.
+    
+    Args:
+        campaign_id: UUID of the campaign
+        lead_id: UUID of the lead
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        bool: True if a record exists, False otherwise
+    """
+    try:
+        response = supabase.table('email_logs')\
+            .select('id')\
+            .eq('campaign_id', str(campaign_id))\
+            .eq('lead_id', str(lead_id))\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .execute()
+            
+        return len(response.data) > 0
+    except Exception as e:
+        logger.error(f"Error checking existing email log record: {str(e)}")
+        return False
