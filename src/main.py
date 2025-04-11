@@ -3943,6 +3943,8 @@ class EmailQueueStatus(str, Enum):
     sent = "sent"
     failed = "failed"
     skipped = "skipped"
+    pending = "pending"
+    processing = "processing"
 
 @app.get("/api/campaigns/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse, tags=["Campaigns & Emails"])
 async def get_campaign_run_email_queues(

@@ -26,6 +26,8 @@ class CallQueueStatus(str, Enum):
     all = "all"
     sent = "sent"
     failed = "failed"
+    pending = "pending"
+    processing = "processing"
 
 @router.get("/{campaign_run_id}/call-queues", response_model=PaginatedCallQueueResponse)
 async def get_campaign_run_call_queues(
