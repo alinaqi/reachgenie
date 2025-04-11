@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List
+from typing import Optional
 from uuid import UUID
 import logging
+from enum import Enum
 
 from src.models import PaginatedEmailQueueResponse
 from src.database import (
@@ -21,11 +22,18 @@ router = APIRouter(
     tags=["Campaigns & Emails"]
 )
 
+class EmailQueueStatus(str, Enum):
+    all = "all"
+    sent = "sent"
+    failed = "failed"
+    skipped = "skipped"
+
 @router.get("/{campaign_run_id}/email-queues", response_model=PaginatedEmailQueueResponse)
 async def get_campaign_run_email_queues(
     campaign_run_id: UUID,
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
+    status: Optional[EmailQueueStatus] = Query(default=EmailQueueStatus.all, description="Filter by email status"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -35,6 +43,7 @@ async def get_campaign_run_email_queues(
         campaign_run_id: UUID of the campaign run
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
+        status: Filter by email status (default: all)
         current_user: Current authenticated user
         
     Returns:
@@ -59,5 +68,6 @@ async def get_campaign_run_email_queues(
     return await get_email_queues_by_campaign_run(
         campaign_run_id=campaign_run_id,
         page_number=page_number,
-        limit=limit
+        limit=limit,
+        status=status.value if status != EmailQueueStatus.all else None
     ) 
