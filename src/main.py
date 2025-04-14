@@ -3448,7 +3448,10 @@ async def run_company_test_campaign(campaign_id: UUID, lead_contact: str):
             await run_test_call_campaign(campaign, company, lead_contact)
             
     except Exception as e:
-        logger.error(f"Unexpected error in run_company_test_campaign: {str(e)}")
+        if isinstance(e, HTTPException):
+            logger.error(f"Unexpected error in run_company_test_campaign: {e.detail}")
+        else:
+            logger.error(f"Unexpected error in run_company_test_campaign: {str(e)}", exc_info=True)
         return
 
 @app.post("/api/companies/{company_id}/leads/{lead_id}/enrich", response_model=dict, tags=["Leads"])
