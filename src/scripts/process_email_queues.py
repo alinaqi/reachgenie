@@ -36,7 +36,6 @@ async def main():
     try:
         logger.info("Starting email queue processing")
         await process_email_queues()
-        logger.info("Email queue processing completed")
     except Exception as e:
         logger.error(f"Error in email queue processing: {str(e)}")
         bugsnag.notify(e)

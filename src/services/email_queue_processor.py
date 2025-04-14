@@ -64,32 +64,43 @@ async def process_email_queues():
         start = 0
         
         while True:
-            # Get paginated list of companies with email credentials
-            response = supabase.from_('companies')\
-                .select('id')\
-                .not_.is_('account_email', 'null')\
-                .not_.is_('account_password', 'null')\
-                .eq('deleted', False)\
-                .range(start, start + page_size - 1)\
-                .execute()
+            try:
+                # Get paginated list of companies with email credentials
+                response = supabase.from_('companies')\
+                    .select('id')\
+                    .not_.is_('account_email', 'null')\
+                    .not_.is_('account_password', 'null')\
+                    .eq('deleted', False)\
+                    .range(start, start + page_size - 1)\
+                    .execute()
+                    
+                if not response.data:
+                    logger.info("No more companies to process")
+                    break
+                    
+                logger.info(f"Processing batch of {len(response.data)} companies")
                 
-            if not response.data:
-                logger.info("No more companies to process")
-                break
+                # Process queue for each company in this batch
+                for company in response.data:
+                    try:
+                        await process_company_email_queue(UUID(company['id']))
+                    except Exception as e:
+                        logger.error(f"Error processing company {company['id']}: {str(e)}")
+                        continue  # Continue with next company even if one fails
                 
-            logger.info(f"Processing batch of {len(response.data)} companies")
+                # Move to next page
+                start += page_size
+            except Exception as e:
+                logger.error(f"Error processing batch starting at {start}: {str(e)}")
+                break  # Break the loop if we can't process a batch
             
-            # Process queue for each company in this batch
-            for company in response.data:
-                await process_company_email_queue(UUID(company['id']))
-            
-            # Move to next page
-            start += page_size
-            
-        logger.info("Email queue processing completed")
+        #logger.info("Email queue processing completed")
     except Exception as e:
         logger.error(f"Error processing email queues: {str(e)}")
-        
+    finally:
+        # Ensure we log completion even if there was an error
+        logger.info("Email queue processing completed")
+
 
 async def process_company_email_queue(company_id: UUID):
     """Process the email queue for a specific company"""
@@ -295,7 +306,6 @@ async def process_queued_email(queue_item: dict, company: dict):
             # Add tracking pixel to the email body
             final_body_with_tracking = add_tracking_pixel(body, email_log['id'])
             
-            # Send email using SMTP client
             # Decrypt the password
             try:
                 decrypted_password = decrypt_password(company["account_password"])
@@ -311,11 +321,15 @@ async def process_queued_email(queue_item: dict, company: dict):
                 return
                 
             # Initialize SMTP client and send email
-            async with SMTPClient(
-                account_email=company["account_email"],
-                account_password=decrypted_password,
-                provider=company["account_type"]
-            ) as smtp_client:
+            smtp_client = None
+            try:
+                smtp_client = SMTPClient(
+                    account_email=company["account_email"],
+                    account_password=decrypted_password,
+                    provider=company["account_type"]
+                )
+                await smtp_client.connect()
+                
                 # Extract name from email or use company name as fallback
                 sender_name = None
                 if company.get("account_email"):
@@ -337,38 +351,44 @@ async def process_queued_email(queue_item: dict, company: dict):
                     references=f"{reference_ids} {message_id}" if reference_ids else (message_id if message_id is not None else None)
                 )
                 logger.info(f"Successfully sent email to {lead['email']} from {sender_name}")
+            finally:
+                if smtp_client:
+                    try:
+                        await smtp_client.disconnect()
+                    except Exception as smtp_cleanup_error:
+                        logger.warning(f"Error during SMTP cleanup: {str(smtp_cleanup_error)}")
                 
-                # Create email log detail
-                await create_email_log_detail(
-                    email_logs_id=email_log['id'],
-                    message_id=None,
-                    email_subject=subject,
-                    email_body=body_without_tracking_pixel,
-                    sender_type='assistant',
-                    sent_at=datetime.now(timezone.utc),
-                    from_name=sender_name,  # Use the same sender name here
-                    from_email=company['account_email'],
-                    to_email=lead['email']
+            # Create email log detail
+            await create_email_log_detail(
+                email_logs_id=email_log['id'],
+                message_id=None,
+                email_subject=subject,
+                email_body=body_without_tracking_pixel,
+                sender_type='assistant',
+                sent_at=datetime.now(timezone.utc),
+                from_name=sender_name,  # Use the same sender name here
+                from_email=company['account_email'],
+                to_email=lead['email']
+            )
+            logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
+
+            # Do not call if the email log id is set, because the email_log_id is set for reminder emails
+            if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_sent' and lead.get('phone_number') and email_log_id is None:
+                
+                logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
+
+                insights = await get_or_generate_insights_for_lead(lead)
+
+                # Add to call queue
+                call_script = await generate_call_script(lead, campaign, company, insights)
+
+                await add_call_to_queue(
+                    company_id=campaign['company_id'],
+                    campaign_id=campaign['id'],
+                    campaign_run_id=campaign_run_id,
+                    lead_id=lead['id'],
+                    call_script=call_script
                 )
-                logger.info(f"Created email log detail for email_log_id: {email_log['id']}")
-
-                # Do not call if the email log id is set, because the email_log_id is set for reminder emails
-                if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_sent' and lead.get('phone_number') and email_log_id is None:
-                    
-                    logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
-
-                    insights = await get_or_generate_insights_for_lead(lead)
-
-                    # Add to call queue
-                    call_script = await generate_call_script(lead, campaign, company, insights)
-
-                    await add_call_to_queue(
-                        company_id=campaign['company_id'],
-                        campaign_id=campaign['id'],
-                        campaign_run_id=campaign_run_id,
-                        lead_id=lead['id'],
-                        call_script=call_script
-                    )
             
             # Mark as sent
             await update_queue_item_status(
