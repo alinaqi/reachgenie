@@ -132,6 +132,7 @@ class SMTPClient:
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail=(
+                            f"Original error: {str(auth_error)}\n\n"
                             "Gmail login failed. If you're using 2-factor authentication, you need to:"
                             "\n1. Go to your Google Account settings"
                             "\n2. Enable 2-Step Verification if not already enabled"
