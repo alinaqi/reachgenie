@@ -6,6 +6,11 @@ from src.services.perplexity_service import perplexity_service
 from src.services.call_generation import generate_call_script
 from src.services.bland_calls import initiate_test_call
 import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 async def run_test_email_campaign(campaign: dict, company: dict, lead_contact: str):
