@@ -28,6 +28,7 @@ from src.utils.smtp_client import SMTPClient
 from src.utils.encryption import decrypt_password
 from src.utils.email_utils import add_tracking_pixel
 from src.config import get_settings
+from fastapi import HTTPException
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -385,11 +386,12 @@ async def process_queued_email(queue_item: dict, company: dict):
             
             if retry_count >= max_retries:
                 # Mark as failed after max retries
+                error_message = e.detail if isinstance(e, HTTPException) else str(e)
                 await update_queue_item_status(
                     queue_id=UUID(queue_item['id']),
                     status='failed',
                     processed_at=datetime.now(timezone.utc),
-                    error_message=str(e)
+                    error_message=error_message
                 )
 
                 supabase.table('email_queue')\
@@ -404,6 +406,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 current_time = datetime.now(timezone.utc)
                 
+                error_message = e.detail if isinstance(e, HTTPException) else str(e)
                 # Update retry count and reschedule
                 supabase.table('email_queue')\
                     .update({
@@ -411,7 +414,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                         'retry_count': retry_count,
                         'scheduled_for': next_attempt.isoformat(),
                         'processed_at': current_time.isoformat(),
-                        'error_message': str(e)
+                        'error_message': error_message
                     })\
                     .eq('id', str(queue_item['id']))\
                     .execute()
@@ -421,11 +424,12 @@ async def process_queued_email(queue_item: dict, company: dict):
         
         # Try to mark as failed
         try:
+            error_message = e.detail if isinstance(e, HTTPException) else str(e)
             await update_queue_item_status(
                 queue_id=UUID(queue_item['id']),
                 status='failed',
                 processed_at=datetime.now(timezone.utc),
-                error_message=f"Unexpected error: {str(e)}"
+                error_message=error_message
             )
 
         except:
