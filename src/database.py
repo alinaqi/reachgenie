@@ -2090,16 +2090,16 @@ async def get_email_throttle_settings(company_id: UUID) -> dict:
         else:
             # Return default settings
             return {
-                'max_emails_per_hour': 500,
-                'max_emails_per_day': 500,
+                'max_emails_per_hour': 300,
+                'max_emails_per_day': 300,
                 'enabled': True
             }
     except Exception as e:
         logger.error(f"Error getting email throttle settings: {str(e)}")
         # Return default settings on error
         return {
-            'max_emails_per_hour': 500,
-            'max_emails_per_day': 500,
+            'max_emails_per_hour': 300,
+            'max_emails_per_day': 300,
             'enabled': True
         }
 
