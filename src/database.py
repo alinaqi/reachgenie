@@ -3359,21 +3359,19 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     """
     try:
         # Get pending calls that are scheduled for now or earlier, and within working hours
-        response = supabase.from_('call_queue')\
+        query = supabase.table('call_queue')\
             .select('*')\
             .eq('company_id', str(company_id))\
             .eq('status', 'pending')\
             .not_('work_time_start', 'is', 'null')\
             .not_('work_time_end', 'is', 'null')\
-            .or_(
-                'and(work_time_start.lte.work_time_end,(now() at time zone \'UTC\').gte.work_time_start,(now() at time zone \'UTC\').lte.work_time_end)',
-                'and(work_time_start.gt.work_time_end,or((now() at time zone \'UTC\').gte.work_time_start,(now() at time zone \'UTC\').lte.work_time_end))'
-            )\
+            .or_('and(work_time_start.lte.work_time_end,now.gte.work_time_start,now.lte.work_time_end)')\
+            .or_('and(work_time_start.gt.work_time_end,or(now.gte.work_time_start,now.lte.work_time_end))')\
             .order('priority', desc=True)\
             .order('created_at')\
             .limit(limit)
             
-        result = response.execute()
+        result = query.execute()
         return result.data
     except Exception as e:
         logger.error(f"Error getting next calls to process: {str(e)}")
