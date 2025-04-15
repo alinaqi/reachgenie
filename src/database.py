@@ -3357,7 +3357,6 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     Returns:
         List of call queue items to process
     """
-    
     try:
         # Get pending calls that are scheduled for now or earlier, and within working hours
         response = supabase.table('call_queue')\
@@ -3376,10 +3375,10 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
             )\
             .order('priority', desc=True)\
             .order('created_at')\
-            .limit(limit)\
-            .execute()
+            .limit(limit)
             
-        return response.data
+        result = response.execute()
+        return result.data
     except Exception as e:
         logger.error(f"Error getting next calls to process: {str(e)}")
         return []
