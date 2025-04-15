@@ -6,7 +6,6 @@ import logging
 import math
 import csv
 import io
-from src.utils.llm import fetch_timezone
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -3218,8 +3217,7 @@ async def add_call_to_queue(
     campaign_run_id: UUID, 
     lead_id: UUID,
     call_script: str,
-    priority: int = 1, 
-    scheduled_for: Optional[datetime] = None,
+    priority: int = 1,
     call_log_id: Optional[UUID] = None
 ) -> dict:
     """
@@ -3232,18 +3230,24 @@ async def add_call_to_queue(
         lead_id: UUID of the lead
         call_script: Script of the call
         priority: Priority of the call (higher number = higher priority)
-        scheduled_for: When to process this call (defaults to now)
+        work_time_start: Start time of the work day
+        work_time_end: End time of the work day
         
     Returns:
         The created queue item
     """
+    from src.utils.llm import fetch_timezone,convert_to_utc
 
     lead = await get_lead_by_id(lead_id)
 
     timezone = await fetch_timezone(lead['phone_number'])
 
-    if scheduled_for is None:
-        scheduled_for = datetime.now(timezone.utc)
+    if timezone:
+        work_time_start = convert_to_utc(timezone, '09:00')
+        work_time_end = convert_to_utc(timezone, '17:00')
+
+    #if scheduled_for is None:
+        #scheduled_for = datetime.now(timezone.utc)
         
     queue_data = {
         'company_id': str(company_id),
@@ -3252,11 +3256,12 @@ async def add_call_to_queue(
         'lead_id': str(lead_id),
         'status': 'pending',
         'priority': priority,
-        'scheduled_for': scheduled_for.isoformat(),
         'retry_count': 0,
         'max_retries': 3,
         'call_script': call_script,
-        'call_log_id': str(call_log_id) if call_log_id else None
+        'call_log_id': str(call_log_id) if call_log_id else None,
+        'work_time_start': work_time_start if work_time_start else None,
+        'work_time_end': work_time_end if work_time_end else None
     }
     
     try:
