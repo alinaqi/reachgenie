@@ -3358,6 +3358,9 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
         List of call queue items to process
     """
     try:
+        # Get current UTC time in HH:MM:SS format
+        current_utc = datetime.now(timezone.utc).strftime('%H:%M:%S')
+        
         # Get pending calls that are scheduled for now or earlier, and within working hours
         response = supabase.table('call_queue')\
             .select('*')\
@@ -3365,8 +3368,7 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
             .eq('status', 'pending')\
             .not_.is_('work_time_start', 'null')\
             .not_.is_('work_time_end', 'null')\
-            .or_('and(work_time_start.lte.work_time_end,(now()).gte.work_time_start,(now()).lte.work_time_end)')\
-            .or_('and(work_time_start.gt.work_time_end,or((now()).gte.work_time_start,(now()).lte.work_time_end))')\
+            .or_(f"and(work_time_start.lte.work_time_end,{current_utc}.gte.work_time_start,{current_utc}.lte.work_time_end),and(work_time_start.gt.work_time_end,or({current_utc}.gte.work_time_start,{current_utc}.lte.work_time_end))")\
             .order('priority', desc=True)\
             .order('created_at')\
             .limit(limit)\
