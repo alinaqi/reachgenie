@@ -3370,8 +3370,8 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
             .filter('work_time_end', 'is not', 'null')\
             .filter(
                 'case when work_time_start <= work_time_end ' +
-                'then current_time::time between work_time_start and work_time_end ' +
-                'else current_time::time >= work_time_start or current_time::time <= work_time_end ' +
+                'then (current_time at time zone \'UTC\')::time between work_time_start and work_time_end ' +
+                'else (current_time at time zone \'UTC\')::time >= work_time_start or (current_time at time zone \'UTC\')::time <= work_time_end ' +
                 'end',
                 'eq',
                 True
