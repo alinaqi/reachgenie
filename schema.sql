@@ -308,6 +308,5 @@ CREATE TABLE IF NOT EXISTS call_queue (
     work_time_start TIME,
     work_time_end TIME,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    scheduled_for TIMESTAMP WITH TIME ZONE,
     processed_at TIMESTAMP WITH TIME ZONE
 );

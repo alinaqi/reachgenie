@@ -1111,7 +1111,6 @@ class CallQueueItem(BaseModel):
     max_retries: int
     error_message: Optional[str]
     created_at: datetime
-    scheduled_for: Optional[datetime]
     processed_at: Optional[datetime]
     lead_name: Optional[str]
     lead_phone: Optional[str]
