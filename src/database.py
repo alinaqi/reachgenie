@@ -3364,8 +3364,8 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
             .select('*')\
             .eq('company_id', str(company_id))\
             .eq('status', 'pending')\
-            .filter('work_time_start', 'is not', 'null')\
-            .filter('work_time_end', 'is not', 'null')\
+            .not_('work_time_start', 'is', 'null')\
+            .not_('work_time_end', 'is', 'null')\
             .filter(
                 'case when work_time_start <= work_time_end ' +
                 'then (current_time at time zone \'UTC\')::time between work_time_start and work_time_end ' +
