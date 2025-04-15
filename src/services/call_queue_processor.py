@@ -90,6 +90,12 @@ async def process_company_call_queue(company_id: UUID):
             logger.info(f"No capacity to initiate calls")
             return
         
+        # Check if it's weekend
+        current_day = datetime.now(timezone.utc).weekday()
+        if current_day >= 5:  # 5 is Saturday, 6 is Sunday
+            logger.info("Skipping call processing on weekends")
+            return
+
         # Get next batch of calls to process
         queue_items = await get_next_calls_to_process(company_id, batch_size)
         
