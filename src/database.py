@@ -3357,8 +3357,6 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     Returns:
         List of call queue items to process
     """
-    # Get the current time
-    now = datetime.now(timezone.utc)
     
     try:
         # Get pending calls that are scheduled for now or earlier, and within working hours
