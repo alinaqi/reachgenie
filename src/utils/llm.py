@@ -12,6 +12,9 @@ import logging
 from uuid import UUID
 import json
 from src.utils.calendar_utils import book_appointment
+import pytz
+from datetime import datetime, time
+from typing import Optional
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -250,3 +253,39 @@ async def fetch_timezone(phone_number: str) -> str:
             status_code=500,
             detail=f"Failed to identify timezone for phone number: {str(e)}"
         )
+
+def convert_to_utc(timezone_str: str, time_str: str) -> Optional[time]:
+    """
+    Convert a time from a specific timezone to UTC.
+    
+    Args:
+        timezone_str (str): Timezone in IANA format (e.g., 'America/Los_Angeles', 'Europe/Berlin')
+        time_str (str): Time string in 24-hour format (e.g., '09:00' or '14:30')
+    
+    Returns:
+        Optional[time]: The equivalent UTC time as a time object, or None if conversion fails
+        
+    Example:
+        >>> convert_to_utc('America/Los_Angeles', '09:00')
+        time(16, 0)  # Returns 16:00 UTC (during PDT)
+    """
+    try:
+        # Get the timezone object
+        tz = pytz.timezone(timezone_str)
+        
+        # Parse the time string
+        hour, minute = map(int, time_str.split(':'))
+        
+        # Create a datetime object for today with the given time
+        # We use today's date since we only care about the time conversion
+        local_dt = datetime.now(tz).replace(hour=hour, minute=minute, second=0, microsecond=0)
+        
+        # Convert to UTC
+        utc_dt = local_dt.astimezone(pytz.UTC)
+        
+        # Return just the time component
+        logger.info(f"Converted time {time_str} from {timezone_str} to UTC: {utc_dt.time()}")
+        return utc_dt.time()
+    except Exception as e:
+        logging.error(f"Error converting time {time_str} from {timezone_str} to UTC: {str(e)}")
+        return None

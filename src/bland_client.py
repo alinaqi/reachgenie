@@ -1,7 +1,6 @@
 import httpx
 from typing import Dict
 import logging
-from src.utils.llm import fetch_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +52,6 @@ class BlandClient:
         - Sentiment must ALWAYS be either 'positive', 'negative', never null or empty.
         - Reminder eligibility must ALWAYS be true or false, never null or empty.
         """
-
-        timezone = await fetch_timezone(phone_number)
 
         # Prepare request data with bland_secret_key
         call_request_data = {
@@ -132,9 +129,7 @@ class BlandClient:
                    "sentiment": "string",
                    "reminder_eligible": "boolean"
                 },
-                "record": record,  # Include record parameter with default value True
-                "timezone": timezone if timezone else None,
-                "dispatch_hours": {"start": "09:00","end": "17:00"}
+                "record": record  # Include record parameter with default value True
             }
                 
             # Final verification of the request_data

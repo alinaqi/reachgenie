@@ -90,6 +90,12 @@ async def process_company_call_queue(company_id: UUID):
             logger.info(f"No capacity to initiate calls")
             return
         
+        # Check if it's weekend
+        current_day = datetime.now(timezone.utc).weekday()
+        if current_day >= 5:  # 5 is Saturday, 6 is Sunday
+            logger.info("Skipping call processing on weekends")
+            return
+
         # Get next batch of calls to process
         queue_items = await get_next_calls_to_process(company_id, batch_size)
         
@@ -226,14 +232,12 @@ async def process_queued_call(queue_item: dict, company: dict):
             else:
                 # Schedule for retry with exponential backoff
                 retry_delay = 2 ** retry_count  # 2, 4, 8, 16... minutes
-                next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 current_time = datetime.now(timezone.utc)
                 # Update retry count and reschedule
                 supabase.table('call_queue')\
                     .update({
                         'status': 'pending',
                         'retry_count': retry_count,
-                        'scheduled_for': next_attempt.isoformat(),
                         'processed_at': current_time.isoformat(),
                         'error_message': str(e)
                     })\

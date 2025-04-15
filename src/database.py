@@ -3217,8 +3217,7 @@ async def add_call_to_queue(
     campaign_run_id: UUID, 
     lead_id: UUID,
     call_script: str,
-    priority: int = 1, 
-    scheduled_for: Optional[datetime] = None,
+    priority: int = 1,
     call_log_id: Optional[UUID] = None
 ) -> dict:
     """
@@ -3231,14 +3230,27 @@ async def add_call_to_queue(
         lead_id: UUID of the lead
         call_script: Script of the call
         priority: Priority of the call (higher number = higher priority)
-        scheduled_for: When to process this call (defaults to now)
+        work_time_start: Start time of the work day
+        work_time_end: End time of the work day
         
     Returns:
         The created queue item
     """
-    if scheduled_for is None:
-        scheduled_for = datetime.now(timezone.utc)
-        
+    from src.utils.llm import fetch_timezone,convert_to_utc
+
+    lead = await get_lead_by_id(lead_id)
+
+    timezone = await fetch_timezone(lead['phone_number'])
+    work_time_start = None
+    work_time_end = None
+
+    if timezone:
+        start_time = convert_to_utc(timezone, '09:00')
+        end_time = convert_to_utc(timezone, '17:00')
+        # Convert time objects to string format HH:MM:SS
+        work_time_start = start_time.strftime('%H:%M:%S') if start_time else None
+        work_time_end = end_time.strftime('%H:%M:%S') if end_time else None
+
     queue_data = {
         'company_id': str(company_id),
         'campaign_id': str(campaign_id),
@@ -3246,11 +3258,12 @@ async def add_call_to_queue(
         'lead_id': str(lead_id),
         'status': 'pending',
         'priority': priority,
-        'scheduled_for': scheduled_for.isoformat(),
         'retry_count': 0,
         'max_retries': 3,
         'call_script': call_script,
-        'call_log_id': str(call_log_id) if call_log_id else None
+        'call_log_id': str(call_log_id) if call_log_id else None,
+        'work_time_start': work_time_start,
+        'work_time_end': work_time_end
     }
     
     try:
@@ -3335,7 +3348,7 @@ async def get_calls_initiated_count(start_time: datetime) -> int:
 
 async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     """
-    Get the next batch of calls to process for a company
+    Get the next batch of calls to process for a company using a database function
     
     Args:
         company_id: UUID of the company
@@ -3344,20 +3357,14 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     Returns:
         List of call queue items to process
     """
-    # Get the current time
-    now = datetime.now(timezone.utc)
-    
     try:
-        # Get pending calls that are scheduled for now or earlier, ordered by priority and creation time
-        response = supabase.table('call_queue')\
-            .select('*')\
-            .eq('company_id', str(company_id))\
-            .eq('status', 'pending')\
-            .lte('scheduled_for', now.isoformat())\
-            .order('priority', desc=True)\
-            .order('created_at')\
-            .limit(limit)\
-            .execute()
+        response = supabase.rpc(
+            'get_next_calls_to_process',
+            {
+                'p_company_id': str(company_id),
+                'p_limit': limit
+            }
+        ).execute()
             
         return response.data
     except Exception as e:
