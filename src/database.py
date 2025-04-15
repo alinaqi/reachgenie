@@ -3361,12 +3361,21 @@ async def get_next_calls_to_process(company_id: UUID, limit: int) -> List[dict]:
     now = datetime.now(timezone.utc)
     
     try:
-        # Get pending calls that are scheduled for now or earlier, ordered by priority and creation time
+        # Get pending calls that are scheduled for now or earlier, and within working hours
         response = supabase.table('call_queue')\
             .select('*')\
             .eq('company_id', str(company_id))\
             .eq('status', 'pending')\
-            .lte('scheduled_for', now.isoformat())\
+            .filter('work_time_start', 'is not', 'null')\
+            .filter('work_time_end', 'is not', 'null')\
+            .filter(
+                'case when work_time_start <= work_time_end ' +
+                'then current_time::time between work_time_start and work_time_end ' +
+                'else current_time::time >= work_time_start or current_time::time <= work_time_end ' +
+                'end',
+                'eq',
+                True
+            )\
             .order('priority', desc=True)\
             .order('created_at')\
             .limit(limit)\
