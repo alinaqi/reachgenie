@@ -6,6 +6,7 @@ import logging
 import math
 import csv
 import io
+from src.utils.llm import fetch_timezone
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -3236,6 +3237,11 @@ async def add_call_to_queue(
     Returns:
         The created queue item
     """
+
+    lead = await get_lead_by_id(lead_id)
+
+    timezone = await fetch_timezone(lead['phone_number'])
+
     if scheduled_for is None:
         scheduled_for = datetime.now(timezone.utc)
         
