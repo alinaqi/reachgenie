@@ -3241,14 +3241,16 @@ async def add_call_to_queue(
     lead = await get_lead_by_id(lead_id)
 
     timezone = await fetch_timezone(lead['phone_number'])
+    work_time_start = None
+    work_time_end = None
 
     if timezone:
-        work_time_start = convert_to_utc(timezone, '09:00')
-        work_time_end = convert_to_utc(timezone, '17:00')
+        start_time = convert_to_utc(timezone, '09:00')
+        end_time = convert_to_utc(timezone, '17:00')
+        # Convert time objects to string format HH:MM:SS
+        work_time_start = start_time.strftime('%H:%M:%S') if start_time else None
+        work_time_end = end_time.strftime('%H:%M:%S') if end_time else None
 
-    #if scheduled_for is None:
-        #scheduled_for = datetime.now(timezone.utc)
-        
     queue_data = {
         'company_id': str(company_id),
         'campaign_id': str(campaign_id),
@@ -3260,8 +3262,8 @@ async def add_call_to_queue(
         'max_retries': 3,
         'call_script': call_script,
         'call_log_id': str(call_log_id) if call_log_id else None,
-        'work_time_start': work_time_start if work_time_start else None,
-        'work_time_end': work_time_end if work_time_end else None
+        'work_time_start': work_time_start,
+        'work_time_end': work_time_end
     }
     
     try:
