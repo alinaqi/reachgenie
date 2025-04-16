@@ -116,11 +116,21 @@ The function will schedule a 30-minute meeting at the specified time.""",
                }
             5. Always maintain a professional and courteous tone
             
+            Company Information (for signature):
+                - Company URL: {company.get('website', '')}
+                - Company Contact Person: {company.get('account_email').split('@')[0]}
+
             Format your responses with proper structure:
             - Start with a greeting on a new line
             - Use paragraphs to separate different points
             - Add a line break between paragraphs
             - End with a professional signature on a new line
+            - Use the Company Contact Person and Company URL in the signature
+            - Format the signature as:
+              Best wishes,
+              [Company Contact Person]
+              [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
+              [Company URL]
             
             Example format:
             Hello [Name],
@@ -128,9 +138,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
             [First point or response to their question]
             
             [Additional information or next steps if needed]
-            
-            Best regards,
-            Sales Team"""
+            """
         }
     ]
     

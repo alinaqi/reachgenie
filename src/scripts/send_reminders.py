@@ -9,7 +9,8 @@ from src.database import (
     get_email_logs_reminder, 
     get_first_email_detail,
     update_reminder_sent_status,
-    get_campaigns
+    get_campaigns,
+    get_company_by_id
 )
 from src.utils.encryption import decrypt_password
 from src.database import add_email_to_queue, get_email_log_by_id, get_campaign_by_id
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-async def get_reminder_content(original_email_body: str, reminder_type: str) -> str:
+async def get_reminder_content(original_email_body: str, reminder_type: str, company_info: Dict) -> str:
     """
     Generate reminder email content using OpenAI based on the original email
     """
@@ -43,16 +44,25 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
         "r9": "10th"
     }.get(reminder_type, "1st")  # Default to "1st" if unknown type
     
-    system_prompt = """You are an AI assistant helping to generate reminder emails. 
+    system_prompt = f"""You are an AI assistant helping to generate reminder emails. 
     Your task is to create a polite and professional follow-up email that references 
     the original email content while maintaining a courteous tone.
     
+    Company Information (for signature):
+    - Company URL: {company_info.get('website', '')}
+    - Company Contact Person: {company_info.get('account_email').split('@')[0]}
+
     Important guidelines:
     1. Generate ONLY the email body content
     2. DO NOT include any subject line
-    3. DO NOT include any signature, name, or "Best regards" type closings
-    4. DO NOT use placeholder values like [Your Name]
-    5. End the email naturally with the last sentence of the message"""
+    3. DO NOT use placeholder values like [Your Name]
+    4. Use the Company Contact Person and Company URL in the signature
+    5. Format the signature as:
+          Best wishes,
+          [Company Contact Person]
+          [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
+          [Company URL]
+    """
     
     user_prompt = f"""Please generate the {reminder_ordinal} reminder email body for the following original email.
     The reminder should:
@@ -64,7 +74,7 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
     
     Remember:
     - Only provide the email body content
-    - Do not include subject, signature, or any placeholder values
+    - Do not include subject or any placeholder values
     - End with the last meaningful sentence
     
     Original email:
@@ -83,7 +93,8 @@ async def get_reminder_content(original_email_body: str, reminder_type: str) -> 
         )
         
         reminder_content = response.choices[0].message.content.strip()
-        return reminder_content
+
+        return reminder_content.replace('\n', '<br>')
     except Exception as e:
         logger.error(f"Error generating reminder content: {str(e)}")
         return None
@@ -98,6 +109,8 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
     """
     try:
         company_id = UUID(company['id'])
+        company_info = await get_company_by_id(company_id)
+
         logger.info(f"Processing reminder emails for company '{company['name']}' ({company_id})")
         
         # Decrypt the password
@@ -127,7 +140,7 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     continue
                 
                 # Generate reminder content using LLM
-                reminder_content = await get_reminder_content(original_email['email_body'], reminder_type)
+                reminder_content = await get_reminder_content(original_email['email_body'], reminder_type, company_info)
                 if not reminder_content:
                     logger.error(f"Failed to generate reminder content for email log {email_log_id}")
                     continue
