@@ -3623,3 +3623,27 @@ async def check_existing_email_log_record(
     except Exception as e:
         logger.error(f"Error checking existing email log record: {str(e)}")
         return False
+
+async def get_call_queue_item(queue_id: UUID) -> Optional[dict]:
+    """
+    Get a call queue item by its ID
+    
+    Args:
+        queue_id: UUID of the call queue item
+        
+    Returns:
+        Call queue item if found, None otherwise
+    """
+    try:
+        response = supabase.table('call_queue')\
+            .select('*')\
+            .eq('id', str(queue_id))\
+            .execute()
+            
+        if not response.data:
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error getting call queue item: {str(e)}")
+        return None
