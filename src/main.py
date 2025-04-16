@@ -132,6 +132,7 @@ from src.services.email_generation import generate_company_insights, generate_em
 from src.services.call_generation import generate_call_script
 from src.routes import email_queues, call_queues
 from src.services.bland_calls import update_call_queue_on_error
+from src.routes.call_queue_status import router as call_queue_status_router
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -3881,6 +3882,7 @@ app.include_router(campaign_retry_router)
 # Include routers
 app.include_router(email_queues.router)
 app.include_router(call_queues.router)
+app.include_router(call_queue_status_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(

@@ -1128,4 +1128,19 @@ class PaginatedCampaignRunResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+class CallQueueRetryResponse(BaseModel):
+    """Response model for call queue retry endpoint"""
+    message: str
+    queue_id: UUID
+    status: str = "initiated"
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Call queue item retry initiated successfully",
+                "queue_id": "123e4567-e89b-12d3-a456-426614174000",
+                "status": "initiated"
+            }
+        }
  
