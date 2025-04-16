@@ -9,7 +9,7 @@ from src.database import (
     get_companies_by_user_id,
     update_call_queue_item_status
 )
-from src.models import CallQueueItem
+from src.models import CallQueueRetryResponse
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ router = APIRouter(
     tags=["Campaigns & Calls"]
 )
 
-@router.post("/{queue_id}/retry", response_model=CallQueueItem)
+@router.post("/{queue_id}/retry", response_model=CallQueueRetryResponse)
 async def retry_call_queue_item(
     queue_id: UUID,
     current_user: dict = Depends(get_current_user)
@@ -33,7 +33,7 @@ async def retry_call_queue_item(
         current_user: Current authenticated user
         
     Returns:
-        Updated call queue item
+        CallQueueRetryResponse with status and details
     """
     # Get the call queue item
     queue_item = await get_call_queue_item(queue_id)
@@ -56,13 +56,17 @@ async def retry_call_queue_item(
 
     try:
         # Update the status to pending
-        updated_item = await update_call_queue_item_status(
+        await update_call_queue_item_status(
             queue_id=queue_id,
             status='pending',
             retry_count=0
         )
         
-        return updated_item
+        return CallQueueRetryResponse(
+            message="Call queue item retry initiated successfully",
+            queue_id=queue_id,
+            status="initiated"
+        )
     except Exception as e:
         logger.error(f"Error retrying call queue item {queue_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retry call queue item") 
