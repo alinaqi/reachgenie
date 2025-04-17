@@ -51,6 +51,7 @@ async def get_reminder_content(original_email_body: str, reminder_type: str, com
     Company Information (for signature):
     - Company URL: {company_info.get('website', '')}
     - Company Contact Person: {company_info.get('account_email').split('@')[0]}
+    - Company Calendar Link: {company_info.get('custom_calendar_link', '')}
 
     Important guidelines:
     1. Generate ONLY the email body content
@@ -62,6 +63,9 @@ async def get_reminder_content(original_email_body: str, reminder_type: str, com
           [Company Contact Person]
           [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
           [Company URL]
+
+          Use the text "For appointment booking:" in the signature for appointment booking, and after that add the Company Calendar Link if provided.
+          e.g. For appointment booking: https://calendly.com/reachgenie/30min
     """
     
     user_prompt = f"""Please generate the {reminder_ordinal} reminder email body for the following original email.

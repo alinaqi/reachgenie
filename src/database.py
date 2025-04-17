@@ -3647,3 +3647,24 @@ async def get_call_queue_item(queue_id: UUID) -> Optional[dict]:
     except Exception as e:
         logger.error(f"Error getting call queue item: {str(e)}")
         return None
+
+async def update_company_custom_calendar(company_id: UUID, custom_calendar_link: str):
+    """
+    Update custom calendar link for a company
+    
+    Args:
+        company_id: UUID of the company
+        custom_calendar_link: New calendar link to set
+        
+    Returns:
+        Updated company data or None if update failed
+    """
+    try:
+        response = supabase.table('companies')\
+            .update({'custom_calendar_link': custom_calendar_link})\
+            .eq('id', str(company_id))\
+            .execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating company custom calendar link: {str(e)}")
+        return None
