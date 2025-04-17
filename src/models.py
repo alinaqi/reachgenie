@@ -206,6 +206,7 @@ class CompanyBase(BaseModel):
         "total_campaigns": 5
     }])
     total_leads: Optional[int] = None
+    custom_calendar_link: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
     pass
