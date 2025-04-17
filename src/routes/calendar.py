@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
 from pydantic import BaseModel
 from src.auth import get_current_user
-from src.database import get_user_company_profile, get_company_by_id
-from src.config import supabase
+from src.database import get_user_company_profile, get_company_by_id, update_company_custom_calendar
 
 # Create router
 calendar_router = APIRouter(
@@ -33,16 +32,10 @@ async def update_custom_calendar(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    try:
-        # Update the custom calendar link
-        response = supabase.table('companies')\
-            .update({'custom_calendar_link': calendar_data.custom_calendar_link})\
-            .eq('id', str(company_id))\
-            .execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=500, detail="Failed to update custom calendar link")
-        
-        return {"success": True, "message": "Custom calendar link updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update custom calendar link: {str(e)}") 
+    # Update the custom calendar link
+    updated_company = await update_company_custom_calendar(company_id, calendar_data.custom_calendar_link)
+    
+    if not updated_company:
+        raise HTTPException(status_code=500, detail="Failed to update custom calendar link")
+    
+    return {"success": True, "message": "Custom calendar link updated successfully"} 
