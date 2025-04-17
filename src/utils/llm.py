@@ -119,6 +119,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
             Company Information (for signature):
                 - Company URL: {company.get('website', '')}
                 - Company Contact Person: {company.get('account_email').split('@')[0]}
+                - Company Calendar Link: {company.get('custom_calendar_link', '')}
 
             Format your responses with proper structure:
             - Start with a greeting on a new line
@@ -131,6 +132,9 @@ The function will schedule a 30-minute meeting at the specified time.""",
               [Company Contact Person]
               [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
               [Company URL]
+              
+              Use the text "For appointment booking:" in the signature for appointment booking, and after that add the Company Calendar Link if provided.
+              e.g. For appointment booking: https://calendly.com/reachgenie/30min
             
             Example format:
             Hello [Name],

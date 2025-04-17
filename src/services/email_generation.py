@@ -167,6 +167,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         Company Information (for signature):
         - Company URL: {company.get('website', '')}
         - Company Contact Person: {company.get('account_email').split('@')[0]}
+        - Company Calendar Link: {company.get('custom_calendar_link', '')}
 
         Create two pieces of content:
         1. Email Subject: Compelling subject line mentioning our product and key benefits. Key guidelines for subject:
@@ -202,6 +203,9 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
           [Company Contact Person]
           [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
           [Company URL with utm_source=reachgenie]
+
+          Use the text "For appointment booking:" in the signature for appointment booking, and after that add the Company Calendar Link if provided. Always add a line break before this text.
+          e.g. For appointment booking: https://calendly.com/reachgenie/30min
         - IMPORTANT: In all urls, use utm_source=reachgenie
         {f'''
         - Use the detailed product information to craft a more compelling message
