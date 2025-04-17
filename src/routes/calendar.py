@@ -7,7 +7,7 @@ from src.database import get_user_company_profile, get_company_by_id, update_com
 # Create router
 calendar_router = APIRouter(
     prefix="/api/companies",
-    tags=["Calendar Management"]
+    tags=["Calendar"]
 )
 
 class CustomCalendarUpdate(BaseModel):
