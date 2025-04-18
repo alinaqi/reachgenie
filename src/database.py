@@ -3238,17 +3238,18 @@ async def add_call_to_queue(
     """
     from src.utils.llm import fetch_timezone,convert_to_utc
 
-    # First check if a record already exists
-    existing_record = await check_existing_call_queue_record(
-        company_id=company_id,
-        campaign_id=campaign_id,
-        campaign_run_id=campaign_run_id,
-        lead_id=lead_id
-    )
-    
-    if existing_record:
-        logger.info(f"Call queue record already exists for lead {lead_id} in campaign {campaign_id}")
-        return None
+    if call_log_id is None:
+        # First check if a record already exists
+        existing_record = await check_existing_call_queue_record(
+            company_id=company_id,
+            campaign_id=campaign_id,
+            campaign_run_id=campaign_run_id,
+            lead_id=lead_id
+        )
+        
+        if existing_record:
+            logger.info(f"Call queue record already exists for lead {lead_id} in campaign {campaign_id}")
+            return None
 
     lead = await get_lead_by_id(lead_id)
     work_time_start = None
