@@ -3238,18 +3238,33 @@ async def add_call_to_queue(
     """
     from src.utils.llm import fetch_timezone,convert_to_utc
 
-    lead = await get_lead_by_id(lead_id)
+    # First check if a record already exists
+    existing_record = await check_existing_call_queue_record(
+        company_id=company_id,
+        campaign_id=campaign_id,
+        campaign_run_id=campaign_run_id,
+        lead_id=lead_id
+    )
+    
+    if existing_record:
+        logger.info(f"Call queue record already exists for lead {lead_id} in campaign {campaign_id}")
+        return None
 
-    timezone = await fetch_timezone(lead['phone_number'])
+    lead = await get_lead_by_id(lead_id)
     work_time_start = None
     work_time_end = None
 
-    if timezone:
-        start_time = convert_to_utc(timezone, '09:00')
-        end_time = convert_to_utc(timezone, '17:00')
-        # Convert time objects to string format HH:MM:SS
-        work_time_start = start_time.strftime('%H:%M:%S') if start_time else None
-        work_time_end = end_time.strftime('%H:%M:%S') if end_time else None
+    try:
+        timezone = await fetch_timezone(lead['phone_number'])
+        if timezone:
+            start_time = convert_to_utc(timezone, '09:00')
+            end_time = convert_to_utc(timezone, '17:00')
+            # Convert time objects to string format HH:MM:SS
+            work_time_start = start_time.strftime('%H:%M:%S') if start_time else None
+            work_time_end = end_time.strftime('%H:%M:%S') if end_time else None
+    except Exception as e:
+        logger.error(f"Error fetching timezone for lead {lead_id}: {str(e)}")
+        # Continue with None values for work times
 
     queue_data = {
         'company_id': str(company_id),
