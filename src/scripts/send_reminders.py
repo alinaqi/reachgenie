@@ -58,7 +58,8 @@ async def get_reminder_content(original_email_body: str, reminder_type: str, com
     2. DO NOT include any subject line
     3. DO NOT use placeholder values like [Your Name]
     4. Use the Company Contact Person and Company URL in the signature
-    5. Format the signature as:
+    5. Links should be formatted as <a href="link">link</a> instead of markdown format
+    6. Format the signature as:
           Best wishes,
           [Company Contact Person]
           [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
@@ -97,7 +98,8 @@ async def get_reminder_content(original_email_body: str, reminder_type: str, com
         )
         
         reminder_content = response.choices[0].message.content.strip()
-
+        logger.info(f"Reply from OpenAI Call: {reminder_content}")
+        
         return reminder_content.replace('\n', '<br>')
     except Exception as e:
         logger.error(f"Error generating reminder content: {str(e)}")
