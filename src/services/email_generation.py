@@ -175,7 +175,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - Create curiosity without being clickbait
         - Include personalization when possible (name, company)
         - Align with the email content (don't mislead)
-        - Use lowercase for a more personal feel
+        - Use lowercase for a more personal feel, however first word of the subject should be uppercase
         - Avoid spam trigger words and excessive punctuation
         Examples:
         - "Intro from [mutual connection]"
