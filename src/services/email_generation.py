@@ -198,6 +198,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         - End with a professional signature using the company url and contact person as provided above
         - DO NOT use placeholders like 'Your Name' or 'Your Position'
         - Use the Company Contact Person and Company URL in the signature
+        - Links should be formatted as <a href="link">link</a> instead of markdown format
         - Format the signature as:
           Best wishes,
           [Company Contact Person]

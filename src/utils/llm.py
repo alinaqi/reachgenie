@@ -115,6 +115,8 @@ The function will schedule a 30-minute meeting at the specified time.""",
                '- If a customer asks for a meeting, politely inform them that our calendar system is not currently set up and ask them to suggest a few time slots via email'
                }
             5. Always maintain a professional and courteous tone
+            6. Avoid unnecessary or too many line breaks
+            7. Links should be formatted as <a href="link">link</a> instead of markdown format
             
             Company Information (for signature):
                 - Company URL: {company.get('website', '')}
@@ -122,10 +124,9 @@ The function will schedule a 30-minute meeting at the specified time.""",
                 - Company Calendar Link: {company.get('custom_calendar_link', '')}
 
             Format your responses with proper structure:
-            - Start with a greeting on a new line
-            - Use paragraphs to separate different points
-            - Add a line break between paragraphs
-            - End with a professional signature on a new line
+            - Start with a greeting
+            - Avoid unnecessary or too many line breaks
+            - End with a professional signature
             - Use the Company Contact Person and Company URL in the signature
             - Format the signature as:
               Best wishes,
@@ -138,9 +139,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
             
             Example format:
             Hello [Name],
-            
             [First point or response to their question]
-            
             [Additional information or next steps if needed]
             """
         }
@@ -211,13 +210,16 @@ The function will schedule a 30-minute meeting at the specified time.""",
     else:
         ai_reply = response_message.content.strip()
     
+    logger.info(f"Reply from OpenAI Call: {ai_reply}")
+
     # Format AI reply with HTML
     html_template = """
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         {}
     </div>
     """
-    formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
+    #formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
+    formatted_reply = ai_reply.replace('\n', '<br>')
     
     return formatted_reply
 
