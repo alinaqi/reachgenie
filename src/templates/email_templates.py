@@ -3,6 +3,8 @@ Email templates for system-wide use.
 Each template is a function that returns HTML content with required parameters.
 """
 
+from typing import List, Dict
+
 def get_base_template(content: str) -> str:
     """
     Base template that wraps content with common styling and structure.
@@ -341,6 +343,79 @@ def get_company_addition_template(user_name: str, company_name: str, inviter_nam
             <p>{inviter_name} has added you to "{company_name}" on ReachGenie. You can now access the company's dashboard and collaborate with your team members.</p>
             <p>To access your new company workspace, simply log in to your ReachGenie account and select "{company_name}" from your company list.</p>
             <p>Best regards,<br>ReachGenie Support Team</p>
+        </div>
+    """
+    return get_base_template(content)
+
+def get_email_campaign_stats_template(
+    campaign_name: str,
+    company_name: str,
+    date: str,
+    emails_sent: int,
+    emails_opened: int,
+    emails_replied: int,
+    meetings_booked: int,
+    engaged_leads: List[Dict[str, str]]
+) -> str:
+    """
+    Campaign statistics email template.
+    
+    Args:
+        campaign_name: Name of the campaign
+        company_name: Name of the company
+        date: Date for which stats are being shown
+        emails_sent: Number of emails sent
+        emails_opened: Number of emails opened
+        emails_replied: Number of emails replied to
+        meetings_booked: Number of meetings booked
+        engaged_leads: List of dictionaries containing lead details (name, company, job_title)
+        
+    Returns:
+        str: Complete HTML template for campaign statistics email
+    """
+    # Generate engaged leads HTML
+    engaged_leads_html = ""
+    if engaged_leads:
+        engaged_leads_html = """
+            <div class="section">
+                <h2>Top Engaged Leads</h2>
+                <div style="margin-left: 10px;">
+        """
+        for lead in engaged_leads:
+            engaged_leads_html += f"""
+                <div style="margin-bottom: 15px;">
+                    <strong>{lead['name']}</strong><br>
+                    {lead['job_title']} at {lead['company']}
+                </div>
+            """
+        engaged_leads_html += """
+                </div>
+            </div>
+        """
+
+    content = f"""
+        <div class="header">
+            <h1>Campaign Performance Update</h1>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>Here's your daily performance update for the campaign "<strong>{campaign_name}</strong>" at {company_name} for {date}:</p>
+            
+            <div class="section">
+                <h2>Campaign Statistics</h2>
+                <div style="margin-left: 10px;">
+                    <p><strong>Emails Sent:</strong> {emails_sent}</p>
+                    <p><strong>Emails Opened:</strong> {emails_opened}</p>
+                    <p><strong>Emails Replied:</strong> {emails_replied}</p>
+                    <p><strong>Meetings Booked:</strong> {meetings_booked}</p>
+                </div>
+            </div>
+            
+            {engaged_leads_html}
+            
+            <p>You can view more detailed statistics and manage your campaign in the ReachGenie dashboard.</p>
+            
+            <p>Best regards,<br>ReachGenie Team</p>
         </div>
     """
     return get_base_template(content)
