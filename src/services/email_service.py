@@ -308,7 +308,7 @@ class EmailService:
             engaged_leads=engaged_leads
         )        
         
-        logger.info(f"html_content: {html_content}")
+        #logger.info(f"html_content: {html_content}")
 
         return await self.send_email(
             to_email=to_email,
