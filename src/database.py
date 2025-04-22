@@ -3922,3 +3922,27 @@ async def get_lead_details_for_email_interactions(
     except Exception as e:
         logger.error(f"Error getting lead details for email interactions: {str(e)}")
         return []
+
+async def update_campaign_schedule_status(schedule_id: UUID, status: str = "sent") -> bool:
+    """
+    Update the status of a campaign message schedule record.
+    
+    Args:
+        schedule_id: UUID of the schedule record
+        status: New status to set (default: "sent")
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('campaign_message_schedule')\
+            .update({
+                'status': status
+            })\
+            .eq('id', str(schedule_id))\
+            .execute()
+            
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating campaign schedule status: {str(e)}")
+        return False
