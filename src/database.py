@@ -3827,3 +3827,50 @@ async def get_call_sent_count(campaign_run_id: UUID, date: datetime, has_meeting
     except Exception as e:
         logger.error(f"Error getting call sent count: {str(e)}")
         return 0
+
+async def get_lead_details_for_email_interactions(
+    campaign_run_id: UUID,
+    date: datetime,
+    limit: int = 3
+) -> List[dict]:
+    """
+    Get lead details for emails that were either opened or replied to on a specific date.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to check for interactions
+        limit: Maximum number of records to return (default: 3)
+        
+    Returns:
+        List of lead details including name, company, and job title
+    """
+    try:
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        response = supabase.table('email_logs')\
+            .select(
+                'leads(name, company, job_title)'
+            )\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)\
+            .or_('has_replied.eq.true,has_opened.eq.true')\
+            .limit(limit)\
+            .execute()
+            
+        # Extract and flatten lead details from the response
+        leads = []
+        for item in response.data:
+            if item.get('leads'):
+                leads.append({
+                    'name': item['leads']['name'],
+                    'company': item['leads']['company'],
+                    'job_title': item['leads']['job_title']
+                })
+                
+        return leads
+    except Exception as e:
+        logger.error(f"Error getting lead details for email interactions: {str(e)}")
+        return []
