@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -63,7 +63,7 @@ async def populate_campaign_schedules() -> None:
     """
     offset = 0
     limit = 100
-    current_date = datetime.now(UTC).date()
+    current_date = datetime.now(timezone.utc).date()
     data_fetch_date = current_date - timedelta(days=1)
     
     while True:
