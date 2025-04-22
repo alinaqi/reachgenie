@@ -3684,3 +3684,66 @@ async def update_company_custom_calendar(company_id: UUID, custom_calendar_link:
     except Exception as e:
         logger.error(f"Error updating company custom calendar link: {str(e)}")
         return None
+
+async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict]:
+    """
+    Create or update campaign message schedule entries based on existing records.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        List of created schedule entries
+    """
+    try:
+        current_date = datetime.now(timezone.utc).date()
+        current_date_str = datetime.combine(current_date, datetime.min.time()).isoformat()
+        
+        # Check if record exists for current date
+        existing_record = supabase.table('campaign_message_schedule')\
+            .select('id')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .eq('scheduled_for', current_date_str)\
+            .execute()
+            
+        created_records = []
+        
+        if not existing_record.data:
+            # No record exists for current date, create two records
+            # First record: current date
+            first_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': current_date_str,
+                    'data_fetch_date': (datetime.combine(current_date - timedelta(days=1), datetime.min.time())).isoformat()
+                })\
+                .execute()
+            created_records.extend(first_record.data)
+            
+            # Second record: next day
+            second_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': (datetime.combine(current_date + timedelta(days=1), datetime.min.time())).isoformat(),
+                    'data_fetch_date': current_date_str
+                })\
+                .execute()
+            created_records.extend(second_record.data)
+        else:
+            # Record exists for current date, only create one record for next day
+            next_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': (datetime.combine(current_date + timedelta(days=1), datetime.min.time())).isoformat(),
+                    'data_fetch_date': current_date_str
+                })\
+                .execute()
+            created_records.extend(next_record.data)
+            
+        return created_records
+    except Exception as e:
+        logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
+        raise
