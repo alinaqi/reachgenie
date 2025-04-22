@@ -255,6 +255,24 @@ COMMENT ON COLUMN email_queue.reference_ids IS 'References header value for emai
 CREATE INDEX IF NOT EXISTS email_queue_status_idx ON email_queue(status);
 CREATE INDEX IF NOT EXISTS email_queue_campaign_run_id_idx ON email_queue(campaign_run_id);
 
+-- Campaign Message Schedule table
+CREATE TABLE IF NOT EXISTS campaign_message_schedule (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    campaign_run_id UUID REFERENCES campaign_runs(id) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent')),
+    data_fetch_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add index for faster lookups by status and campaign_run_id
+CREATE INDEX IF NOT EXISTS campaign_message_schedule_status_idx ON campaign_message_schedule(status);
+CREATE INDEX IF NOT EXISTS campaign_message_schedule_campaign_run_id_idx ON campaign_message_schedule(campaign_run_id);
+
+-- Add compound unique index to ensure no duplicate schedules for the same campaign run
+CREATE UNIQUE INDEX IF NOT EXISTS campaign_message_schedule_run_schedule_unique_idx 
+    ON campaign_message_schedule(campaign_run_id, scheduled_for);
+
 -- Partner Applications table
 CREATE TABLE IF NOT EXISTS partner_applications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
