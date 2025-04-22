@@ -3751,7 +3751,7 @@ async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict
         logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
         raise
 
-async def get_email_sent_count(campaign_run_id: UUID, date: datetime, has_opened: Optional[bool] = None) -> int:
+async def get_email_sent_count(campaign_run_id: UUID, date: datetime, has_opened: Optional[bool] = None, has_replied: Optional[bool] = None, has_meeting_booked: Optional[bool] = None) -> int:
     """
     Get count of email sent for a specific date and campaign run ID.
     
@@ -3778,9 +3778,52 @@ async def get_email_sent_count(campaign_run_id: UUID, date: datetime, has_opened
         # Add has_opened filter only if explicitly set
         if has_opened is not None:
             query = query.eq('has_opened', has_opened)
-            
+        
+        # Add has_replied filter only if explicitly set
+        if has_replied is not None:
+            query = query.eq('has_replied', has_replied)
+
+        # Add has_meeting_booked filter only if explicitly set
+        if has_meeting_booked is not None:
+            query = query.eq('has_meeting_booked', has_meeting_booked)
+
         response = query.execute()
         return response.count if response.count is not None else 0
     except Exception as e:
         logger.error(f"Error getting email sent count: {str(e)}")
+        return 0
+
+async def get_call_sent_count(campaign_run_id: UUID, date: datetime, has_meeting_booked: Optional[bool] = None) -> int:
+    """
+    Get count of successful calls (where failure_reason is null) for a specific date and campaign run ID.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to count calls for
+        has_meeting_booked: Optional filter for meeting booked calls (True/False)
+        
+    Returns:
+        Number of successful calls sent for the specified date and campaign run
+    """
+    try:
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        # Build base query
+        query = supabase.table('calls')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)\
+            .is_('failure_reason', 'null')  # Only count successful calls
+
+        # Add has_meeting_booked filter only if explicitly set
+        if has_meeting_booked is not None:
+            query = query.eq('has_meeting_booked', has_meeting_booked)
+
+        response = query.execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting call sent count: {str(e)}")
         return 0
