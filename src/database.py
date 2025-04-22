@@ -3751,13 +3751,14 @@ async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict
         logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
         raise
 
-async def get_email_sent_count(campaign_run_id: UUID, date: datetime) -> int:
+async def get_email_sent_count(campaign_run_id: UUID, date: datetime, has_opened: Optional[bool] = None) -> int:
     """
     Get count of email sent for a specific date and campaign run ID.
     
     Args:
         campaign_run_id: UUID of the campaign run
         date: The date to count emails for
+        has_opened: Optional filter for opened emails (True/False)
         
     Returns:
         Number of email sent for the specified date and campaign run
@@ -3767,14 +3768,19 @@ async def get_email_sent_count(campaign_run_id: UUID, date: datetime) -> int:
         start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
         end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
         
-        response = supabase.table('email_logs')\
+        # Build base query
+        query = supabase.table('email_logs')\
             .select('id', count='exact')\
             .eq('campaign_run_id', str(campaign_run_id))\
             .gte('created_at', start_of_day)\
-            .lte('created_at', end_of_day)\
-            .execute()
+            .lte('created_at', end_of_day)
             
+        # Add has_opened filter only if explicitly set
+        if has_opened is not None:
+            query = query.eq('has_opened', has_opened)
+            
+        response = query.execute()
         return response.count if response.count is not None else 0
     except Exception as e:
-        logger.error(f"Error getting email logs count: {str(e)}")
+        logger.error(f"Error getting email sent count: {str(e)}")
         return 0
