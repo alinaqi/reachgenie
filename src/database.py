@@ -3849,6 +3849,10 @@ async def get_lead_details_for_email_interactions(
         start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
         end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
         
+        logger.info(f"start_of_day: {start_of_day}")
+        logger.info(f"end_of_day: {end_of_day}")
+        return
+    
         response = supabase.table('email_logs')\
             .select(
                 'leads(name, company, job_title)'

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from src.services.campaign_stats_emailer import get_pending_campaign_schedules
+from src.database import get_lead_details_for_email_interactions
 from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
@@ -35,7 +36,15 @@ async def main():
         
         for schedule in pending_schedules:
             logger.info(f"Processing schedule for campaign run: {schedule['campaign_run_id']}")
-            # More processing will be added here in future iterations
+            
+            leads = await get_lead_details_for_email_interactions(schedule['campaign_run_id'], schedule['data_fetch_date'])
+
+            for lead in leads:
+                print(f"Name: {lead['name']}")
+                print(f"Company: {lead['company']}")
+                print(f"Job Title: {lead['job_title']}")
+
+
     except Exception as e:
         logger.error(f"Error in campaign stats email processing: {str(e)}")
         bugsnag.notify(e)
