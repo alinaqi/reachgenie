@@ -15,6 +15,7 @@ from src.templates.email_templates import (
     get_email_campaign_stats_template
 )
 from src.services.company_personalization_service import CompanyPersonalizationService
+from datetime import datetime
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -283,7 +284,7 @@ class EmailService:
             to_email: Recipient's email address
             campaign_name: Name of the campaign
             company_name: Name of the company
-            date: Date for which stats are being shown
+            date: Date for which stats are being shown (ISO format string)
             emails_sent: Number of emails sent
             emails_opened: Number of emails opened
             emails_replied: Number of emails replied to
@@ -304,11 +305,14 @@ class EmailService:
             engaged_leads=engaged_leads
         )
         
+        # Convert ISO date string to datetime and format it
+        formatted_date = datetime.fromisoformat(date.replace('Z', '+00:00')).strftime("%B %d, %Y")
+        
         logger.info(f"html_content: {html_content}")
 
         return await self.send_email(
             to_email=to_email,
-            subject=f"Campaign Stats: {campaign_name} - {date}",
+            subject=f"Campaign Report: {campaign_name} - {formatted_date}",
             html_content=html_content
         )
 
