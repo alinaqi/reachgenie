@@ -3751,22 +3751,38 @@ async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict
         logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
         raise
 
-async def get_email_sent_count(campaign_run_id: UUID, date: datetime, has_opened: Optional[bool] = None, has_replied: Optional[bool] = None, has_meeting_booked: Optional[bool] = None) -> int:
+async def get_email_sent_count(campaign_run_id: UUID, date: Union[str, datetime], has_opened: Optional[bool] = None, has_replied: Optional[bool] = None, has_meeting_booked: Optional[bool] = None) -> int:
     """
     Get count of email sent for a specific date and campaign run ID.
     
     Args:
         campaign_run_id: UUID of the campaign run
-        date: The date to count emails for
+        date: The date to count emails for (can be string in ISO format or datetime object)
         has_opened: Optional filter for opened emails (True/False)
+        has_replied: Optional filter for replied emails (True/False)
+        has_meeting_booked: Optional filter for emails that resulted in meetings (True/False)
         
     Returns:
         Number of email sent for the specified date and campaign run
     """
     try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError as e:
+                logger.error(f"Invalid date format. Expected ISO format, got: {date}")
+                return 0
+        elif isinstance(date, datetime):
+            date = date.date()
+            
         # Convert date to start and end of day in ISO format
         start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
         end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        logger.info(f"Counting emails for date range: {start_of_day} to {end_of_day}")
         
         # Build base query
         query = supabase.table('email_logs')\
