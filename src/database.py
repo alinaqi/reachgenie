@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 import logging
 import math
 import csv
@@ -3830,7 +3830,7 @@ async def get_call_sent_count(campaign_run_id: UUID, date: datetime, has_meeting
 
 async def get_lead_details_for_email_interactions(
     campaign_run_id: UUID,
-    date: datetime,
+    date: Union[str, datetime],
     limit: int = 3
 ) -> List[dict]:
     """
@@ -3838,21 +3838,35 @@ async def get_lead_details_for_email_interactions(
     
     Args:
         campaign_run_id: UUID of the campaign run
-        date: The date to check for interactions
+        date: The date to check for interactions (can be string 'YYYY-MM-DD' or ISO format, or datetime object)
         limit: Maximum number of records to return (default: 3)
         
     Returns:
         List of lead details including name, company, and job title
     """
     try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format first
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError:
+                try:
+                    # Try YYYY-MM-DD format as fallback
+                    date = datetime.strptime(date, '%Y-%m-%d').date()
+                except ValueError as e:
+                    logger.error(f"Invalid date format. Expected 'YYYY-MM-DD' or ISO format, got: {date}")
+                    return []
+        elif isinstance(date, datetime):
+            date = date.date()
+            
         # Convert date to start and end of day in ISO format
         start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
         end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
         
-        logger.info(f"start_of_day: {start_of_day}")
-        logger.info(f"end_of_day: {end_of_day}")
-        return
-    
+        logger.info(f"Fetching lead details for date range: {start_of_day} to {end_of_day}")
+        
         response = supabase.table('email_logs')\
             .select(
                 'leads(name, company, job_title)'
