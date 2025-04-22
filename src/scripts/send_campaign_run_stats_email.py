@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from src.services.campaign_stats_emailer import get_pending_campaign_schedules
-from src.database import get_lead_details_for_email_interactions, get_campaign_run, get_campaign_by_id, get_email_sent_count, get_call_sent_count, get_company_by_id
+from src.database import get_lead_details_for_email_interactions, get_campaign_run, get_campaign_by_id, get_email_sent_count, get_call_sent_count, get_company_by_id, update_campaign_schedule_status
 from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
@@ -62,6 +62,13 @@ async def main():
                         meetings_booked=email_meeting_booked_count,
                         engaged_leads=leads
                     )
+                    
+                    # Mark the schedule as sent
+                    success = await update_campaign_schedule_status(schedule['id'], "sent")
+                    if success:
+                        logger.info(f"Marked schedule {schedule['id']} as sent")
+                    else:
+                        logger.error(f"Failed to mark schedule {schedule['id']} as sent")
 
             elif campaign['type'] == 'call':
                 call_sent_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
