@@ -373,6 +373,11 @@ def get_email_campaign_stats_template(
     Returns:
         str: Complete HTML template for campaign statistics email
     """
+    # Calculate percentages (avoid division by zero)
+    open_rate = round((emails_opened / emails_sent * 100) if emails_sent > 0 else 0)
+    reply_rate = round((emails_replied / emails_sent * 100) if emails_sent > 0 else 0)
+    meeting_rate = round((meetings_booked / emails_sent * 100) if emails_sent > 0 else 0)
+    
     # Generate engaged leads HTML
     engaged_leads_html = ""
     if engaged_leads:
@@ -405,9 +410,9 @@ def get_email_campaign_stats_template(
                 <h2>Campaign Statistics</h2>
                 <div style="margin-left: 10px;">
                     <p><strong>Emails Sent:</strong> {emails_sent}</p>
-                    <p><strong>Emails Opened:</strong> {emails_opened}</p>
-                    <p><strong>Emails Replied:</strong> {emails_replied}</p>
-                    <p><strong>Meetings Booked:</strong> {meetings_booked}</p>
+                    <p><strong>Emails Opened:</strong> {emails_opened} ({open_rate}% open rate)</p>
+                    <p><strong>Emails Replied:</strong> {emails_replied} ({reply_rate}% reply rate)</p>
+                    <p><strong>Meetings Booked:</strong> {meetings_booked} ({meeting_rate}% conversion rate)</p>
                 </div>
             </div>
             
