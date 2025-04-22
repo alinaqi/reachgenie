@@ -294,19 +294,19 @@ class EmailService:
         Returns:
             Dict: Response from Mailjet API
         """
+        # Convert ISO date string to datetime and format it
+        formatted_date = datetime.fromisoformat(date.replace('Z', '+00:00')).strftime("%B %d, %Y")
+
         html_content = get_email_campaign_stats_template(
             campaign_name=campaign_name,
             company_name=company_name,
-            date=date,
+            date=formatted_date,
             emails_sent=emails_sent,
             emails_opened=emails_opened,
             emails_replied=emails_replied,
             meetings_booked=meetings_booked,
             engaged_leads=engaged_leads
-        )
-        
-        # Convert ISO date string to datetime and format it
-        formatted_date = datetime.fromisoformat(date.replace('Z', '+00:00')).strftime("%B %d, %Y")
+        )        
         
         logger.info(f"html_content: {html_content}")
 
