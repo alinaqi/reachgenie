@@ -415,7 +415,7 @@ def get_email_campaign_stats_template(
             
             <p>You can view more detailed statistics and manage your campaign in the ReachGenie dashboard.</p>
             
-            <p>Best regards,<br>ReachGenie Team</p>
+            <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """
     return get_base_template(content)
