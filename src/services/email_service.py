@@ -11,7 +11,8 @@ from src.templates.email_templates import (
     get_welcome_template,
     get_account_verification_template,
     get_invite_template,
-    get_company_addition_template
+    get_company_addition_template,
+    get_email_campaign_stats_template
 )
 from src.services.company_personalization_service import CompanyPersonalizationService
 
@@ -260,6 +261,52 @@ class EmailService:
         return await self.send_email(
             to_email=to_email,
             subject=f"You've Been Added to {company_name} on ReachGenie",
+            html_content=html_content
+        )
+
+    async def send_campaign_stats_email(
+        self,
+        to_email: str,
+        campaign_name: str,
+        company_name: str,
+        date: str,
+        emails_sent: int,
+        emails_opened: int,
+        emails_replied: int,
+        meetings_booked: int,
+        engaged_leads: List[Dict[str, str]]
+    ) -> Dict:
+        """
+        Send campaign statistics email.
+        
+        Args:
+            to_email: Recipient's email address
+            campaign_name: Name of the campaign
+            company_name: Name of the company
+            date: Date for which stats are being shown
+            emails_sent: Number of emails sent
+            emails_opened: Number of emails opened
+            emails_replied: Number of emails replied to
+            meetings_booked: Number of meetings booked
+            engaged_leads: List of dictionaries containing lead details (name, company, job_title)
+            
+        Returns:
+            Dict: Response from Mailjet API
+        """
+        html_content = get_email_campaign_stats_template(
+            campaign_name=campaign_name,
+            company_name=company_name,
+            date=date,
+            emails_sent=emails_sent,
+            emails_opened=emails_opened,
+            emails_replied=emails_replied,
+            meetings_booked=meetings_booked,
+            engaged_leads=engaged_leads
+        )
+        
+        return await self.send_email(
+            to_email=to_email,
+            subject=f"Campaign Stats: {campaign_name} - {date}",
             html_content=html_content
         )
 
