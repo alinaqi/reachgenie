@@ -10,6 +10,7 @@ from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
 from src.templates.email_templates import get_email_campaign_stats_template
+from src.services.email_service import email_service
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +40,7 @@ async def main():
             campaign_run = await get_campaign_run(schedule['campaign_run_id'])
             campaign = await get_campaign_by_id(campaign_run['campaign_id'])
             company = await get_company_by_id(campaign['company_id'])
-            
+
             if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
                 email_sent_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
 
@@ -50,12 +51,8 @@ async def main():
 
                     leads = await get_lead_details_for_email_interactions(schedule['campaign_run_id'], schedule['data_fetch_date'])
 
-                    #for lead in leads:
-                    #    print(f"Name: {lead['name']}")
-                    #    print(f"Company: {lead['company']}")
-                    #    print(f"Job Title: {lead['job_title']}")
-                    #    print();
-                    html_content = get_email_campaign_stats_template(
+                    await email_service.send_campaign_stats_email(
+                        to_email=company['account_email'],
                         campaign_name=campaign['name'],
                         company_name=company['name'],
                         date=schedule['data_fetch_date'],
