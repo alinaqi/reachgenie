@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from src.services.campaign_stats_emailer import get_pending_campaign_schedules
-from src.database import get_lead_details_for_email_interactions
+from src.database import get_lead_details_for_email_interactions, get_campaign_run, get_campaign_by_id, get_email_sent_count, get_call_sent_count
 from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
@@ -36,14 +36,29 @@ async def main():
         
         for schedule in pending_schedules:
             logger.info(f"Processing schedule for campaign run: {schedule['campaign_run_id']}")
-            
-            leads = await get_lead_details_for_email_interactions(schedule['campaign_run_id'], schedule['data_fetch_date'])
+            campaign_run = await get_campaign_run(schedule['campaign_run_id'])
+            campaign = await get_campaign_by_id(campaign_run['campaign_id'])
 
-            for lead in leads:
-                print(f"Name: {lead['name']}")
-                print(f"Company: {lead['company']}")
-                print(f"Job Title: {lead['job_title']}")
-                print();
+            if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
+                email_sent_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
+
+                if email_sent_count > 0:
+                    email_opened_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_opened=True)
+                    email_replied_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_replied=True)
+                    email_meeting_booked_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_meeting_booked=True)
+
+                    leads = await get_lead_details_for_email_interactions(schedule['campaign_run_id'], schedule['data_fetch_date'])
+
+                    for lead in leads:
+                        print(f"Name: {lead['name']}")
+                        print(f"Company: {lead['company']}")
+                        print(f"Job Title: {lead['job_title']}")
+                        print();
+            elif campaign['type'] == 'call':
+                call_sent_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
+
+                if call_sent_count > 0:
+                    call_meeting_booked_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_meeting_booked=True) 
 
 
     except Exception as e:
