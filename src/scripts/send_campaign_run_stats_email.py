@@ -43,6 +43,7 @@ async def main():
                 print(f"Name: {lead['name']}")
                 print(f"Company: {lead['company']}")
                 print(f"Job Title: {lead['job_title']}")
+                print();
 
 
     except Exception as e:
