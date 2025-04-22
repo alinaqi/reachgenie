@@ -1746,7 +1746,10 @@ async def update_campaign_run_status(campaign_run_id: UUID, status: str):
         if not response.data:
             logger.error(f"Failed to update status for campaign run {campaign_run_id}")
             return None
-            
+        
+        if status == 'completed':
+            await create_or_update_campaign_schedule(campaign_run_id)
+
         return response.data[0]
     except Exception as e:
         logger.error(f"Error updating campaign run status: {str(e)}")
