@@ -3750,3 +3750,31 @@ async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict
     except Exception as e:
         logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
         raise
+
+async def get_email_sent_count(campaign_run_id: UUID, date: datetime) -> int:
+    """
+    Get count of email sent for a specific date and campaign run ID.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to count emails for
+        
+    Returns:
+        Number of email sent for the specified date and campaign run
+    """
+    try:
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        response = supabase.table('email_logs')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)\
+            .execute()
+            
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting email logs count: {str(e)}")
+        return 0
