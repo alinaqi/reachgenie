@@ -9,7 +9,6 @@ from src.database import get_lead_details_for_email_interactions, get_campaign_r
 from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
-from src.templates.email_templates import get_email_campaign_stats_template
 from src.services.email_service import email_service
 # Configure logger
 logging.basicConfig(
@@ -74,7 +73,22 @@ async def main():
                 call_sent_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
 
                 if call_sent_count > 0:
-                    call_meeting_booked_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_meeting_booked=True) 
+                    call_meeting_booked_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_meeting_booked=True)
+
+                    await email_service.send_campaign_stats_call(
+                        to_email=company['account_email'],
+                        campaign_name=campaign['name'],
+                        company_name=company['name'],
+                        date=schedule['data_fetch_date'],
+                        calls_sent=call_sent_count,
+                        meetings_booked=call_meeting_booked_count
+                    )
+                    # Mark the schedule as sent
+                    success = await update_campaign_schedule_status(schedule['id'], "sent")
+                    if success:
+                        logger.info(f"Marked schedule {schedule['id']} as sent")
+                    else:
+                        logger.error(f"Failed to mark schedule {schedule['id']} as sent")
 
 
     except Exception as e:

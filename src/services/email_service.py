@@ -12,7 +12,8 @@ from src.templates.email_templates import (
     get_account_verification_template,
     get_invite_template,
     get_company_addition_template,
-    get_email_campaign_stats_template
+    get_email_campaign_stats_template,
+    get_call_campaign_stats_template
 )
 from src.services.company_personalization_service import CompanyPersonalizationService
 from datetime import datetime
@@ -278,7 +279,7 @@ class EmailService:
         engaged_leads: List[Dict[str, str]]
     ) -> Dict:
         """
-        Send campaign statistics email.
+        Send campaign statistics email for campaign type 'email'.
         
         Args:
             to_email: Recipient's email address
@@ -315,6 +316,48 @@ class EmailService:
             subject=f"Campaign Report: {campaign_name} - {formatted_date}",
             html_content=html_content
         )
+
+    async def send_campaign_stats_call(
+            self,
+            to_email: str,
+            campaign_name: str,
+            company_name: str,
+            date: str,
+            calls_sent: int,
+            meetings_booked: int
+        ) -> Dict:
+            """
+            Send campaign statistics email for campaign type 'call'.
+            
+            Args:
+                to_email: Recipient's email address
+                campaign_name: Name of the campaign
+                company_name: Name of the company
+                date: Date for which stats are being shown (ISO format string)
+                calls_sent: Number of calls sent
+                meetings_booked: Number of meetings booked
+                
+            Returns:
+                Dict: Response from Mailjet API
+            """
+            # Convert ISO date string to datetime and format it
+            formatted_date = datetime.fromisoformat(date.replace('Z', '+00:00')).strftime("%B %d, %Y")
+
+            html_content = get_call_campaign_stats_template(
+                campaign_name=campaign_name,
+                company_name=company_name,
+                date=formatted_date,
+                calls_sent=calls_sent,
+                meetings_booked=meetings_booked
+            )        
+            
+            #logger.info(f"html_content: {html_content}")
+
+            return await self.send_email(
+                to_email=to_email,
+                subject=f"Campaign Report: {campaign_name} - {formatted_date}",
+                html_content=html_content
+            )
 
 # Create a singleton instance
 email_service = EmailService() 
