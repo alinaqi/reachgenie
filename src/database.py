@@ -3809,22 +3809,36 @@ async def get_email_sent_count(campaign_run_id: UUID, date: Union[str, datetime]
         logger.error(f"Error getting email sent count: {str(e)}")
         return 0
 
-async def get_call_sent_count(campaign_run_id: UUID, date: datetime, has_meeting_booked: Optional[bool] = None) -> int:
+async def get_call_sent_count(campaign_run_id: UUID, date: Union[str, datetime], has_meeting_booked: Optional[bool] = None) -> int:
     """
     Get count of successful calls (where failure_reason is null) for a specific date and campaign run ID.
     
     Args:
         campaign_run_id: UUID of the campaign run
-        date: The date to count calls for
+        date: The date to count calls for (can be string in ISO format or datetime object)
         has_meeting_booked: Optional filter for meeting booked calls (True/False)
         
     Returns:
         Number of successful calls sent for the specified date and campaign run
     """
     try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError as e:
+                logger.error(f"Invalid date format. Expected ISO format, got: {date}")
+                return 0
+        elif isinstance(date, datetime):
+            date = date.date()
+            
         # Convert date to start and end of day in ISO format
         start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
         end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        logger.info(f"Counting calls for date range: {start_of_day} to {end_of_day}")
         
         # Build base query
         query = supabase.table('calls')\
