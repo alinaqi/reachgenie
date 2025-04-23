@@ -69,6 +69,8 @@ async def fetch_emails(company: Dict):
     company_id = UUID(company['id'])
 
     try:
+        logger.info(f"Processing emails for company '{company['name']}' ({company_id})")
+
         # Decrypt email password
         try:
             decrypted_password = decrypt_password(company['account_password'])
@@ -193,7 +195,7 @@ async def fetch_emails(company: Dict):
         await process_emails(email_data, company, decrypted_password)        
 
     except Exception as e:
-        logger.info(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         return []
 
 async def process_emails(
