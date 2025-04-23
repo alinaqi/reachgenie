@@ -209,6 +209,7 @@ async def process_emails(
             # and ignoring all emails which are not related to our system.
             email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
             email_log_id = UUID(email_log_id_str)
+            logger.info(f"Email Subject: {email_data['subject']}")
             logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
 
         except (IndexError, ValueError) as e:
