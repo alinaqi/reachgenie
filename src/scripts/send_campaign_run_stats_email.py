@@ -62,12 +62,12 @@ async def main():
                         engaged_leads=leads
                     )
                     
-                    # Mark the schedule as sent
-                    success = await update_campaign_schedule_status(schedule['id'], "sent")
-                    if success:
-                        logger.info(f"Marked schedule {schedule['id']} as sent")
-                    else:
-                        logger.error(f"Failed to mark schedule {schedule['id']} as sent")
+                # Mark the schedule as sent
+                success = await update_campaign_schedule_status(schedule['id'], "sent")
+                if success:
+                    logger.info(f"Marked schedule {schedule['id']} as sent")
+                else:
+                    logger.error(f"Failed to mark schedule {schedule['id']} as sent")
 
             elif campaign['type'] == 'call':
                 call_sent_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
@@ -83,13 +83,12 @@ async def main():
                         calls_sent=call_sent_count,
                         meetings_booked=call_meeting_booked_count
                     )
-                    # Mark the schedule as sent
-                    success = await update_campaign_schedule_status(schedule['id'], "sent")
-                    if success:
-                        logger.info(f"Marked schedule {schedule['id']} as sent")
-                    else:
-                        logger.error(f"Failed to mark schedule {schedule['id']} as sent")
-
+                # Mark the schedule as sent
+                success = await update_campaign_schedule_status(schedule['id'], "sent")
+                if success:
+                    logger.info(f"Marked schedule {schedule['id']} as sent")
+                else:
+                    logger.error(f"Failed to mark schedule {schedule['id']} as sent")
 
     except Exception as e:
         logger.error(f"Error in campaign stats email processing: {str(e)}")
