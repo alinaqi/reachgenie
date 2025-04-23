@@ -3,6 +3,8 @@ Email templates for system-wide use.
 Each template is a function that returns HTML content with required parameters.
 """
 
+from typing import List, Dict
+
 def get_base_template(content: str) -> str:
     """
     Base template that wraps content with common styling and structure.
@@ -340,6 +342,130 @@ def get_company_addition_template(user_name: str, company_name: str, inviter_nam
             <p>Hello {user_name},</p>
             <p>{inviter_name} has added you to "{company_name}" on ReachGenie. You can now access the company's dashboard and collaborate with your team members.</p>
             <p>To access your new company workspace, simply log in to your ReachGenie account and select "{company_name}" from your company list.</p>
+            <p>Best regards,<br>ReachGenie Support Team</p>
+        </div>
+    """
+    return get_base_template(content)
+
+def get_email_campaign_stats_template(
+    campaign_name: str,
+    company_name: str,
+    date: str,
+    emails_sent: int,
+    emails_opened: int,
+    emails_replied: int,
+    meetings_booked: int,
+    engaged_leads: List[Dict[str, str]]
+) -> str:
+    """
+    Campaign statistics email template.
+    
+    Args:
+        campaign_name: Name of the campaign
+        company_name: Name of the company
+        date: Date for which stats are being shown
+        emails_sent: Number of emails sent
+        emails_opened: Number of emails opened
+        emails_replied: Number of emails replied to
+        meetings_booked: Number of meetings booked
+        engaged_leads: List of dictionaries containing lead details (name, company, job_title)
+        
+    Returns:
+        str: Complete HTML template for campaign statistics email
+    """
+    # Calculate percentages (avoid division by zero)
+    open_rate = round((emails_opened / emails_sent * 100) if emails_sent > 0 else 0)
+    reply_rate = round((emails_replied / emails_sent * 100) if emails_sent > 0 else 0)
+    meeting_rate = round((meetings_booked / emails_sent * 100) if emails_sent > 0 else 0)
+    
+    # Generate engaged leads HTML
+    engaged_leads_html = ""
+    if engaged_leads:
+        engaged_leads_html = """
+            <div class="section">
+                <h2>Top Engaged Leads</h2>
+                <div style="margin-left: 10px;">
+        """
+        for lead in engaged_leads:
+            engaged_leads_html += f"""
+                <div style="margin-bottom: 15px;">
+                    <strong>{lead['name']}</strong><br>
+                    {lead['job_title']} at {lead['company']}
+                </div>
+            """
+        engaged_leads_html += """
+                </div>
+            </div>
+        """
+
+    content = f"""
+        <div class="header">
+            <h1>Campaign Performance Update</h1>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>Here's your daily performance update for the campaign "<strong>{campaign_name}</strong>" at {company_name} for {date}:</p>
+            
+            <div class="section">
+                <h2>Campaign Statistics</h2>
+                <div style="margin-left: 10px;">
+                    <p><strong>Emails Sent:</strong> {emails_sent}</p>
+                    <p><strong>Emails Opened:</strong> {emails_opened} ({open_rate}% open rate)</p>
+                    <p><strong>Emails Replied:</strong> {emails_replied} ({reply_rate}% reply rate)</p>
+                    <p><strong>Meetings Booked:</strong> {meetings_booked} ({meeting_rate}% conversion rate)</p>
+                </div>
+            </div>
+            
+            {engaged_leads_html}
+            
+            <p>You can view more detailed statistics and manage your campaign in the ReachGenie dashboard.</p>
+            
+            <p>Best regards,<br>ReachGenie Support Team</p>
+        </div>
+    """
+    return get_base_template(content)
+
+def get_call_campaign_stats_template(
+    campaign_name: str,
+    company_name: str,
+    date: str,
+    calls_sent: int,
+    meetings_booked: int
+) -> str:
+    """
+    Campaign statistics email template for campaign type 'call'.
+    
+    Args:
+        campaign_name: Name of the campaign
+        company_name: Name of the company
+        date: Date for which stats are being shown
+        calls_sent: Number of calls sent
+        meetings_booked: Number of meetings booked
+        
+    Returns:
+        str: Complete HTML template for campaign statistics email
+    """
+    # Calculate percentages (avoid division by zero)
+    meeting_rate = round((meetings_booked / calls_sent * 100) if calls_sent > 0 else 0)
+
+    content = f"""
+        <div class="header">
+            <h1>Campaign Performance Update</h1>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>Here's your daily performance update for the campaign "<strong>{campaign_name}</strong>" at {company_name} for {date}:</p>
+            
+            <div class="section">
+                <h2>Campaign Statistics</h2>
+                <div style="margin-left: 10px;">
+                    <p><strong>Calls Dispatched:</strong> {calls_sent}</p>
+                    <p><strong>Meetings Booked:</strong> {meetings_booked} ({meeting_rate}% conversion rate)</p>
+                </div>
+            </div>
+            
+            <p>You can view more detailed statistics and manage your campaign in the ReachGenie dashboard.</p>
+            
             <p>Best regards,<br>ReachGenie Support Team</p>
         </div>
     """

@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 import logging
 import math
 import csv
@@ -1746,7 +1746,10 @@ async def update_campaign_run_status(campaign_run_id: UUID, status: str):
         if not response.data:
             logger.error(f"Failed to update status for campaign run {campaign_run_id}")
             return None
-            
+        
+        if status == 'completed':
+            await create_or_update_campaign_schedule(campaign_run_id)
+
         return response.data[0]
     except Exception as e:
         logger.error(f"Error updating campaign run status: {str(e)}")
@@ -3684,3 +3687,262 @@ async def update_company_custom_calendar(company_id: UUID, custom_calendar_link:
     except Exception as e:
         logger.error(f"Error updating company custom calendar link: {str(e)}")
         return None
+
+async def create_or_update_campaign_schedule(campaign_run_id: UUID) -> List[dict]:
+    """
+    Create or update campaign message schedule entries based on existing records.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        
+    Returns:
+        List of created schedule entries
+    """
+    try:
+        current_date = datetime.now(timezone.utc).date()
+        current_date_str = datetime.combine(current_date, datetime.min.time()).isoformat()
+        
+        # Check if record exists for current date
+        existing_record = supabase.table('campaign_message_schedule')\
+            .select('id')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .eq('scheduled_for', current_date_str)\
+            .execute()
+            
+        created_records = []
+        
+        if not existing_record.data:
+            # No record exists for current date, create two records
+            # First record: current date
+            first_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': current_date_str,
+                    'data_fetch_date': (datetime.combine(current_date - timedelta(days=1), datetime.min.time())).isoformat()
+                })\
+                .execute()
+            created_records.extend(first_record.data)
+            
+            # Second record: next day
+            second_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': (datetime.combine(current_date + timedelta(days=1), datetime.min.time())).isoformat(),
+                    'data_fetch_date': current_date_str
+                })\
+                .execute()
+            created_records.extend(second_record.data)
+        else:
+            # Record exists for current date, only create one record for next day
+            next_record = supabase.table('campaign_message_schedule')\
+                .insert({
+                    'campaign_run_id': str(campaign_run_id),
+                    'status': 'pending',
+                    'scheduled_for': (datetime.combine(current_date + timedelta(days=1), datetime.min.time())).isoformat(),
+                    'data_fetch_date': current_date_str
+                })\
+                .execute()
+            created_records.extend(next_record.data)
+            
+        return created_records
+    except Exception as e:
+        logger.error(f"Error creating/updating campaign schedule for run {campaign_run_id}: {str(e)}")
+        raise
+
+async def get_email_sent_count(campaign_run_id: UUID, date: Union[str, datetime], has_opened: Optional[bool] = None, has_replied: Optional[bool] = None, has_meeting_booked: Optional[bool] = None) -> int:
+    """
+    Get count of email sent for a specific date and campaign run ID.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to count emails for (can be string in ISO format or datetime object)
+        has_opened: Optional filter for opened emails (True/False)
+        has_replied: Optional filter for replied emails (True/False)
+        has_meeting_booked: Optional filter for emails that resulted in meetings (True/False)
+        
+    Returns:
+        Number of email sent for the specified date and campaign run
+    """
+    try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError as e:
+                logger.error(f"Invalid date format. Expected ISO format, got: {date}")
+                return 0
+        elif isinstance(date, datetime):
+            date = date.date()
+            
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        logger.info(f"Counting emails for date range: {start_of_day} to {end_of_day}")
+        
+        # Build base query
+        query = supabase.table('email_logs')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)
+            
+        # Add has_opened filter only if explicitly set
+        if has_opened is not None:
+            query = query.eq('has_opened', has_opened)
+        
+        # Add has_replied filter only if explicitly set
+        if has_replied is not None:
+            query = query.eq('has_replied', has_replied)
+
+        # Add has_meeting_booked filter only if explicitly set
+        if has_meeting_booked is not None:
+            query = query.eq('has_meeting_booked', has_meeting_booked)
+
+        response = query.execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting email sent count: {str(e)}")
+        return 0
+
+async def get_call_sent_count(campaign_run_id: UUID, date: Union[str, datetime], has_meeting_booked: Optional[bool] = None) -> int:
+    """
+    Get count of successful calls (where failure_reason is null) for a specific date and campaign run ID.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to count calls for (can be string in ISO format or datetime object)
+        has_meeting_booked: Optional filter for meeting booked calls (True/False)
+        
+    Returns:
+        Number of successful calls sent for the specified date and campaign run
+    """
+    try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError as e:
+                logger.error(f"Invalid date format. Expected ISO format, got: {date}")
+                return 0
+        elif isinstance(date, datetime):
+            date = date.date()
+            
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        logger.info(f"Counting calls for date range: {start_of_day} to {end_of_day}")
+        
+        # Build base query
+        query = supabase.table('calls')\
+            .select('id', count='exact')\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)\
+            .is_('failure_reason', 'null')  # Only count successful calls
+
+        # Add has_meeting_booked filter only if explicitly set
+        if has_meeting_booked is not None:
+            query = query.eq('has_meeting_booked', has_meeting_booked)
+
+        response = query.execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting call sent count: {str(e)}")
+        return 0
+
+async def get_lead_details_for_email_interactions(
+    campaign_run_id: UUID,
+    date: Union[str, datetime],
+    limit: int = 3
+) -> List[dict]:
+    """
+    Get lead details for emails that were either opened or replied to on a specific date.
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        date: The date to check for interactions (can be string 'YYYY-MM-DD' or ISO format, or datetime object)
+        limit: Maximum number of records to return (default: 3)
+        
+    Returns:
+        List of lead details including name, company, and job title
+    """
+    try:
+        # Convert string date to datetime if needed
+        if isinstance(date, str):
+            try:
+                # Try parsing ISO format first
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                date = parsed_date.date()
+            except ValueError:
+                try:
+                    # Try YYYY-MM-DD format as fallback
+                    date = datetime.strptime(date, '%Y-%m-%d').date()
+                except ValueError as e:
+                    logger.error(f"Invalid date format. Expected 'YYYY-MM-DD' or ISO format, got: {date}")
+                    return []
+        elif isinstance(date, datetime):
+            date = date.date()
+            
+        # Convert date to start and end of day in ISO format
+        start_of_day = datetime.combine(date, datetime.min.time()).isoformat()
+        end_of_day = datetime.combine(date, datetime.max.time()).isoformat()
+        
+        logger.info(f"Fetching lead details for date range: {start_of_day} to {end_of_day}")
+        
+        response = supabase.table('email_logs')\
+            .select(
+                'leads(name, company, job_title)'
+            )\
+            .eq('campaign_run_id', str(campaign_run_id))\
+            .gte('created_at', start_of_day)\
+            .lte('created_at', end_of_day)\
+            .or_('has_replied.eq.true,has_opened.eq.true')\
+            .limit(limit)\
+            .execute()
+            
+        # Extract and flatten lead details from the response
+        leads = []
+        for item in response.data:
+            if item.get('leads'):
+                leads.append({
+                    'name': item['leads']['name'],
+                    'company': item['leads']['company'],
+                    'job_title': item['leads']['job_title']
+                })
+                
+        return leads
+    except Exception as e:
+        logger.error(f"Error getting lead details for email interactions: {str(e)}")
+        return []
+
+async def update_campaign_schedule_status(schedule_id: UUID, status: str = "sent") -> bool:
+    """
+    Update the status of a campaign message schedule record.
+    
+    Args:
+        schedule_id: UUID of the schedule record
+        status: New status to set (default: "sent")
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('campaign_message_schedule')\
+            .update({
+                'status': status
+            })\
+            .eq('id', str(schedule_id))\
+            .execute()
+            
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error updating campaign schedule status: {str(e)}")
+        return False
