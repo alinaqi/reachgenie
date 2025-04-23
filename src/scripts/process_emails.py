@@ -193,7 +193,7 @@ async def fetch_emails(company: Dict):
         await process_emails(email_data, company, decrypted_password)        
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.info(f"An error occurred: {e}")
         return []
 
 async def process_emails(
