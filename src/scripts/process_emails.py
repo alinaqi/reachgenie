@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 # Function to decode email headers
 def decode_header_value(header_value):
+    if not header_value:
+        return ""
     decoded = decode_header(header_value)
     return ''.join(
         str(part[0], part[1] or 'utf-8') if isinstance(part[0], bytes) else str(part[0])
@@ -136,10 +138,11 @@ async def fetch_emails(company: Dict):
             #res, msg = imap.fetch(email_id, "(RFC822)")
             res, msg = imap.uid('fetch', email_id, "(RFC822)")
             
-            logger.info(f"Fetched email with UID {email_id.decode('utf-8')}")
+            uid = email_id.decode('utf-8') if isinstance(email_id, bytes) else str(email_id)
+            logger.info(f"Fetched email with UID {uid}")
 
             if res != "OK":
-                raise Exception(f"Failed to fetch email with UID {email_id.decode('utf-8')}")
+                raise Exception(f"Failed to fetch email with UID {uid}")
 
             for response_part in msg:
                 if isinstance(response_part, tuple):
@@ -162,15 +165,21 @@ async def fetch_emails(company: Dict):
                             content_disposition = str(part.get("Content-Disposition"))
 
                             if content_type == "text/plain" and "attachment" not in content_disposition:
-                                body = part.get_payload(decode=True).decode(errors="ignore")
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    body = payload.decode(errors="ignore")
                                 break
                             elif content_type == "text/html" and "attachment" not in content_disposition:
-                                body = part.get_payload(decode=True).decode(errors="ignore")
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    body = payload.decode(errors="ignore")
                                 break
                     else:
                         content_type = msg_obj.get_content_type()
                         if content_type == "text/plain" or content_type == "text/html":
-                            body = msg_obj.get_payload(decode=True).decode(errors="ignore")
+                            payload = msg_obj.get_payload(decode=True)
+                            if payload:
+                                body = payload.decode(errors="ignore")
 
                     # Extract sender name and email
                     sender_name, sender_email = parse_from_field(from_field)
