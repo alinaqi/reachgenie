@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Body
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Query, Form, Body, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -3064,42 +3064,59 @@ async def delete_user_company_profile_endpoint(
     return {"message": "User profile deleted successfully"}
 
 @app.get("/api/track-email/{email_log_id}", tags=["Campaigns & Emails"])
-async def track_email(email_log_id: UUID):
+async def track_email(email_log_id: UUID, request: Request):
     try:
-        # Update the email_log has_opened status using the database function
-        await update_email_log_has_opened(email_log_id)
+        # Get User-Agent and timestamp
+        user_agent = request.headers.get("user-agent", "").lower()
+        
+        # List of known bot/crawler/proxy identifiers
+        automated_identifiers = [
+            'bot', 'crawler', 'spider', 'preview', 
+            'proxy', 'scanner', 'googleimageproxy',
+            'security', 'protection', 'monitoring'
+        ]
+        
+        # Check if this looks like an automated request
+        is_likely_automated = any(identifier in user_agent for identifier in automated_identifiers)
+        
+        if not is_likely_automated:
+            # Update the email_log has_opened status using the database function
+            await update_email_log_has_opened(email_log_id)
 
-        # Get the campaign and lead
-        email_log = await get_email_log_by_id(email_log_id)
-        campaign = await get_campaign_by_id(email_log['campaign_id'])
-        lead = await get_lead_by_id(email_log['lead_id'])
-        company = await get_company_by_id(campaign['company_id'])
+            # Get the campaign and lead
+            email_log = await get_email_log_by_id(email_log_id)
+            campaign = await get_campaign_by_id(email_log['campaign_id'])
+            lead = await get_lead_by_id(email_log['lead_id'])
+            company = await get_company_by_id(campaign['company_id'])
 
-        # If the campaign is an "email_and_call" campaign and the trigger_call_on is after_email_open, add the call to the queue
-        if campaign.get('type') == 'email_and_call' and campaign.get('trigger_call_on') == 'after_email_open' and lead.get('phone_number'):
-            
-            call_queue_exists = await check_existing_call_queue_record(
-                        company_id=campaign['company_id'],
-                        campaign_id=campaign['id'],
-                        campaign_run_id=email_log['campaign_run_id'],
-                        lead_id=lead['id']
-                    )
-            
-            if not call_queue_exists:
-                logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
-
-                insights = await get_or_generate_insights_for_lead(lead)
-
-                call_script = await generate_call_script(lead, campaign, company, insights)
-
-                # Add to call queue
-                await add_call_to_queue(
+            # If the campaign is an "email_and_call" campaign and the trigger_call_on is after_email_open, add the call to the queue
+            if (campaign.get('type') == 'email_and_call' and 
+                campaign.get('trigger_call_on') == 'after_email_open' and 
+                lead.get('phone_number')):
+                
+                call_queue_exists = await check_existing_call_queue_record(
                     company_id=campaign['company_id'],
                     campaign_id=campaign['id'],
                     campaign_run_id=email_log['campaign_run_id'],
-                    lead_id=lead['id'],
-                    call_script=call_script
+                    lead_id=lead['id']
                 )
+                
+                if not call_queue_exists:
+                    logger.info(f"Adding call to queue for lead: {lead['name']} ({lead['phone_number']})")
+
+                    insights = await get_or_generate_insights_for_lead(lead)
+                    call_script = await generate_call_script(lead, campaign, company, insights)
+
+                    # Add to call queue
+                    await add_call_to_queue(
+                        company_id=campaign['company_id'],
+                        campaign_id=campaign['id'],
+                        campaign_run_id=email_log['campaign_run_id'],
+                        lead_id=lead['id'],
+                        call_script=call_script
+                    )
+        else:
+            logger.info(f"Automated request detected for email_log_id {email_log_id}. User-Agent: {user_agent}")
         
         # Return a 1x1 transparent pixel with cache control headers
         headers = {
