@@ -3080,6 +3080,8 @@ async def track_email(email_log_id: UUID, request: Request):
         is_likely_automated = any(identifier in user_agent for identifier in automated_identifiers)
         
         if not is_likely_automated:
+            logger.info(f"User initiated request detected for email_log_id {email_log_id}. User-Agent: {user_agent}")
+
             # Update the email_log has_opened status using the database function
             await update_email_log_has_opened(email_log_id)
 
