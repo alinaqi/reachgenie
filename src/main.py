@@ -134,6 +134,7 @@ from src.routes import email_queues, call_queues
 from src.services.bland_calls import update_call_queue_on_error
 from src.routes.call_queue_status import router as call_queue_status_router
 from src.routes.calendar import calendar_router
+from src.services.email_open_detector import EmailOpenDetector
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -3066,27 +3067,19 @@ async def delete_user_company_profile_endpoint(
 @app.get("/api/track-email/{email_log_id}", tags=["Campaigns & Emails"])
 async def track_email(email_log_id: UUID, request: Request):
     try:
-        # Get User-Agent and timestamp
+        # Get User-Agent
         user_agent = request.headers.get("user-agent", "").lower()
         
-        # List of known bot/crawler/proxy identifiers
-        automated_identifiers = [
-            'bot', 'crawler', 'spider', 'preview', 
-            'proxy', 'scanner', 'googleimageproxy',
-            'security', 'protection', 'monitoring'
-        ]
-        
-        # Check if this looks like an automated request
-        is_likely_automated = any(identifier in user_agent for identifier in automated_identifiers)
-        
-        if not is_likely_automated:
-            logger.info(f"User initiated request detected for email_log_id {email_log_id}. User-Agent: {user_agent}")
+        is_valid = EmailOpenDetector.is_valid_email_open(user_agent)
+        email_log = await get_email_log_by_id(email_log_id)
+
+        if is_valid:
+            logger.info(f"User initiated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log['campaign_run_id']}. User-Agent: {user_agent}")
 
             # Update the email_log has_opened status using the database function
             await update_email_log_has_opened(email_log_id)
 
-            # Get the campaign and lead
-            email_log = await get_email_log_by_id(email_log_id)
+            # Get the campaign and lead            
             campaign = await get_campaign_by_id(email_log['campaign_id'])
             lead = await get_lead_by_id(email_log['lead_id'])
             company = await get_company_by_id(campaign['company_id'])
@@ -3118,7 +3111,7 @@ async def track_email(email_log_id: UUID, request: Request):
                         call_script=call_script
                     )
         else:
-            logger.info(f"Automated request detected for email_log_id {email_log_id}. User-Agent: {user_agent}")
+            logger.warning(f"Automated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log['campaign_run_id']}, ignoring it. User-Agent: {user_agent}")
         
         # Return a 1x1 transparent pixel with cache control headers
         headers = {
