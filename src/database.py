@@ -3983,3 +3983,43 @@ async def get_pending_scheduled_campaigns(last_id: Optional[UUID] = None, limit:
     except Exception as e:
         logger.error(f"Error fetching pending scheduled campaigns: {str(e)}")
         return []
+    
+async def mark_campaign_as_triggered(campaign_id: UUID) -> bool:
+    """
+    Mark a campaign as auto-triggered.
+    
+    Args:
+        campaign_id: UUID of the campaign to mark as triggered
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('campaigns').update({
+            'auto_run_triggered': True
+        }).eq('id', str(campaign_id)).execute()
+        
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error marking campaign {campaign_id} as triggered: {str(e)}")
+        return False
+
+async def get_campaign_lead_count(campaign: dict) -> int:
+    """
+    Get the total number of leads for a campaign based on its type.
+    
+    Args:
+        campaign: Campaign dictionary containing type and id
+        
+    Returns:
+        int: Total number of leads
+    """
+    try:
+        if campaign['type'] in ['email', 'email_and_call']:
+            return await get_leads_with_email(campaign['id'], count=True)
+        elif campaign['type'] == 'call':
+            return await get_leads_with_phone(campaign['company_id'], count=True)
+        return 0
+    except Exception as e:
+        logger.error(f"Error getting lead count for campaign {campaign['id']}: {str(e)}")
+        return 0
