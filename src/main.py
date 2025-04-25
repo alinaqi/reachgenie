@@ -2342,24 +2342,24 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
     # Validate company settings
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email account credentials")
         return
             
     if not company.get("account_type"):
         logger.error(f"Company {campaign['company_id']} missing email provider type")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email provider type")
         return
             
     if not company.get("name"):
         logger.error(f"Company {campaign['company_id']} missing company name")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing company name")
         return    
     
     # Get campaign template
     template = campaign.get('template')
     if not template:
         logger.error(f"Campaign {campaign['id']} missing email template")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing campaign email template")
         return
     
     # Get total count of leads with emails
