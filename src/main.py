@@ -102,7 +102,8 @@ from src.database import (
     get_email_log_by_id,
     check_existing_call_queue_record,
     update_email_reminder_eligibility,
-    get_call_log_by_bland_id
+    get_call_log_by_bland_id,
+    get_campaign_lead_count
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1705,12 +1706,7 @@ async def run_campaign(
                 detail="Email provider type not configured. Please set up email provider type first."
             )
     # Get total leads count based on campaign type
-    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
-        lead_count = await get_leads_with_email(campaign['id'], count=True)
-    elif campaign['type'] == 'call':
-        lead_count = await get_leads_with_phone(company['id'], count=True)
-    else:
-        lead_count = 0
+    lead_count = await get_campaign_lead_count(campaign)
 
     # Create a new campaign run record
     campaign_run = await create_campaign_run(
