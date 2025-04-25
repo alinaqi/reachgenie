@@ -409,6 +409,7 @@ class CampaignRunResponse(BaseModel):
     leads_processed: int
     has_failed_items: bool
     status: str
+    failure_reason: Optional[str] = None
     created_at: datetime
     campaigns: Dict[str, Any] = Field(
         description="Campaign details including name and type. Example: {'name': 'Q4 Sales Campaign', 'type': 'email'}"
