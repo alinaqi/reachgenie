@@ -1724,25 +1724,28 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
         logger.error(f"Error creating campaign run: {str(e)}")
         return None
 
-async def update_campaign_run_status(campaign_run_id: UUID, status: str):
+async def update_campaign_run_status(campaign_run_id: UUID, status: str, failure_reason: Optional[str] = None):
     """
     Update the status of a campaign run
     
     Args:
         campaign_run_id: UUID of the campaign run
-        status: New status ('idle', 'running', 'completed')
+        status: New status ('idle', 'failed', 'running', 'completed')
+        failure_reason: Optional reason for failure when status is 'failed'
         
     Returns:
         Dict containing the updated campaign run record or None if update failed
     """
     try:
-        if status not in ['idle', 'running', 'completed']:
+        if status not in ['idle', 'failed', 'running', 'completed']:
             logger.error(f"Invalid campaign run status: {status}")
             return None
             
-        response = supabase.table('campaign_runs').update({
-            'status': status
-        }).eq('id', str(campaign_run_id)).execute()
+        update_data = {'status': status}
+        if failure_reason is not None:
+            update_data['failure_reason'] = failure_reason
+            
+        response = supabase.table('campaign_runs').update(update_data).eq('id', str(campaign_run_id)).execute()
         
         if not response.data:
             logger.error(f"Failed to update status for campaign run {campaign_run_id}")
