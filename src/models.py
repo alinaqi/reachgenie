@@ -386,6 +386,7 @@ class EmailCampaignBase(BaseModel):
     phone_number_of_reminders: Optional[int] = 0
     phone_days_between_reminders: Optional[int] = 0
     trigger_call_on: Optional[str] = Field(None, description="Condition to trigger a call", example="after_email_sent")
+    scheduled_at: Optional[datetime] = Field(None, description="When the campaign should be scheduled to start")
 
 class TaskResponse(BaseModel):
     task_id: UUID

@@ -447,7 +447,7 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
         'total_pages': (total + limit - 1) // limit if total > 0 else 1
     }
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None, scheduled_at: Optional[datetime] = None):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
@@ -460,7 +460,8 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
         'phone_number_of_reminders': phone_number_of_reminders,
         'phone_days_between_reminders': phone_days_between_reminders,
         'auto_reply_enabled': auto_reply_enabled,
-        'trigger_call_on': trigger_call_on
+        'trigger_call_on': trigger_call_on,
+        'scheduled_at': scheduled_at.isoformat() if scheduled_at else None
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
