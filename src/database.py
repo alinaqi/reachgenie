@@ -3966,7 +3966,7 @@ async def get_pending_scheduled_campaigns(last_id: Optional[UUID] = None, limit:
         
         # Build base query
         query = supabase.from_('campaigns')\
-            .select('id, name, scheduled_at, company_id, companies!inner(id, name, deleted)')\
+            .select('id, name, type, scheduled_at, company_id, companies!inner(id, name, deleted)')\
             .eq('auto_run_triggered', False)\
             .eq('companies.deleted', False)\
             .lte('scheduled_at', current_time.isoformat())\
