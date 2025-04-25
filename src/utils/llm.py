@@ -212,13 +212,6 @@ The function will schedule a 30-minute meeting at the specified time.""",
     
     logger.info(f"Reply from OpenAI Call: {ai_reply}")
 
-    # Format AI reply with HTML
-    html_template = """
-    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        {}
-    </div>
-    """
-    #formatted_reply = html_template.format(ai_reply.replace('\n', '<br>'))
     formatted_reply = ai_reply.replace('\n', '<br>')
     
     return formatted_reply

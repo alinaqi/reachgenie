@@ -245,7 +245,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         email_content = json.loads(content)
         
         logger.info(f"Generated email content for lead: {lead.get('email')}")
-        return email_content["subject"], email_content["body"]
+        return email_content["subject"].capitalize(), email_content["body"]
         
     except Exception as e:
         logger.error(f"Failed to generate email content: {str(e)}")
