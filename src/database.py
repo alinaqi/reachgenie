@@ -3947,3 +3947,39 @@ async def update_campaign_schedule_status(schedule_id: UUID, status: str = "sent
     except Exception as e:
         logger.error(f"Error updating campaign schedule status: {str(e)}")
         return False
+
+async def get_pending_scheduled_campaigns(last_id: Optional[UUID] = None, limit: int = 50) -> List[Dict]:
+    """
+    Get campaigns that are scheduled to run and haven't been auto-triggered yet.
+    Uses keyset pagination for efficient querying of large datasets.
+    
+    Args:
+        last_id: UUID of the last campaign from previous page (for pagination)
+        limit: Maximum number of records to return
+        
+    Returns:
+        List of campaign dictionaries with id, name, scheduled_at, and company info
+    """
+    try:
+        # Get current timestamp in UTC
+        current_time = datetime.now(timezone.utc)
+        
+        # Build base query
+        query = supabase.from_('campaigns')\
+            .select('id, name, scheduled_at, company_id, companies!inner(id, name, deleted)')\
+            .eq('auto_run_triggered', False)\
+            .eq('companies.deleted', False)\
+            .lte('scheduled_at', current_time.isoformat())\
+            .order('id')\
+            .limit(limit)
+            
+        # Add keyset pagination condition if last_id is provided
+        if last_id:
+            query = query.gt('id', str(last_id))
+            
+        response = query.execute()
+        return response.data
+            
+    except Exception as e:
+        logger.error(f"Error fetching pending scheduled campaigns: {str(e)}")
+        return []
