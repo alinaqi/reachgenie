@@ -10,7 +10,13 @@ import logging
 from uuid import UUID
 from typing import Optional
 
-from src.database import get_pending_scheduled_campaigns
+from src.database import (
+    get_pending_scheduled_campaigns,
+    create_campaign_run,
+    mark_campaign_as_triggered,
+    get_campaign_lead_count
+)
+from src.main import run_company_campaign
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +31,7 @@ BATCH_SIZE = 50  # Number of campaigns to process in each batch
 async def process_scheduled_campaigns():
     """
     Process all scheduled campaigns using keyset pagination.
+    Reuses existing campaign running logic from the API endpoint.
     """
     try:
         total_campaigns = 0
@@ -40,14 +47,48 @@ async def process_scheduled_campaigns():
                 
             # Process each campaign in the batch
             for campaign in campaigns:
-                logger.info(
-                    f"\n Found pending scheduled campaign - "
-                    f"ID: {campaign['id']}, \n "
-                    f"Name: {campaign['name']}, \n "
-                    f"Company: {campaign['companies']['name']}, \n "
-                    f"Scheduled At: {campaign['scheduled_at']} \n "
-                )
-                total_campaigns += 1
+                campaign_id = UUID(campaign['id'])
+                
+                try:
+                    logger.info(
+                        f"\nProcessing scheduled campaign - "
+                        f"ID: {campaign_id}, "
+                        f"Campaign Name: {campaign['name']}, "
+                        f"Company Name: {campaign['companies']['name']}, "
+                        f"Scheduled At: {campaign['scheduled_at']}"
+                    )
+                    
+                    # Get total leads count
+                    lead_count = await get_campaign_lead_count(campaign)
+                    
+                    # Create campaign run record
+                    campaign_run = await create_campaign_run(
+                        campaign_id=campaign_id,
+                        status="idle",
+                        leads_total=lead_count
+                    )
+                    
+                    if not campaign_run:
+                        logger.error(f"Failed to create campaign run for campaign {campaign_id}")
+                        continue
+                        
+                    campaign_run_id = UUID(campaign_run['id'])
+                    logger.info(f"Created campaign run {campaign_run_id} with {lead_count} leads")
+                    
+                    # Run the campaign using existing logic
+                    await run_company_campaign(campaign_id, campaign_run_id)
+                    
+                    # Mark campaign as auto-triggered
+                    if await mark_campaign_as_triggered(campaign_id):
+                        logger.info(f"Successfully marked campaign {campaign_id} as triggered")
+                    else:
+                        logger.error(f"Failed to mark campaign {campaign_id} as triggered")
+                    
+                    total_campaigns += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error processing campaign {campaign_id}: {str(e)}")
+                    continue
                 
             # Update last_id for next batch
             last_id = UUID(campaigns[-1]['id'])
