@@ -204,9 +204,12 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
           [Company Contact Person]
           [GIVE A NICE AND SHORT TITLE FOR THE CONTACT PERSON]
           [Company URL with utm_source=reachgenie]
-
-          Use the text "For appointment booking:" in the signature for appointment booking, and after that add the Company Calendar Link if provided. Always add a line break before this text.
-          e.g. For appointment booking: https://calendly.com/reachgenie/30min
+          
+          Signature Calendar Link Rule:
+          IF company.get('custom_calendar_link') exists and is not empty THEN
+          Add an empty line followed by:
+          For appointment booking: [INSERT THE EXACT custom_calendar_link VALUE]
+          END IF
         - IMPORTANT: In all urls, use utm_source=reachgenie
         {f'''
         - Use the detailed product information to craft a more compelling message
