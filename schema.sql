@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     phone_days_between_reminders INTEGER DEFAULT 0,
     auto_reply_enabled BOOLEAN DEFAULT FALSE,
     trigger_call_on TEXT,
+    scheduled_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -134,6 +135,7 @@ COMMENT ON COLUMN campaigns.auto_reply_enabled IS 'Flag to enable/disable automa
 COMMENT ON COLUMN campaigns.phone_number_of_reminders IS 'Number of phone call reminders to be made';
 COMMENT ON COLUMN campaigns.phone_days_between_reminders IS 'Number of days to wait between phone call reminders';
 COMMENT ON COLUMN campaigns.trigger_call_on IS 'Specifies the condition or event that triggers a call in the campaign';
+COMMENT ON COLUMN campaigns.scheduled_at IS 'Timestamp when the campaign is scheduled to start';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (
