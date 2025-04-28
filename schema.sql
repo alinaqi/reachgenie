@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
     phone_days_between_reminders INTEGER DEFAULT 0,
     auto_reply_enabled BOOLEAN DEFAULT FALSE,
     trigger_call_on TEXT,
+    scheduled_at TIMESTAMP WITH TIME ZONE,
+    auto_run_triggered BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -134,6 +136,8 @@ COMMENT ON COLUMN campaigns.auto_reply_enabled IS 'Flag to enable/disable automa
 COMMENT ON COLUMN campaigns.phone_number_of_reminders IS 'Number of phone call reminders to be made';
 COMMENT ON COLUMN campaigns.phone_days_between_reminders IS 'Number of days to wait between phone call reminders';
 COMMENT ON COLUMN campaigns.trigger_call_on IS 'Specifies the condition or event that triggers a call in the campaign';
+COMMENT ON COLUMN campaigns.scheduled_at IS 'Timestamp when the campaign is scheduled to start';
+COMMENT ON COLUMN campaigns.auto_run_triggered IS 'Flag indicating whether the campaign has been automatically triggered based on schedule';
 
 -- Email Logs table
 CREATE TABLE IF NOT EXISTS email_logs (
@@ -213,13 +217,15 @@ CREATE TABLE IF NOT EXISTS campaign_runs (
     campaign_id UUID REFERENCES campaigns(id) NOT NULL,
     run_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     leads_total INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'completed')),
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'failed', 'running', 'completed')),
+    failure_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Add comments to explain the columns
 COMMENT ON COLUMN campaign_runs.leads_total IS 'Number of call/email leads that were available when this run was executed';
-COMMENT ON COLUMN campaign_runs.status IS 'Status of the campaign run: idle (default), running, or completed';
+COMMENT ON COLUMN campaign_runs.status IS 'Status of the campaign run: idle (default), running, completed, or failed';
+COMMENT ON COLUMN campaign_runs.failure_reason IS 'Reason for failure if the campaign run status is failed';
 
 -- Email Queue table
 CREATE TABLE IF NOT EXISTS email_queue (

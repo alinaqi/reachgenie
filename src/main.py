@@ -102,7 +102,8 @@ from src.database import (
     get_email_log_by_id,
     check_existing_call_queue_record,
     update_email_reminder_eligibility,
-    get_call_log_by_bland_id
+    get_call_log_by_bland_id,
+    get_campaign_lead_count
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1557,7 +1558,8 @@ async def create_company_campaign(
         phone_number_of_reminders=campaign.phone_number_of_reminders,
         phone_days_between_reminders=campaign.phone_days_between_reminders,
         auto_reply_enabled=campaign.auto_reply_enabled,
-        trigger_call_on=campaign.trigger_call_on
+        trigger_call_on=campaign.trigger_call_on,
+        scheduled_at=campaign.scheduled_at
     )
 
 @app.get("/api/companies/{company_id}/campaigns", response_model=List[EmailCampaignInDB], tags=["Campaigns & Emails"])
@@ -1704,12 +1706,7 @@ async def run_campaign(
                 detail="Email provider type not configured. Please set up email provider type first."
             )
     # Get total leads count based on campaign type
-    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
-        lead_count = await get_leads_with_email(campaign['id'], count=True)
-    elif campaign['type'] == 'call':
-        lead_count = await get_leads_with_phone(company['id'], count=True)
-    else:
-        lead_count = 0
+    lead_count = await get_campaign_lead_count(campaign)
 
     # Create a new campaign run record
     campaign_run = await create_campaign_run(
@@ -2345,24 +2342,24 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
     # Validate company settings
     if not company.get("account_email") or not company.get("account_password"):
         logger.error(f"Company {campaign['company_id']} missing credentials")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email account credentials")
         return
             
     if not company.get("account_type"):
         logger.error(f"Company {campaign['company_id']} missing email provider type")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email provider type")
         return
             
     if not company.get("name"):
         logger.error(f"Company {campaign['company_id']} missing company name")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing company name")
         return    
     
     # Get campaign template
     template = campaign.get('template')
     if not template:
         logger.error(f"Campaign {campaign['id']} missing email template")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed")
+        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing campaign email template")
         return
     
     # Get total count of leads with emails

@@ -447,7 +447,7 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
         'total_pages': (total + limit - 1) // limit if total > 0 else 1
     }
 
-async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None):
+async def create_campaign(company_id: UUID, name: str, description: Optional[str], product_id: UUID, type: str = 'email', template: Optional[str] = None, number_of_reminders: Optional[int] = 0, days_between_reminders: Optional[int] = 0, phone_number_of_reminders: Optional[int] = 0, phone_days_between_reminders: Optional[int] = 0, auto_reply_enabled: Optional[bool] = False, trigger_call_on: Optional[str] = None, scheduled_at: Optional[datetime] = None):
     campaign_data = {
         'company_id': str(company_id),
         'name': name,
@@ -460,7 +460,8 @@ async def create_campaign(company_id: UUID, name: str, description: Optional[str
         'phone_number_of_reminders': phone_number_of_reminders,
         'phone_days_between_reminders': phone_days_between_reminders,
         'auto_reply_enabled': auto_reply_enabled,
-        'trigger_call_on': trigger_call_on
+        'trigger_call_on': trigger_call_on,
+        'scheduled_at': scheduled_at.isoformat() if scheduled_at else None
     }
     response = supabase.table('campaigns').insert(campaign_data).execute()
     return response.data[0]
@@ -1723,25 +1724,28 @@ async def create_campaign_run(campaign_id: UUID, status: str = "idle", leads_tot
         logger.error(f"Error creating campaign run: {str(e)}")
         return None
 
-async def update_campaign_run_status(campaign_run_id: UUID, status: str):
+async def update_campaign_run_status(campaign_run_id: UUID, status: str, failure_reason: Optional[str] = None):
     """
     Update the status of a campaign run
     
     Args:
         campaign_run_id: UUID of the campaign run
-        status: New status ('idle', 'running', 'completed')
+        status: New status ('idle', 'failed', 'running', 'completed')
+        failure_reason: Optional reason for failure when status is 'failed'
         
     Returns:
         Dict containing the updated campaign run record or None if update failed
     """
     try:
-        if status not in ['idle', 'running', 'completed']:
+        if status not in ['idle', 'failed', 'running', 'completed']:
             logger.error(f"Invalid campaign run status: {status}")
             return None
             
-        response = supabase.table('campaign_runs').update({
-            'status': status
-        }).eq('id', str(campaign_run_id)).execute()
+        update_data = {'status': status}
+        if failure_reason is not None:
+            update_data['failure_reason'] = failure_reason
+            
+        response = supabase.table('campaign_runs').update(update_data).eq('id', str(campaign_run_id)).execute()
         
         if not response.data:
             logger.error(f"Failed to update status for campaign run {campaign_run_id}")
@@ -3946,3 +3950,79 @@ async def update_campaign_schedule_status(schedule_id: UUID, status: str = "sent
     except Exception as e:
         logger.error(f"Error updating campaign schedule status: {str(e)}")
         return False
+
+async def get_pending_scheduled_campaigns(last_id: Optional[UUID] = None, limit: int = 50) -> List[Dict]:
+    """
+    Get campaigns that are scheduled to run and haven't been auto-triggered yet.
+    Uses keyset pagination for efficient querying of large datasets.
+    
+    Args:
+        last_id: UUID of the last campaign from previous page (for pagination)
+        limit: Maximum number of records to return
+        
+    Returns:
+        List of campaign dictionaries with id, name, scheduled_at, and company info
+    """
+    try:
+        # Get current timestamp in UTC
+        current_time = datetime.now(timezone.utc)
+        
+        # Build base query
+        query = supabase.from_('campaigns')\
+            .select('id, name, type, scheduled_at, company_id, companies!inner(id, name, deleted)')\
+            .eq('auto_run_triggered', False)\
+            .eq('companies.deleted', False)\
+            .lte('scheduled_at', current_time.isoformat())\
+            .order('id')\
+            .limit(limit)
+            
+        # Add keyset pagination condition if last_id is provided
+        if last_id:
+            query = query.gt('id', str(last_id))
+            
+        response = query.execute()
+        return response.data
+            
+    except Exception as e:
+        logger.error(f"Error fetching pending scheduled campaigns: {str(e)}")
+        return []
+    
+async def mark_campaign_as_triggered(campaign_id: UUID) -> bool:
+    """
+    Mark a campaign as auto-triggered.
+    
+    Args:
+        campaign_id: UUID of the campaign to mark as triggered
+        
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    try:
+        response = supabase.table('campaigns').update({
+            'auto_run_triggered': True
+        }).eq('id', str(campaign_id)).execute()
+        
+        return bool(response.data)
+    except Exception as e:
+        logger.error(f"Error marking campaign {campaign_id} as triggered: {str(e)}")
+        return False
+
+async def get_campaign_lead_count(campaign: dict) -> int:
+    """
+    Get the total number of leads for a campaign based on its type.
+    
+    Args:
+        campaign: Campaign dictionary containing type and id
+        
+    Returns:
+        int: Total number of leads
+    """
+    try:
+        if campaign['type'] in ['email', 'email_and_call']:
+            return await get_leads_with_email(campaign['id'], count=True)
+        elif campaign['type'] == 'call':
+            return await get_leads_with_phone(campaign['company_id'], count=True)
+        return 0
+    except Exception as e:
+        logger.error(f"Error getting lead count for campaign {campaign['id']}: {str(e)}")
+        return 0
