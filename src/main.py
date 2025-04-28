@@ -1591,18 +1591,20 @@ async def get_company_emails(
     campaign_id: Optional[UUID] = Query(None, description="Filter emails by campaign ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter emails by lead ID"),
     campaign_run_id: Optional[UUID] = Query(None, description="Filter emails by campaign run ID"),
+    status: Optional[str] = Query(None, description="Filter emails by status: 'opened', 'replied', or 'meeting_booked'"),
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get paginated email logs for a company, optionally filtered by campaign ID, lead ID, or campaign run ID
+    Get paginated email logs for a company, optionally filtered by campaign ID, lead ID, campaign run ID, or status
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
         lead_id: Optional UUID of the lead to filter by
         campaign_run_id: Optional UUID of the campaign run to filter by
+        status: Optional status to filter by ('opened', 'replied', or 'meeting_booked')
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
         current_user: Current authenticated user
@@ -1615,12 +1617,21 @@ async def get_company_emails(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Validate status parameter if provided
+    valid_statuses = {'opened', 'replied', 'meeting_booked'}
+    if status is not None and status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid status. Must be one of: 'opened', 'replied', or 'meeting_booked'"
+        )
+    
     # Get email logs with pagination
     email_logs_response = await get_company_email_logs(
         company_id=company_id, 
         campaign_id=campaign_id, 
         lead_id=lead_id, 
         campaign_run_id=campaign_run_id,
+        status=status,
         page_number=page_number,
         limit=limit
     )
