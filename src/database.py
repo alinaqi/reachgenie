@@ -970,15 +970,16 @@ async def get_user_by_id(user_id: UUID):
     response = supabase.table('users').select('*').eq('id', str(user_id)).execute()
     return response.data[0] if response.data else None
 
-async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
+async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, status: Optional[str] = None, page_number: int = 1, limit: int = 20):
     """
-    Get email logs for a company, optionally filtered by campaign_id and/or lead_id
+    Get email logs for a company, optionally filtered by campaign_id, lead_id, campaign_run_id, and status
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
         lead_id: Optional UUID of the lead to filter by
         campaign_run_id: Optional UUID of the campaign run to filter by
+        status: Optional status to filter by ('opened', 'replied', or 'meeting_booked')
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
         
@@ -1003,6 +1004,23 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     
     if campaign_run_id:
         base_query = base_query.eq('campaign_run_id', str(campaign_run_id))
+        
+    # Add status filter if provided
+    if status:
+        if status == 'opened':
+            base_query = base_query.eq('has_opened', True)
+        elif status == 'replied':
+            base_query = base_query.eq('has_replied', True)
+        elif status == 'meeting_booked':
+            base_query = base_query.eq('has_meeting_booked', True)
+    
+    # Calculate offset for pagination
+    offset = (page_number - 1) * limit
+    
+    # Execute paginated query
+    response = base_query.order('sent_at', desc=True)\
+        .range(offset, offset + limit - 1)\
+        .execute()
     
     # Get total count
     total_count_query = supabase.table('email_logs')\
@@ -1015,18 +1033,24 @@ async def get_company_email_logs(company_id: UUID, campaign_id: Optional[UUID] =
     
     if lead_id:
         total_count_query = total_count_query.eq('lead_id', str(lead_id))
-    
+        
     if campaign_run_id:
         total_count_query = total_count_query.eq('campaign_run_id', str(campaign_run_id))
+        
+    # Add status filter to count query if provided
+    if status:
+        if status == 'opened':
+            total_count_query = total_count_query.eq('has_opened', True)
+        elif status == 'replied':
+            total_count_query = total_count_query.eq('has_replied', True)
+        elif status == 'meeting_booked':
+            total_count_query = total_count_query.eq('has_meeting_booked', True)
     
     count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
     
-    # Calculate offset from page_number
-    offset = (page_number - 1) * limit
     
-    # Get paginated data
-    response = base_query.range(offset, offset + limit - 1).order('sent_at', desc=True).execute()
+    
     
     return {
         'items': response.data,
