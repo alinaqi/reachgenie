@@ -21,7 +21,8 @@ from src.database import (
     get_email_log_by_id,
     get_campaign_by_id,
     get_lead_by_id,
-    add_email_to_queue
+    add_email_to_queue,
+    get_company_id_from_email_log
 )
 from src.utils.encryption import decrypt_password
 from src.utils.llm import generate_ai_reply
@@ -220,8 +221,14 @@ async def process_emails(
             # and ignoring all emails which are not related to our system.
             email_log_id_str = email_data['to'].split('+')[1].split('@')[0]
             email_log_id = UUID(email_log_id_str)
+            
             logger.info(f"Email Subject: {email_data['subject']}")
             logger.info(f"Extracted email_log_id from 'to' field: {email_log_id}")
+            
+            company_id = await get_company_id_from_email_log(email_log_id)
+            if company_id != UUID(company['id']):
+                logger.info(f"Email is not related to the company {company['name']} ({company['id']}). Ignoring this email.")
+                continue
 
         except (IndexError, ValueError) as e:
             logger.info(f"Email Subject: {email_data['subject']}")
