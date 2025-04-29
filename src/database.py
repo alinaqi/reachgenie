@@ -4050,3 +4050,42 @@ async def get_campaign_lead_count(campaign: dict) -> int:
     except Exception as e:
         logger.error(f"Error getting lead count for campaign {campaign['id']}: {str(e)}")
         return 0
+
+async def check_account_email_exists_in_other_companies(company_id: UUID, account_email: str, user_id: UUID) -> bool:
+    """
+    Check if the given account_email exists in other non-deleted companies for the user
+    
+    Args:
+        company_id: UUID of the current company to exclude from check
+        account_email: Email address to check
+        user_id: UUID of the current user
+        
+    Returns:
+        bool: True if email exists in other companies, False otherwise
+    """
+    try:
+        # Get all companies for the user where the account_email exists
+        response = supabase.table('companies')\
+            .select('id')\
+            .neq('id', str(company_id))\
+            .eq('account_email', account_email)\
+            .eq('deleted', False)\
+            .execute()
+
+        if not response.data:
+            return False
+
+        # Check if any of these companies belong to the user
+        user_companies = await get_companies_by_user_id(user_id)
+        user_company_ids = {str(company['id']) for company in user_companies}
+        
+        # Check if any of the found companies belong to the user
+        for company in response.data:
+            if str(company['id']) in user_company_ids:
+                return True
+                
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking account email existence: {str(e)}")
+        return False

@@ -1146,4 +1146,16 @@ class CallQueueRetryResponse(BaseModel):
                 "status": "initiated"
             }
         }
+
+class AccountEmailCheckResponse(BaseModel):
+    exists: bool = Field(..., description="Whether the account email exists in other companies")
+    message: str = Field(..., description="Descriptive message about the result")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "exists": True,
+                "message": "Account email already exists in another company"
+            }
+        }
  
