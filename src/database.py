@@ -256,34 +256,24 @@ async def get_lead_by_id(lead_id: UUID):
 
 async def delete_lead(lead_id: UUID) -> bool:
     """
-    Delete a lead from the database and all related records in the correct order:
-    1. email_log_details
-    2. email_logs
-    3. lead
+    Soft delete a lead by setting its deleted_at timestamp
     
     Args:
         lead_id: UUID of the lead to delete
         
     Returns:
-        bool: True if lead was deleted successfully, False otherwise
+        bool: True if lead was marked as deleted successfully, False otherwise
     """
     try:
-        # First get all email logs for this lead
-        email_logs = supabase.table('email_logs').select('id').eq('lead_id', str(lead_id)).execute()
-        
-        if email_logs.data:
-            # Delete all email_log_details for these email logs
-            for log in email_logs.data:
-                supabase.table('email_log_details').delete().eq('email_logs_id', str(log['id'])).execute()
-        
-        # Now delete the email logs
-        supabase.table('email_logs').delete().eq('lead_id', str(lead_id)).execute()
-        
-        # Finally delete the lead
-        response = supabase.table('leads').delete().eq('id', str(lead_id)).execute()
+        # Update the lead with current timestamp in deleted_at
+        response = supabase.table('leads')\
+            .update({"deleted_at": datetime.now(timezone.utc).isoformat()})\
+            .eq('id', str(lead_id))\
+            .execute()
+            
         return bool(response.data)
     except Exception as e:
-        logger.error(f"Error deleting lead {lead_id}: {str(e)}")
+        logger.error(f"Error soft deleting lead {lead_id}: {str(e)}")
         return False
 
 async def get_product_by_id(product_id: UUID):
