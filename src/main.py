@@ -103,7 +103,8 @@ from src.database import (
     check_existing_call_queue_record,
     update_email_reminder_eligibility,
     get_call_log_by_bland_id,
-    get_campaign_lead_count
+    get_campaign_lead_count,
+    check_trial_status
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1692,7 +1693,12 @@ async def run_campaign(
     campaign = await get_campaign_by_id(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    
+
+    # Check if the company's user is on a trial and can run the campaign
+    can_run, error_message = await check_trial_status(campaign['company_id'])
+    if not can_run:
+        raise Exception(error_message)
+  
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
