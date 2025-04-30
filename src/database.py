@@ -4133,3 +4133,44 @@ async def check_account_email_exists_in_other_companies(company_id: UUID, accoun
     except Exception as e:
         logger.error(f"Error checking account email existence: {str(e)}")
         return False
+
+async def check_trial_status(company_id: UUID) -> tuple[bool, str]:
+    """
+    Check if company owner's trial has expired
+    
+    Args:
+        company_id: UUID of the company
+    
+    Returns:
+        Tuple of (can_run_campaign, error_message)
+        - If can_run_campaign is False, error_message will explain why
+        - If can_run_campaign is True, error_message will be empty
+    """
+    try:
+        # Get company with owner's user info using join
+        company_query = supabase.table('companies')\
+            .select('*, users!companies_user_id_fkey(plan_type, created_at)')\
+            .eq('id', str(company_id))\
+            .single()
+        company = company_query.execute()
+        
+        if not company.data:
+            return (False, "Company not found")
+            
+        # Get user's plan type and creation date
+        user = company.data['users']
+        if user['plan_type'] != 'trial':
+            return (True, "")  # Not a trial user, can run campaign
+            
+        # Check if trial has expired (7 days from creation)
+        created_at = datetime.fromisoformat(user['created_at'].replace('Z', '+00:00'))
+        trial_expiry = created_at + timedelta(days=7)
+        
+        if datetime.now(timezone.utc) > trial_expiry:
+            return (False, "Trial period has expired. Please upgrade your plan")
+            
+        return (True, "")  # Trial is still valid
+        
+    except Exception as e:
+        logger.error(f"Error checking trial status: {str(e)}")
+        return (False, f"Error checking trial status: {str(e)}")
