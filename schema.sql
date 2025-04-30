@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS leads (
     company_facebook TEXT,
     company_twitter TEXT,
     company_revenue TEXT,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
