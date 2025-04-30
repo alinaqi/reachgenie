@@ -25,6 +25,9 @@ logging.basicConfig(
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
+# Constants
+TRIAL_PLAN_LEAD_LIMIT = 500
+
 async def get_user_by_email(email: str):
     response = supabase.table('users').select('*').eq('email', email).execute()
     return response.data[0] if response.data else None
@@ -64,8 +67,8 @@ async def check_trial_user_lead_limit(company_id: UUID) -> tuple[bool, str]:
             .in_('company_id', company_ids)\
             .execute()
             
-        if leads_count.count >= 500:
-            return (False, "Trial plan limit of 500 leads reached")
+        if leads_count.count >= TRIAL_PLAN_LEAD_LIMIT:
+            return (False, f"Trial plan limit of {TRIAL_PLAN_LEAD_LIMIT} leads reached")
             
         return (True, "")
         
