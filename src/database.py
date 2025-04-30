@@ -30,7 +30,11 @@ async def get_user_by_email(email: str):
     return response.data[0] if response.data else None
 
 async def create_user(email: str, password_hash: str):
-    user_data = {'email': email, 'password_hash': password_hash}
+    user_data = {
+        'email': email, 
+        'password_hash': password_hash,
+        'plan_type': 'trial'  # Set default plan type
+    }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0]
 
@@ -1267,7 +1271,8 @@ async def create_unverified_user(email: str, name: Optional[str] = None):
         'email': email,
         'name': name,
         'password_hash': 'PENDING_INVITE',  # Temporary value that can't be used to log in
-        'verified': False
+        'verified': False,
+        'plan_type': 'trial'  # Set default plan type
     }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0] if response.data else None
