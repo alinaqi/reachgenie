@@ -11,6 +11,14 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add new columns to users table
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+ADD COLUMN IF NOT EXISTS plan_type TEXT CHECK (plan_type IN ('trial', 'fixed', 'performance')),
+ADD COLUMN IF NOT EXISTS lead_tier INTEGER CHECK (lead_tier IN (2500, 5000, 7500, 10000)),
+ADD COLUMN IF NOT EXISTS channels_active JSONB,
+ADD COLUMN IF NOT EXISTS subscription_id TEXT;
+
 -- Companies table
 CREATE TABLE IF NOT EXISTS companies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
