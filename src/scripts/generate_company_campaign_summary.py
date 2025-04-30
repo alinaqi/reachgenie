@@ -22,6 +22,7 @@ from src.database import (
 )
 from src.services.email_service import EmailService
 from src.templates.email_templates import get_base_template
+from src.database import supabase
 
 # Configure logging
 logging.basicConfig(
@@ -182,7 +183,13 @@ async def get_engaged_leads(company_id: UUID, limit: int = 5) -> List[Dict]:
         
         if lead_id and lead_id not in seen_lead_ids and len(engaged_leads) < limit:
             seen_lead_ids.add(lead_id)
-            lead = await get_lead_by_id(UUID(lead_id))
+            # Get lead details and check if not soft deleted
+            lead_response = supabase.table('leads')\
+                .select('*')\
+                .eq('id', str(lead_id))\
+                .is_('deleted_at', None)\
+                .execute()
+            lead = lead_response.data[0] if lead_response.data else None
             
             if lead:
                 # Extract enrichment data
