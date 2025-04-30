@@ -1687,63 +1687,67 @@ async def run_campaign(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
-    logger.info(f"Running campaign {campaign_id}")
-    
-    # Get the campaign
-    campaign = await get_campaign_by_id(campaign_id)
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    try:
+        logger.info(f"Running campaign {campaign_id}")
+        
+        # Get the campaign
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # Check if the company's user is on a trial and can run the campaign
-    can_run, error_message = await check_trial_status(campaign['company_id'])
-    if not can_run:
-        raise Exception(error_message)
-  
-    # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        # Check if the company's user is on a trial and can run the campaign
+        can_run, error_message = await check_trial_status(campaign['company_id'])
+        if not can_run:
+            raise Exception(error_message)
     
-    # Get company details and validate email credentials
-    company = await get_company_by_id(campaign["company_id"])
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # Only validate email credentials if campaign type is email or email_and_call
-    if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
-        if not company.get("account_email") or not company.get("account_password"):
-            logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
-            raise HTTPException(
-                status_code=400,
-                detail="Company email credentials not configured. Please set up email account credentials first."
-            )
-            
-        if not company.get("account_type"):
-            raise HTTPException(
-                status_code=400,
-                detail="Email provider type not configured. Please set up email provider type first."
-            )
-    # Get total leads count based on campaign type
-    lead_count = await get_campaign_lead_count(campaign)
+        # Validate company access
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get company details and validate email credentials
+        company = await get_company_by_id(campaign["company_id"])
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        
+        # Only validate email credentials if campaign type is email or email_and_call
+        if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
+            if not company.get("account_email") or not company.get("account_password"):
+                logger.error(f"Company {campaign['company_id']} missing credentials - email: {company.get('account_email')!r}, has_password: {bool(company.get('account_password'))}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Company email credentials not configured. Please set up email account credentials first."
+                )
+                
+            if not company.get("account_type"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email provider type not configured. Please set up email provider type first."
+                )
+        # Get total leads count based on campaign type
+        lead_count = await get_campaign_lead_count(campaign)
 
-    # Create a new campaign run record
-    campaign_run = await create_campaign_run(
-        campaign_id=campaign_id,
-        status="idle",
-        leads_total=lead_count
-    )
-    
-    if not campaign_run:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create campaign run record"
+        # Create a new campaign run record
+        campaign_run = await create_campaign_run(
+            campaign_id=campaign_id,
+            status="idle",
+            leads_total=lead_count
         )
-    
-    logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
-    # Add campaign execution to background tasks
-    background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
-    
-    return {"message": "Campaign request initiated successfully"} 
+        
+        if not campaign_run:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create campaign run record"
+            )
+        
+        logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
+        # Add campaign execution to background tasks
+        background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
+        
+        return {"message": "Campaign request initiated successfully"}
+    except Exception as e:
+        logger.error(f"Unable to run campaign: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
 
 @app.post("/api/generate-campaign", response_model=CampaignGenerationResponse, tags=["Campaigns & Emails"])
 async def generate_campaign(
