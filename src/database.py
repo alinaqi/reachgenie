@@ -168,7 +168,9 @@ async def create_lead(company_id: UUID, lead_data: dict):
 
 async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: int = 20, search_term: Optional[str] = None):
     # Build base query
-    base_query = supabase.table('leads').select('*', count='exact').eq('company_id', str(company_id))
+    base_query = supabase.table('leads').select('*', count='exact')\
+        .eq('company_id', str(company_id))\
+        .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     # Add search filter if search_term is provided
     if search_term:
@@ -388,8 +390,12 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
         return None
 
 async def get_calls_by_companies(company_ids: List[str]):
-    # Get all leads for the companies
-    leads_response = supabase.table('leads').select('id').in_('company_id', company_ids).execute()
+    # Get all leads for the companies (excluding soft-deleted)
+    leads_response = supabase.table('leads')\
+        .select('id')\
+        .in_('company_id', company_ids)\
+        .is_('deleted_at', None)\
+        .execute()
     lead_ids = [lead['id'] for lead in leads_response.data]
     
     # Get all products for the companies
@@ -423,7 +429,7 @@ async def get_calls_by_companies(company_ids: List[str]):
             call['product_name'] = call['products']['product_name'] if call.get('products') else None
             unique_calls.append(call)
     
-    return unique_calls 
+    return unique_calls
 
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
     """
@@ -549,16 +555,6 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, 
 async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
     """
     Get leads with email addresses for a campaign with pagination support
-    
-    Args:
-        campaign_id: UUID of the campaign
-        count: If True, return only the count of leads
-        page: Page number (1-indexed)
-        limit: Number of leads per page
-        
-    Returns:
-        If count=True: Total number of leads
-        If count=False: Dict containing paginated leads data and metadata
     """
     # First get the campaign to get company_id
     campaign = await get_campaign_by_id(campaign_id)
@@ -570,7 +566,8 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             .eq('company_id', campaign['company_id'])\
             .neq('email', None)\
             .neq('email', '')\
-            .eq('do_not_contact', False)
+            .eq('do_not_contact', False)\
+            .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     if count:
         # Get count using the filter chain
@@ -604,23 +601,14 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
 async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
     """
     Get leads with phone numbers for a company with pagination support
-    
-    Args:
-        company_id: UUID of the company
-        count: If True, return only the count of leads
-        page: Page number (1-indexed)
-        limit: Number of leads per page
-        
-    Returns:
-        If count=True: Total number of leads
-        If count=False: Dict containing paginated leads data and metadata
     """
     def apply_filters(query):
         return query\
             .eq('company_id', str(company_id))\
             .neq('phone_number', None)\
             .neq('phone_number', '')\
-            .eq('do_not_contact', False)
+            .eq('do_not_contact', False)\
+            .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     if count:
         # Get count using the filter chain
@@ -1693,7 +1681,11 @@ async def get_lead_by_email(email: str):
     """
     Get a lead by email address
     """
-    response = supabase.table('leads').select('*').eq('email', email).execute()
+    response = supabase.table('leads')\
+        .select('*')\
+        .eq('email', email)\
+        .is_('deleted_at', None)\
+        .execute()
     return response.data[0] if response.data else None
 
 async def get_lead_by_phone(phone: str):
@@ -1703,7 +1695,11 @@ async def get_lead_by_phone(phone: str):
     fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
     
     for field in fields:
-        response = supabase.table('leads').select('*').eq(field, phone).execute()
+        response = supabase.table('leads')\
+            .select('*')\
+            .eq(field, phone)\
+            .is_('deleted_at', None)\
+            .execute()
         if response.data:
             return response.data[0]
     
