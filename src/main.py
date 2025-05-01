@@ -400,6 +400,12 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
     company_roles = await get_user_company_roles(UUID(user["id"]))
     user["company_roles"] = company_roles
     
+    # Check whether the user is on a trial plan and whether it has expired or not
+    can_run, error_message = await check_trial_status(UUID(user["id"]))
+    # if user is on a trial plan and the trial has expired, set the message for the user
+    if not can_run:
+        user["upgrade_message"] = "You trial plan has expired. Please upgrade to a paid plan to continue using the platform."
+
     return user
 
 # Company Management endpoints

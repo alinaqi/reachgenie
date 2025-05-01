@@ -123,6 +123,7 @@ class UserInDB(UserBase):
     created_at: datetime
     company_roles: Optional[List[UserCompanyRole]] = None
     plan_type: str
+    upgrade_message: Optional[str] = None
 
     class Config:
         json_schema_extra = {
