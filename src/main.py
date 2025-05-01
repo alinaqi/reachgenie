@@ -964,6 +964,19 @@ async def upload_leads(
     Returns:
         Task ID for tracking the upload progress
     """
+
+    # Get company details
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Check if the company owner user is on a trial plan and whether it has expired or not
+    can_run, error_message = await check_trial_status(UUID(company["user_id"]))
+    
+    # if user is on a trial plan and the trial has expired
+    if not can_run:
+        raise HTTPException(status_code=403, detail=error_message)
+
     # Validate company access
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
