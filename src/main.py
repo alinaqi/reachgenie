@@ -1214,6 +1214,18 @@ async def create_lead_endpoint(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Get company details
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Check if the company owner user is on a trial plan and whether it has expired or not
+    can_run, error_message = await check_trial_status(UUID(company["user_id"]))
+    
+    # if user is on a trial plan and the trial has expired
+    if not can_run:
+        raise HTTPException(status_code=403, detail=error_message)
+
     try:
         # Process lead data
         lead_dict = lead_data.dict(exclude_unset=True)
