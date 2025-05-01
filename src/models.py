@@ -122,6 +122,7 @@ class UserInDB(UserBase):
     verified: bool = False
     created_at: datetime
     company_roles: Optional[List[UserCompanyRole]] = None
+    plan_type: str
 
     class Config:
         json_schema_extra = {
