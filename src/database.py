@@ -4134,12 +4134,12 @@ async def check_account_email_exists_in_other_companies(company_id: UUID, accoun
         logger.error(f"Error checking account email existence: {str(e)}")
         return False
 
-async def check_trial_status(company_id: UUID) -> tuple[bool, str]:
+async def check_trial_status(user_id: UUID) -> tuple[bool, str]:
     """
-    Check if company owner's trial has expired
+    Check if user's trial has expired
     
     Args:
-        company_id: UUID of the company
+        user_id: UUID of the user
     
     Returns:
         Tuple of (can_run_campaign, error_message)
@@ -4147,23 +4147,21 @@ async def check_trial_status(company_id: UUID) -> tuple[bool, str]:
         - If can_run_campaign is True, error_message will be empty
     """
     try:
-        # Get company with owner's user info using join
-        company_query = supabase.table('companies')\
-            .select('*, users!companies_user_id_fkey(plan_type, created_at)')\
-            .eq('id', str(company_id))\
+        # Get user info directly
+        user_query = supabase.table('users')\
+            .select('plan_type, created_at')\
+            .eq('id', str(user_id))\
             .single()
-        company = company_query.execute()
+        user = user_query.execute()
         
-        if not company.data:
-            return (False, "Company not found")
+        if not user.data:
+            return (False, "User not found")
             
-        # Get user's plan type and creation date
-        user = company.data['users']
-        if user['plan_type'] != 'trial':
-            return (True, "")  # Not a trial user, can run campaign
+        if user.data['plan_type'] != 'trial':
+            return (True, "")  # Not a trial user
             
         # Check if trial has expired (7 days from creation)
-        created_at = datetime.fromisoformat(user['created_at'].replace('Z', '+00:00'))
+        created_at = datetime.fromisoformat(user.data['created_at'].replace('Z', '+00:00'))
         trial_expiry = created_at + timedelta(days=7)
         
         if datetime.now(timezone.utc) > trial_expiry:

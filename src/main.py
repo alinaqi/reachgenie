@@ -1695,8 +1695,13 @@ async def run_campaign(
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
 
-        # Check if the company's user is on a trial and can run the campaign
-        can_run, error_message = await check_trial_status(campaign['company_id'])
+        # Get company details and validate email credentials
+        company = await get_company_by_id(campaign["company_id"])
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if the company owner user is on a trial plan and whether it has expired or not
+        can_run, error_message = await check_trial_status(UUID(company["user_id"]))
         if not can_run:
             raise Exception(error_message)
     
@@ -1704,11 +1709,6 @@ async def run_campaign(
         companies = await get_companies_by_user_id(current_user["id"])
         if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
             raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        # Get company details and validate email credentials
-        company = await get_company_by_id(campaign["company_id"])
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
         
         # Only validate email credentials if campaign type is email or email_and_call
         if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
