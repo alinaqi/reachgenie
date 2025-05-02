@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from src.config import get_settings
 import stripe
 import logging
+from src.database import supabase
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -46,5 +47,41 @@ async def fulfill_checkout(session_id: str):
 
     # Check the Checkout Session's payment_status property to determine if fulfillment should be performed
     if checkout_session.payment_status == "paid":
-        # Fulfill the order
-        pass
+        try:
+            # Extract metadata from the session
+            metadata = checkout_session.metadata
+            user_id = metadata.get("user_id")
+            plan_type = metadata.get("plan_type")
+            lead_tier = int(metadata.get("lead_tier"))
+            channels = metadata.get("channels", "").split(",")
+            
+            # Get subscription ID from the session
+            subscription_id = checkout_session.subscription
+            
+            # Update user record in the database
+            update_data = {
+                "plan_type": plan_type,
+                "lead_tier": lead_tier,
+                "channels_active": channels,
+                "subscription_id": subscription_id
+            }
+            
+            response = supabase.table("users").update(update_data).eq("id", user_id).execute()
+            
+            if not response.data:
+                logger.error(f"Failed to update user {user_id} with subscription details")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update user subscription details"
+                )
+                
+            logger.info(f"Successfully updated subscription details for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error fulfilling checkout: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to fulfill checkout session"
+            )
+    
+    return checkout_session
