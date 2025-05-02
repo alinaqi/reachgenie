@@ -20,6 +20,9 @@ async def get_checkout_session(session_id: str):
     """
     try:
         session = stripe.checkout.Session.retrieve(session_id)
+        
+        logger.info(f"Retrieved checkout session: {session}")
+        
         return session
 
     except stripe.error.StripeError as e:
