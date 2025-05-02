@@ -53,7 +53,15 @@ async def fulfill_checkout(session_id: str):
             user_id = metadata.get("user_id")
             plan_type = metadata.get("plan_type")
             lead_tier = int(metadata.get("lead_tier"))
-            channels = metadata.get("channels", "").split(",")
+            active_channels = metadata.get("channels", "").split(",")
+            
+            # Format channels as JSON object with boolean values
+            channels_active = {
+                "email": "email" in active_channels,
+                "phone": "phone" in active_channels,
+                "whatsapp": "whatsapp" in active_channels,
+                "linkedin": "linkedin" in active_channels
+            }
             
             # Get subscription ID from the session
             subscription_id = checkout_session.subscription
@@ -62,7 +70,7 @@ async def fulfill_checkout(session_id: str):
             update_data = {
                 "plan_type": plan_type,
                 "lead_tier": lead_tier,
-                "channels_active": channels,
+                "channels_active": channels_active,
                 "subscription_id": subscription_id
             }
             
