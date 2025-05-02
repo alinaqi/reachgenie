@@ -82,7 +82,7 @@ async def get_price_id_for_channel(channel: str, plan_type: str) -> Optional[str
     
     return price_map[plan_type][channel]
 
-async def get_or_create_stripe_customer(user_id: str, email: str, name: str) -> str:
+async def get_or_create_stripe_customer(user_id: str, email: str, name: str = None) -> str:
     """Get existing Stripe customer ID or create a new one"""
     try:
         # Check if user already has a Stripe customer ID
