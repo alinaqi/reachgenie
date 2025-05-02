@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # Calendar settings
     calendly_username: Optional[str] = None
     
-    frontend_url: str = "http://localhost:3000"  # Default frontend URL
+    frontend_url: str = "http://localhost:5173"  # Default frontend URL
 
     class Config:
         env_file = ".env"
