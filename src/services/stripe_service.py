@@ -21,32 +21,32 @@ class StripeService:
         # Define product metadata
         self.products = {
             "fixed": {
-                "name": "Fixed Plan",
+                "name": "ReachGenie - Fixed Plan",
                 "description": "Fixed monthly pricing with base fee + lead tier cost",
                 "metadata": {"plan_type": "fixed"}
             },
             "performance": {
-                "name": "Performance Plan",
+                "name": "ReachGenie - Performance Plan",
                 "description": "Performance-based pricing with lower base fee + lead tier cost + per-meeting cost",
                 "metadata": {"plan_type": "performance"}
             },
             "email_channel": {
-                "name": "Email Channel",
+                "name": "ReachGenie - Email Channel",
                 "description": "Email outreach capability",
                 "metadata": {"addon_type": "channel", "channel": "email"}
             },
             "phone_channel": {
-                "name": "Phone Channel",
+                "name": "ReachGenie - Phone Channel",
                 "description": "Phone outreach capability",
                 "metadata": {"addon_type": "channel", "channel": "phone"}
             },
             "linkedin_channel": {
-                "name": "LinkedIn Channel",
+                "name": "ReachGenie - LinkedIn Channel",
                 "description": "LinkedIn outreach capability",
                 "metadata": {"addon_type": "channel", "channel": "linkedin"}
             },
             "whatsapp_channel": {
-                "name": "WhatsApp Channel",
+                "name": "ReachGenie - WhatsApp Channel",
                 "description": "WhatsApp outreach capability",
                 "metadata": {"addon_type": "channel", "channel": "whatsapp"}
             }
