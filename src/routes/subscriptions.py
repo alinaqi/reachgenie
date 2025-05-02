@@ -82,7 +82,7 @@ async def get_price_id_for_channel(channel: str, plan_type: str) -> Optional[str
     
     return price_map[plan_type][channel]
 
-async def get_or_create_stripe_customer(user_id: str, email: str) -> str:
+async def get_or_create_stripe_customer(user_id: str, email: str, name: str) -> str:
     """Get existing Stripe customer ID or create a new one"""
     try:
         # Check if user already has a Stripe customer ID
@@ -93,6 +93,7 @@ async def get_or_create_stripe_customer(user_id: str, email: str) -> str:
         # Create new Stripe customer
         customer = stripe.Customer.create(
             email=email,
+            name=name,
             metadata={
                 "user_id": user_id
             }
@@ -144,7 +145,8 @@ async def create_subscription(
         # Get or create Stripe customer
         customer_id = await get_or_create_stripe_customer(
             current_user["id"],
-            current_user["email"]
+            current_user["email"],
+            current_user["name"]
         )
         
         # Get price ID for the base plan
