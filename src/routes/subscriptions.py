@@ -110,9 +110,9 @@ async def create_subscription(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except HTTPException as e:
         logger.error(f"Error in create_subscription: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create subscription"
+            detail=str(e.detail)
         ) 
