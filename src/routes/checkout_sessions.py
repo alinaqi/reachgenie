@@ -7,19 +7,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Initialize router
-router = APIRouter(prefix="/api/checkout-sessions", tags=["Checkout Sessions"])
+router = APIRouter(prefix="/api/fulfill_checkout", tags=["Checkout Sessions"])
 
 # Initialize settings
 settings = get_settings()
 stripe.api_key = settings.stripe_secret_key
 
 @router.get("/{session_id}")
-async def get_checkout_session(session_id: str):
+async def fulfill_checkout_session(session_id: str):
     """
-    Retrieve a Stripe Checkout Session by its ID
+    Fulfill a Stripe Checkout Session
     """
     try:
-        session = stripe.checkout.Session.retrieve(session_id)
+        session = await fulfill_checkout(session_id)
         
         logger.info(f"Retrieved checkout session: {session}")
         
@@ -37,3 +37,14 @@ async def get_checkout_session(session_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve checkout session"
         ) 
+    
+async def fulfill_checkout(session_id: str):
+    """
+    Fulfill a Stripe Checkout Session
+    """
+    checkout_session = stripe.checkout.Session.retrieve(session_id)
+
+    # Check the Checkout Session's payment_status property to determine if fulfillment should be performed
+    if checkout_session.payment_status == "paid":
+        # Fulfill the order
+        pass
