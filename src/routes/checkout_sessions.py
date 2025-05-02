@@ -3,6 +3,7 @@ from src.config import get_settings
 import stripe
 import logging
 from src.database import supabase
+from typing import Dict, Any
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/fulfill_checkout", tags=["Checkout Sessions"])
 settings = get_settings()
 stripe.api_key = settings.stripe_secret_key
 
-@router.get("/{session_id}")
+@router.get("/{session_id}", response_model=Dict[str, Any])
 async def fulfill_checkout_session(session_id: str):
     """
     Fulfill a Stripe Checkout Session
@@ -24,7 +25,10 @@ async def fulfill_checkout_session(session_id: str):
         
         logger.info(f"Retrieved checkout session: {session}")
         
-        return session
+        return {
+            "status": "success",
+            "message": "Checkout session retrieved and fulfilled successfully"
+        }
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error in get_checkout_session: {str(e)}")
