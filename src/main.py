@@ -139,6 +139,7 @@ from src.routes.calendar import calendar_router
 from src.services.email_open_detector import EmailOpenDetector
 from src.routes.accounts import accounts_router
 from src.routes.subscriptions import router as subscriptions_router
+from src.routes.checkout_sessions import router as checkout_sessions_router
 
 # Configure logger
 logging.basicConfig(
@@ -3951,6 +3952,7 @@ app.include_router(call_queue_status_router)
 app.include_router(calendar_router)
 app.include_router(accounts_router)
 app.include_router(subscriptions_router)  # Add the new subscriptions router
+app.include_router(checkout_sessions_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
