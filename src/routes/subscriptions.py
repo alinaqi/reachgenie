@@ -88,7 +88,7 @@ async def create_subscription(
             customer=customer_id,
             mode="subscription",
             line_items=line_items,
-            success_url=f"{settings.frontend_url}/subscription/success?session_id={CHECKOUT_SESSION_ID}",
+            success_url=f"{settings.frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{settings.frontend_url}/subscription/cancel",
             metadata={
                 "user_id": current_user["id"],
