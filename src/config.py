@@ -21,6 +21,22 @@ class Settings(BaseSettings):
     cronofy_client_secret: str
     anthropic_api_key: str
     
+    # Stripe settings
+    stripe_secret_key: str
+    stripe_webhook_secret: Optional[str] = None
+    stripe_price_fixed_2500: Optional[str] = None
+    stripe_price_fixed_5000: Optional[str] = None
+    stripe_price_fixed_7500: Optional[str] = None
+    stripe_price_fixed_10000: Optional[str] = None
+    stripe_price_performance_2500: Optional[str] = None
+    stripe_price_performance_5000: Optional[str] = None
+    stripe_price_performance_7500: Optional[str] = None
+    stripe_price_performance_10000: Optional[str] = None
+    stripe_price_email_fixed: Optional[str] = None
+    stripe_price_phone_fixed: Optional[str] = None
+    stripe_price_email_performance: Optional[str] = None
+    stripe_price_phone_performance: Optional[str] = None
+    
     # Bugsnag settings
     bugsnag_api_key: str
     environment: str = "development"
