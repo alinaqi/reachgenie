@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     stripe_price_phone_fixed: Optional[str] = None
     stripe_price_email_performance: Optional[str] = None
     stripe_price_phone_performance: Optional[str] = None
+    stripe_price_linkedin_fixed: Optional[str] = None  # Coming soon
+    stripe_price_whatsapp_fixed: Optional[str] = None  # Coming soon
+    stripe_price_linkedin_performance: Optional[str] = None  # Coming soon
+    stripe_price_whatsapp_performance: Optional[str] = None  # Coming soon
     
     # Bugsnag settings
     bugsnag_api_key: str
