@@ -68,7 +68,7 @@ async def stripe_webhook(request: Request):
             session = event.data.object
             session_response = await fulfill_checkout(session.id)
             logger.info(f"Retrieved checkout session from webhook: {session_response}")
-        elif event.type == "customer.subscription.updated":
+        elif event.type in ["customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.created"]:
             subscription = event.data.object
             await update_subscription_status(subscription)
             
