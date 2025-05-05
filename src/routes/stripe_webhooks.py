@@ -4,6 +4,7 @@ from src.routes.checkout_sessions import fulfill_checkout
 import stripe
 import logging
 from src.database import supabase
+from datetime import datetime
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ stripe.api_key = settings.stripe_secret_key
 
 async def update_subscription_status(subscription: stripe.Subscription):
     """
-    Update user's subscription status in the database
+    Update user's subscription status and billing period in the database
     """
     try:
         # Get the customer ID from the subscription
@@ -30,12 +31,18 @@ async def update_subscription_status(subscription: stripe.Subscription):
             logger.error(f"No user found with stripe customer ID: {customer_id}")
             return
             
-        # Update the user's subscription status
+        # Convert Unix timestamps to datetime objects
+        billing_period_start = datetime.fromtimestamp(subscription.current_period_start)
+        billing_period_end = datetime.fromtimestamp(subscription.current_period_end)
+            
+        # Update the user's subscription status and billing period
         supabase.table("users").update({
-            "subscription_status": subscription.status
+            "subscription_status": subscription.status,
+            "billing_period_start": billing_period_start.isoformat(),
+            "billing_period_end": billing_period_end.isoformat()
         }).eq("stripe_customer_id", customer_id).execute()
         
-        logger.info(f"Updated subscription status to {subscription.status} for customer {customer_id}")
+        logger.info(f"Updated subscription status to {subscription.status} and billing period for customer {customer_id}")
         
     except Exception as e:
         logger.error(f"Error updating subscription status: {str(e)}")
