@@ -18,7 +18,9 @@ ADD COLUMN IF NOT EXISTS plan_type TEXT CHECK (plan_type IN ('trial', 'fixed', '
 ADD COLUMN IF NOT EXISTS lead_tier INTEGER CHECK (lead_tier IN (2500, 5000, 7500, 10000)),
 ADD COLUMN IF NOT EXISTS channels_active JSONB,
 ADD COLUMN IF NOT EXISTS subscription_id TEXT,
-ADD COLUMN IF NOT EXISTS subscription_status TEXT CHECK (subscription_status IN ('active', 'past_due', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'unpaid'));
+ADD COLUMN IF NOT EXISTS subscription_status TEXT CHECK (subscription_status IN ('active', 'past_due', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'unpaid')),
+ADD COLUMN IF NOT EXISTS billing_period_start TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS billing_period_end TIMESTAMP WITH TIME ZONE;
 
 -- Companies table
 CREATE TABLE IF NOT EXISTS companies (
