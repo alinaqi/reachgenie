@@ -124,6 +124,7 @@ class UserInDB(UserBase):
     company_roles: Optional[List[UserCompanyRole]] = None
     plan_type: str
     upgrade_message: Optional[str] = None
+    subscription_status: Optional[str] = None
 
     class Config:
         json_schema_extra = {
