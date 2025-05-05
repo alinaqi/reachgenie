@@ -127,6 +127,8 @@ class UserInDB(UserBase):
     subscription_status: Optional[str] = None
     lead_tier: Optional[int] = None
     channels_active: Optional[Dict[str, Any]] = None
+    billing_period_start: Optional[datetime] = None
+    billing_period_end: Optional[datetime] = None
 
     class Config:
         json_schema_extra = {
