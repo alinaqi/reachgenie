@@ -125,6 +125,8 @@ class UserInDB(UserBase):
     plan_type: str
     upgrade_message: Optional[str] = None
     subscription_status: Optional[str] = None
+    lead_tier: Optional[int] = None
+    channels_active: Optional[Dict[str, Any]] = None
 
     class Config:
         json_schema_extra = {
