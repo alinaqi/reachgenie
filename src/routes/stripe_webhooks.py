@@ -3,6 +3,7 @@ from src.config import get_settings
 from src.routes.checkout_sessions import fulfill_checkout
 import stripe
 import logging
+from src.database import supabase
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -14,6 +15,32 @@ router = APIRouter(prefix="/stripe", tags=["Stripe Webhooks"])
 settings = get_settings()
 stripe.api_key = settings.stripe_secret_key
 
+async def update_subscription_status(subscription: stripe.Subscription):
+    """
+    Update user's subscription status in the database
+    """
+    try:
+        # Get the customer ID from the subscription
+        customer_id = subscription.customer
+        
+        # Find user with this stripe customer ID
+        response = supabase.table("users").select("id").eq("stripe_customer_id", customer_id).execute()
+        
+        if not response.data:
+            logger.error(f"No user found with stripe customer ID: {customer_id}")
+            return
+            
+        # Update the user's subscription status
+        supabase.table("users").update({
+            "subscription_status": subscription.status
+        }).eq("stripe_customer_id", customer_id).execute()
+        
+        logger.info(f"Updated subscription status to {subscription.status} for customer {customer_id}")
+        
+    except Exception as e:
+        logger.error(f"Error updating subscription status: {str(e)}")
+        raise
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     """
@@ -22,6 +49,7 @@ async def stripe_webhook(request: Request):
     Currently handling:
     - checkout.session.async_payment_succeeded
     - checkout.session.completed
+    - customer.subscription.updated
     """
     # Get the raw request body for signature verification
     payload = await request.body()
@@ -39,8 +67,10 @@ async def stripe_webhook(request: Request):
         if event.type in ["checkout.session.async_payment_succeeded", "checkout.session.completed"]:
             session = event.data.object
             session_response = await fulfill_checkout(session.id)
-
             logger.info(f"Retrieved checkout session from webhook: {session_response}")
+        elif event.type == "customer.subscription.updated":
+            subscription = event.data.object
+            await update_subscription_status(subscription)
             
         return {"status": "success"}
         
