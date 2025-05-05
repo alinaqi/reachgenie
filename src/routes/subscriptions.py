@@ -27,7 +27,11 @@ class CreateSubscriptionRequest(BaseModel):
     lead_tier: int  # 2500, 5000, 7500, or 10000
     channels: Channel
 
-@router.post("/", response_model=dict)
+class CreateSubscriptionResponse(BaseModel):
+    session_id: str
+    session_url: str
+
+@router.post("/", response_model=CreateSubscriptionResponse)
 async def create_subscription(
     request: CreateSubscriptionRequest,
     current_user: dict = Depends(get_current_user)
@@ -100,8 +104,7 @@ async def create_subscription(
         
         return {
             "session_id": session.id,
-            "session_url": session.url,
-            "subscription_id": session.subscription
+            "session_url": session.url
         }
         
     except stripe.error.StripeError as e:
