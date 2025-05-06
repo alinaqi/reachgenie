@@ -4,11 +4,13 @@ Script to set up Stripe products and prices for ReachGenie.
 This script will:
 1. Create all necessary products in Stripe
 2. Create all price points for each product
-3. Print all price IDs for manual use
+3. Create billing meters if specified
+4. Print all price IDs for manual use
 """
 import asyncio
 import sys
 import logging
+import argparse
 from pathlib import Path
 from typing import Dict
 
@@ -34,6 +36,13 @@ bugsnag.configure(
 handler = BugsnagHandler()
 handler.setLevel(logging.ERROR)
 logger.addHandler(handler)
+
+def setup_argument_parser():
+    """Set up command line argument parser"""
+    parser = argparse.ArgumentParser(description='Set up Stripe products, prices, and billing meters.')
+    parser.add_argument('--setup-products', action='store_true', help='Set up products and prices')
+    parser.add_argument('--create-meter', action='store_true', help='Create the Alpaca AI tokens billing meter')
+    return parser
 
 def print_price_ids(price_ids: Dict[str, str]):
     """
@@ -69,28 +78,63 @@ def print_price_ids(price_ids: Dict[str, str]):
     
     print("\nCopy these price IDs and use them where needed.")
 
-async def main():
-    """Main function to set up Stripe products and prices"""
+async def setup_products():
+    """Set up all Stripe products and prices"""
     try:
-        # Check if Stripe API key is configured
-        if not settings.stripe_secret_key:
-            logger.error("STRIPE_SECRET_KEY not set in environment variables")
-            sys.exit(1)
-        
         logger.info("Starting Stripe product and price setup...")
-        
-        # Create all products and prices
         price_ids = await stripe_service.create_all_products_and_prices()
-        
-        # Print price IDs in a clear format
         print_price_ids(price_ids)
-        
         logger.info("Stripe products and prices setup completed successfully")
-        
+        return True
     except Exception as e:
-        logger.error(f"Error in Stripe setup: {str(e)}")
+        logger.error(f"Error in Stripe product setup: {str(e)}")
         bugsnag.notify(e)
+        return False
+
+async def create_meter():
+    """Create the Alpaca AI tokens billing meter"""
+    try:
+        logger.info("Creating Alpaca AI tokens billing meter...")
+        meter = await stripe_service.create_billing_meter(
+            display_name="Alpaca AI tokens",
+            event_name="alpaca_ai_tokens",
+            event_payload_key="value",
+            customer_payload_key="stripe_customer_id"
+        )
+        logger.info(f"Successfully created billing meter with ID: {meter.id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error creating billing meter: {str(e)}")
+        bugsnag.notify(e)
+        return False
+
+async def main():
+    """Main function to set up Stripe configuration"""
+    # Check if Stripe API key is configured
+    if not settings.stripe_secret_key:
+        logger.error("STRIPE_SECRET_KEY not set in environment variables")
         sys.exit(1)
+    
+    # Parse command line arguments
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    
+    # Check if no arguments provided
+    if not (args.setup_products or args.create_meter):
+        parser.print_help()
+        sys.exit(1)
+    
+    success = True
+    
+    # Set up products if requested
+    if args.setup_products:
+        success = success and await setup_products()
+    
+    # Create meter if requested
+    if args.create_meter:
+        success = success and await create_meter()
+    
+    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
     asyncio.run(main())
