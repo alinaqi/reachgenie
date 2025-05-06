@@ -345,5 +345,33 @@ class StripeService:
             logger.error(f"Error creating metered price for meetings: {str(e)}")
             raise
 
+    async def report_meeting_booked(self, stripe_customer_id: str, count: int = 1) -> Dict:
+        """
+        Report a meeting booking to Stripe for usage-based billing.
+        
+        Args:
+            stripe_customer_id: The Stripe customer ID to report usage for
+            count: Number of meetings to report (default: 1)
+            
+        Returns:
+            Dict containing the meter event details
+        """
+        try:
+            # Report the meeting event
+            meter_event = stripe.billing.MeterEvent.create(
+                event_name="reachgenie_meetings_booked",
+                payload={
+                    "stripe_customer_id": stripe_customer_id,
+                    "value": count
+                }
+            )
+            
+            logger.info(f"Reported {count} meeting(s) for customer {stripe_customer_id}")
+            return meter_event
+            
+        except Exception as e:
+            logger.error(f"Error reporting meeting booking: {str(e)}")
+            raise
+
 # Create a global instance
 stripe_service = StripeService() 
