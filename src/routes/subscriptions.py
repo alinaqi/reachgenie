@@ -87,6 +87,13 @@ async def create_subscription(
                         "quantity": 1
                     })
         
+        # Add performance meetings price for performance plan
+        if request.plan_type == "performance" and settings.stripe_price_performance_meetings:
+            line_items.append({
+                "price": settings.stripe_price_performance_meetings,
+                "quantity": 1
+            })
+        
         # Create Stripe checkout session
         session = stripe.checkout.Session.create(
             customer=customer_id,
