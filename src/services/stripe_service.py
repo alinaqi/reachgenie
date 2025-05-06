@@ -32,23 +32,28 @@ class StripeService:
             },
             "email_channel": {
                 "name": "ReachGenie - Email Channel",
-                "description": "Email outreach capability",
+                "description": "Email outreach channel",
                 "metadata": {"addon_type": "channel", "channel": "email"}
             },
             "phone_channel": {
                 "name": "ReachGenie - Phone Channel",
-                "description": "Phone outreach capability",
+                "description": "Phone outreach channel",
                 "metadata": {"addon_type": "channel", "channel": "phone"}
             },
             "linkedin_channel": {
                 "name": "ReachGenie - LinkedIn Channel",
-                "description": "LinkedIn outreach capability",
+                "description": "LinkedIn outreach channel",
                 "metadata": {"addon_type": "channel", "channel": "linkedin"}
             },
             "whatsapp_channel": {
                 "name": "ReachGenie - WhatsApp Channel",
-                "description": "WhatsApp outreach capability",
+                "description": "WhatsApp outreach channel",
                 "metadata": {"addon_type": "channel", "channel": "whatsapp"}
+            },
+            "meetings": {
+                "name": "ReachGenie - Meetings Booked",
+                "description": "Usage-based pricing for meetings booked through ReachGenie",
+                "metadata": {"type": "meetings_usage", "plan_type": "performance"}
             }
         }
         
@@ -155,6 +160,7 @@ class StripeService:
             phone_product = await self.create_product("phone_channel")
             linkedin_product = await self.create_product("linkedin_channel")
             whatsapp_product = await self.create_product("whatsapp_channel")
+            meetings_product = await self.create_product("meetings")
             
             # Create prices for fixed plans
             for tier, amounts in self.price_configs["fixed"].items():
@@ -189,7 +195,7 @@ class StripeService:
             # Create metered price for meetings (performance plan only)
             if self.settings.stripe_meetings_booked_meter_id:
                 try:
-                    metered_price = await self.create_metered_price_for_meetings(performance_product.id)
+                    metered_price = await self.create_metered_price_for_meetings(meetings_product.id)
                     price_ids["performance_meetings"] = metered_price.id
                 except Exception as e:
                     logger.error(f"Failed to create metered price for meetings: {str(e)}")
