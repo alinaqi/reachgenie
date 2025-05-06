@@ -1578,6 +1578,43 @@ async def create_company_campaign(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
+    # Get company details
+    company = await get_company_by_id(company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Get user details to check subscription and channels
+    user_query = supabase.table('users')\
+        .select('subscription_id, subscription_status, channels_active')\
+        .eq('id', str(company["user_id"]))\
+        .single()
+    user = user_query.execute()
+
+    if not user.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check subscription and channels for non-trial users
+    if user.data.get('subscription_id') and user.data.get('subscription_status') == 'active':
+        channels = user.data.get('channels_active', {})
+        campaign_type = campaign.type.value
+
+        # Validate campaign type based on purchased channels
+        if campaign_type == 'email' and not channels.get('email'):
+            raise HTTPException(
+                status_code=403, 
+                detail="Email channel is not active in your subscription. Please upgrade your plan to include email campaigns."
+            )
+        elif campaign_type == 'call' and not channels.get('phone'):
+            raise HTTPException(
+                status_code=403, 
+                detail="Phone channel is not active in your subscription. Please upgrade your plan to include call campaigns."
+            )
+        elif campaign_type == 'email_and_call' and (not channels.get('email') or not channels.get('phone')):
+            raise HTTPException(
+                status_code=403, 
+                detail="Both email and phone channels are required for this campaign type. Please upgrade your plan to include both channels."
+            )
+    
     # Validate that the product exists and belongs to the company
     product = await get_product_by_id(campaign.product_id)
     if not product:
