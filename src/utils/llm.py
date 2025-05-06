@@ -108,7 +108,7 @@ The function will schedule a 30-minute meeting at the specified time.""",
                - Only use the book_appointment function when you have both a specific date AND time
                - Use the book_appointment function with:
                  * company_id: "{str(company_id)}"
-                 * email: "{email_data['from']}"
+                 * from_email: "{email_data['from']}"
                  * email_subject: "{email_data['subject']}"
                  * email_log_id: "{str(email_log_id)}"
                  * start_time: the ISO 8601 formatted date-time specified by the customer''' if company and company.get('cronofy_access_token') and company.get('cronofy_refresh_token') else
