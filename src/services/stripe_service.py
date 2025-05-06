@@ -251,5 +251,47 @@ class StripeService:
             logger.error(f"Error creating Stripe products and prices: {str(e)}")
             raise
 
+    async def create_billing_meter(
+        self,
+        display_name: str,
+        event_name: str,
+        event_payload_key: str = "value",
+        customer_payload_key: str = "stripe_customer_id"
+    ) -> Dict:
+        """
+        Create a Stripe billing meter for usage-based billing.
+        
+        Args:
+            display_name: Display name for the meter
+            event_name: Name of the event to track
+            event_payload_key: Key in the event payload that contains the value to measure (default: "value")
+            customer_payload_key: Key in the event payload that contains the customer ID (default: "stripe_customer_id")
+            
+        Returns:
+            Created billing meter object
+        """
+        try:
+            meter = stripe.billing.Meter.create(
+                display_name=display_name,
+                event_name=event_name,
+                default_aggregation={
+                    "formula": "sum"
+                },
+                customer_mapping={
+                    "event_payload_key": customer_payload_key,
+                    "type": "by_id"
+                },
+                value_settings={
+                    "event_payload_key": event_payload_key
+                }
+            )
+            
+            logger.info(f"Created Stripe billing meter: {meter.id} ({display_name})")
+            return meter
+            
+        except Exception as e:
+            logger.error(f"Error creating Stripe billing meter: {str(e)}")
+            raise
+
 # Create a global instance
 stripe_service = StripeService() 
