@@ -4209,3 +4209,50 @@ async def check_user_access_status(user_id: UUID) -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Error checking user access status: {str(e)}")
         return (False, f"Error checking user access status: {str(e)}")
+
+async def check_user_campaign_access(user_id: UUID, campaign_type: str) -> tuple[bool, str]:
+    """
+    Check if a user has access to create a campaign of the specified type based on their subscription and active channels.
+    
+    Args:
+        user_id (UUID): The ID of the user to check
+        campaign_type (str): The type of campaign being created ('email', 'call', or 'email_and_call')
+        
+    Returns:
+        tuple[bool, str]: A tuple containing (has_access, error_message)
+                         has_access: True if user can create the campaign type
+                         error_message: Empty string if access granted, otherwise contains reason for denial
+    """
+    try:
+        # Get user details with subscription and channels
+        user_query = supabase.table('users')\
+            .select('subscription_id, subscription_status, channels_active')\
+            .eq('id', str(user_id))\
+            .single()
+        user = user_query.execute()
+        
+        if not user.data:
+            return (False, "User not found")
+            
+        # Check if user has an active subscription
+        if user.data.get('subscription_id'):
+            if user.data.get('subscription_status') != 'active':
+                return (False, "Your subscription is not active. Please upgrade your plan.")
+                
+            # Get active channels
+            channels = user.data.get('channels_active', {})
+            
+            # Validate campaign type based on purchased channels
+            if campaign_type == 'email' and not channels.get('email'):
+                return (False, "Email channel is not active in your subscription. Please upgrade your plan to include email campaigns.")
+            elif campaign_type == 'call' and not channels.get('phone'):
+                return (False, "Phone channel is not active in your subscription. Please upgrade your plan to include call campaigns.")
+            elif campaign_type == 'email_and_call' and (not channels.get('email') or not channels.get('phone')):
+                return (False, "Both email and phone channels are required for this campaign type. Please upgrade your plan to include both channels.")
+                
+        # If no subscription or all checks pass, allow access
+        return (True, "")
+        
+    except Exception as e:
+        logger.error(f"Error checking user campaign access: {str(e)}")
+        return (False, f"Error checking campaign access: {str(e)}")

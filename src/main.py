@@ -104,7 +104,8 @@ from src.database import (
     update_email_reminder_eligibility,
     get_call_log_by_bland_id,
     get_campaign_lead_count,
-    check_user_access_status
+    check_user_access_status,
+    check_user_campaign_access
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1583,42 +1584,13 @@ async def create_company_campaign(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Get user details to check subscription and channels
-    user_query = supabase.table('users')\
-        .select('subscription_id, subscription_status, channels_active')\
-        .eq('id', str(company["user_id"]))\
-        .single()
-    user = user_query.execute()
-
-    if not user.data:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Check subscription and channels for non-trial users
-    if user.data.get('subscription_id') and user.data.get('subscription_status') == 'active':
-        channels = user.data.get('channels_active', {})
-        campaign_type = campaign.type.value
-
-        # Validate campaign type based on purchased channels
-        if campaign_type == 'email' and not channels.get('email'):
-            raise HTTPException(
-                status_code=403, 
-                detail="Email channel is not active in your subscription. Please upgrade your plan to include email campaigns."
-            )
-        elif campaign_type == 'call' and not channels.get('phone'):
-            raise HTTPException(
-                status_code=403, 
-                detail="Phone channel is not active in your subscription. Please upgrade your plan to include call campaigns."
-            )
-        elif campaign_type == 'email_and_call' and (not channels.get('email') or not channels.get('phone')):
-            raise HTTPException(
-                status_code=403, 
-                detail="Both email and phone channels are required for this campaign type. Please upgrade your plan to include both channels."
-            )
-    elif user.data.get('subscription_id') and user.data.get('subscription_status') != 'active':
-        raise HTTPException(
-                status_code=403, 
-                detail="Your subscription is not active. Please upgrade your plan."
-            )
+    # Check user's access to create this type of campaign
+    has_access, error_message = await check_user_campaign_access(
+        user_id=UUID(company["user_id"]),
+        campaign_type=campaign.type.value
+    )
+    if not has_access:
+        raise HTTPException(status_code=403, detail=error_message)
     
     # Validate that the product exists and belongs to the company
     product = await get_product_by_id(campaign.product_id)
