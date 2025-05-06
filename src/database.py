@@ -4170,7 +4170,7 @@ async def check_user_access_status(user_id: UUID) -> tuple[bool, str]:
         trial_expiry = created_at + timedelta(days=7)
         
         if datetime.now(timezone.utc) > trial_expiry:
-            return (False, "Trial period has expired. Please upgrade your plan")
+            return (False, "Your trial plan has expired. Please upgrade to a paid plan to continue using the platform.")
             
         return (True, "")  # Trial is still valid
         

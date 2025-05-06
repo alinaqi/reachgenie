@@ -104,7 +104,7 @@ from src.database import (
     update_email_reminder_eligibility,
     get_call_log_by_bland_id,
     get_campaign_lead_count,
-    check_trial_status
+    check_user_access_status
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -404,11 +404,13 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
     company_roles = await get_user_company_roles(UUID(user["id"]))
     user["company_roles"] = company_roles
     
-    # Check whether the user is on a trial plan and whether it has expired or not
-    can_run, error_message = await check_trial_status(UUID(user["id"]))
-    # if user is on a trial plan and the trial has expired, set the message for the user
-    if not can_run:
-        user["upgrade_message"] = "Your trial plan has expired. Please upgrade to a paid plan to continue using the platform."
+    if user["plan_type"] == "trial":
+        # Check whether the user is on a trial plan and whether it has expired or not
+        has_access, error_message = await check_user_access_status(UUID(user["id"]))
+        
+        # if user is on a trial plan and the trial has expired, set the message for the user
+        if not has_access:
+            user["upgrade_message"] = error_message
 
     return user
 
@@ -974,11 +976,11 @@ async def upload_leads(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Check if the company owner user is on a trial plan and whether it has expired or not
-    can_run, error_message = await check_trial_status(UUID(company["user_id"]))
+    # Check if the company owner user is on an active subscription, or has a trial that is still valid
+    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
     
-    # if user is on a trial plan and the trial has expired
-    if not can_run:
+    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+    if not has_access:
         raise HTTPException(status_code=403, detail=error_message)
 
     # Validate company access
@@ -1223,11 +1225,11 @@ async def create_lead_endpoint(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Check if the company owner user is on a trial plan and whether it has expired or not
-    can_run, error_message = await check_trial_status(UUID(company["user_id"]))
+    # Check if the company owner user is on an active subscription, or has a trial that is still valid
+    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
     
-    # if user is on a trial plan and the trial has expired
-    if not can_run:
+    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+    if not has_access:
         raise HTTPException(status_code=403, detail=error_message)
 
     try:
@@ -1735,9 +1737,9 @@ async def run_campaign(
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Check if the company owner user is on a trial plan and whether it has expired or not
-        can_run, error_message = await check_trial_status(UUID(company["user_id"]))
-        if not can_run:
+        # Check if the company owner user is on an active subscription, or has a trial that is still valid
+        has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
+        if not has_access:
             raise Exception(error_message)
     
         # Validate company access
