@@ -1614,6 +1614,11 @@ async def create_company_campaign(
                 status_code=403, 
                 detail="Both email and phone channels are required for this campaign type. Please upgrade your plan to include both channels."
             )
+    elif user.data.get('subscription_id') and user.data.get('subscription_status') != 'active':
+        raise HTTPException(
+                status_code=403, 
+                detail="Your subscription is not active. Please upgrade your plan."
+            )
     
     # Validate that the product exists and belongs to the company
     product = await get_product_by_id(campaign.product_id)
