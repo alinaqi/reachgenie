@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Stripe settings
     stripe_secret_key: str
     stripe_webhook_secret: Optional[str] = None
+    stripe_meetings_booked_meter_id: Optional[str] = None  # Meter ID for tracking booked meetings
     stripe_price_fixed_2500: Optional[str] = None
     stripe_price_fixed_5000: Optional[str] = None
     stripe_price_fixed_7500: Optional[str] = None
