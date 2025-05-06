@@ -41,7 +41,7 @@ def setup_argument_parser():
     """Set up command line argument parser"""
     parser = argparse.ArgumentParser(description='Set up Stripe products, prices, and billing meters.')
     parser.add_argument('--setup-products', action='store_true', help='Set up products and prices')
-    parser.add_argument('--create-meter', action='store_true', help='Create the Alpaca AI tokens billing meter')
+    parser.add_argument('--create-meter', action='store_true', help='Create the Meetings Booked billing meter')
     return parser
 
 def print_price_ids(price_ids: Dict[str, str]):
@@ -92,16 +92,14 @@ async def setup_products():
         return False
 
 async def create_meter():
-    """Create the Alpaca AI tokens billing meter"""
+    """Create the Meetings Booked billing meter"""
     try:
-        logger.info("Creating Alpaca AI tokens billing meter...")
-        meter = await stripe_service.create_billing_meter(
-            display_name="Alpaca AI tokens",
-            event_name="alpaca_ai_tokens",
-            event_payload_key="value",
-            customer_payload_key="stripe_customer_id"
+        logger.info("Creating ReachGenie Meetings Booked billing meter...")
+        await stripe_service.create_billing_meter(
+            display_name="ReachGenie - Meetings Booked",
+            event_name="reachgenie_meetings_booked"
         )
-        logger.info(f"Successfully created billing meter with ID: {meter.id}")
+
         return True
     except Exception as e:
         logger.error(f"Error creating billing meter: {str(e)}")
