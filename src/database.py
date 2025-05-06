@@ -4134,22 +4134,22 @@ async def check_account_email_exists_in_other_companies(company_id: UUID, accoun
         logger.error(f"Error checking account email existence: {str(e)}")
         return False
 
-async def check_trial_status(user_id: UUID) -> tuple[bool, str]:
+async def check_user_access_status(user_id: UUID) -> tuple[bool, str]:
     """
-    Check if user's trial has expired
+    Check if a user has either an active subscription or a valid trial.
     
     Args:
-        user_id: UUID of the user
-    
+        user_id (UUID): The ID of the user to check
+        
     Returns:
-        Tuple of (can_run_campaign, error_message)
-        - If can_run_campaign is False, error_message will explain why
-        - If can_run_campaign is True, error_message will be empty
+        tuple[bool, str]: A tuple containing (has_access, message)
+                         has_access: True if user has either active subscription or valid trial
+                         message: Empty string if access granted, otherwise contains reason for no access
     """
     try:
-        # Get user info directly
+        # Get user info with all required fields
         user_query = supabase.table('users')\
-            .select('plan_type, created_at')\
+            .select('subscription_id, subscription_status, plan_type, created_at')\
             .eq('id', str(user_id))\
             .single()
         user = user_query.execute()
@@ -4157,8 +4157,13 @@ async def check_trial_status(user_id: UUID) -> tuple[bool, str]:
         if not user.data:
             return (False, "User not found")
             
+        # First check for active subscription
+        if user.data.get('subscription_id') and user.data.get('subscription_status') == 'active':
+            return (True, "")  # Active subscription exists
+            
+        # If no active subscription, check trial status
         if user.data['plan_type'] != 'trial':
-            return (True, "")  # Not a trial user
+            return (False, "No active subscription or trial found")
             
         # Check if trial has expired (7 days from creation)
         created_at = datetime.fromisoformat(user.data['created_at'].replace('Z', '+00:00'))
@@ -4170,38 +4175,5 @@ async def check_trial_status(user_id: UUID) -> tuple[bool, str]:
         return (True, "")  # Trial is still valid
         
     except Exception as e:
-        logger.error(f"Error checking trial status: {str(e)}")
-        return (False, f"Error checking trial status: {str(e)}")
-
-async def check_subscription_status(user_id: UUID) -> tuple[bool, str]:
-    """
-    Check if a user has an active subscription.
-    
-    Args:
-        user_id (UUID): The ID of the user to check
-        
-    Returns:
-        tuple[bool, str]: A tuple containing (is_subscription_active, error_message)
-    """
-    try:
-        # Get user info with subscription details
-        user_query = supabase.table('users')\
-            .select('subscription_id, subscription_status')\
-            .eq('id', str(user_id))\
-            .single()
-        user = user_query.execute()
-        
-        if not user.data:
-            return (False, "User not found")
-            
-        if not user.data.get('subscription_id'):
-            return (False, "No active subscription found")
-            
-        if user.data.get('subscription_status') != 'active':
-            return (False, "Subscription is not active")
-            
-        return (True, "")  # Subscription is active
-        
-    except Exception as e:
-        logger.error(f"Error checking subscription status: {str(e)}")
-        return (False, f"Error checking subscription status: {str(e)}")
+        logger.error(f"Error checking user access status: {str(e)}")
+        return (False, f"Error checking user access status: {str(e)}")
