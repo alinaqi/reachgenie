@@ -32,15 +32,22 @@ async def get_user_by_email(email: str):
     response = supabase.table('users').select('*').eq('email', email).execute()
     return response.data[0] if response.data else None
 
-async def check_trial_user_lead_limit(company_id: UUID) -> tuple[bool, str]:
+async def check_user_lead_limit(company_id: UUID) -> tuple[bool, str]:
     """
-    Check if a company's owner is on trial and has reached lead limit
-    Returns: (can_add_lead, error_message)
+    Check if a company's owner has reached their lead limit based on their plan type.
+    For trial users, checks against TRIAL_PLAN_LEAD_LIMIT.
+    For subscription users, checks against their lead_tier within billing period.
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        tuple[bool, str]: (can_add_lead, error_message)
     """
     try:
         # Get company details with owner's user info
         company_query = supabase.table('companies')\
-            .select('*, users!companies_user_id_fkey(plan_type)')\
+            .select('*, users!companies_user_id_fkey(plan_type, subscription_id, subscription_status, lead_tier, billing_period_start, billing_period_end)')\
             .eq('id', str(company_id))\
             .single()
         company = company_query.execute()
@@ -48,32 +55,57 @@ async def check_trial_user_lead_limit(company_id: UUID) -> tuple[bool, str]:
         if not company.data:
             return (False, "Company not found")
             
-        # Get user's plan type
+        # Get user's info
         user = company.data['users']
-        if user['plan_type'] != 'trial':
-            return (True, "")  # Not a trial user, no limit
-            
-        # Get all companies owned by this user
-        companies = supabase.table('companies')\
-            .select('id')\
-            .eq('user_id', company.data['user_id'])\
-            .execute()
-            
-        company_ids = [c['id'] for c in companies.data]
         
-        # Count leads across all user's companies
-        leads_count = supabase.table('leads')\
-            .select('count', count='exact')\
-            .in_('company_id', company_ids)\
-            .execute()
+        # Check if user has active subscription
+        if user.get('subscription_id') and user.get('subscription_status') == 'active':
+            # Get all companies owned by this user
+            companies = supabase.table('companies')\
+                .select('id')\
+                .eq('user_id', company.data['user_id'])\
+                .execute()
+                
+            company_ids = [c['id'] for c in companies.data]
             
-        if leads_count.count >= TRIAL_PLAN_LEAD_LIMIT:
-            return (False, f"Trial plan limit of {TRIAL_PLAN_LEAD_LIMIT} leads reached")
+            # Count leads created within billing period across all user's companies
+            leads_count = supabase.table('leads')\
+                .select('count', count='exact')\
+                .in_('company_id', company_ids)\
+                .gte('created_at', user['billing_period_start'])\
+                .lte('created_at', user['billing_period_end'])\
+                .execute()
+                
+            if leads_count.count >= user['lead_tier']:
+                return (False, f"You have reached your monthly lead limit of {user['lead_tier']} leads")
+                
+            return (True, "")
             
-        return (True, "")
+        # If not subscription, check trial limit
+        if user['plan_type'] == 'trial':
+            # Get all companies owned by this user
+            companies = supabase.table('companies')\
+                .select('id')\
+                .eq('user_id', company.data['user_id'])\
+                .execute()
+                
+            company_ids = [c['id'] for c in companies.data]
+            
+            # Count all leads across user's companies
+            leads_count = supabase.table('leads')\
+                .select('count', count='exact')\
+                .in_('company_id', company_ids)\
+                .execute()
+                
+            if leads_count.count >= TRIAL_PLAN_LEAD_LIMIT:
+                return (False, f"Trial plan limit of {TRIAL_PLAN_LEAD_LIMIT} leads reached")
+                
+            return (True, "")
+            
+        return (False, "No active subscription or trial found")
         
     except Exception as e:
-        logger.error(f"Error checking trial user lead limit: {str(e)}")
+        logger.error(f"Error checking user lead limit: {str(e)}")
         return (False, f"Error checking lead limit: {str(e)}")
 
 async def create_user(email: str, password_hash: str):
@@ -150,7 +182,7 @@ async def get_products_by_company(company_id: UUID):
 async def create_lead(company_id: UUID, lead_data: dict):
     try:
         # First check trial user limit
-        can_add_lead, error_message = await check_trial_user_lead_limit(company_id)
+        can_add_lead, error_message = await check_user_lead_limit(company_id)
         if not can_add_lead:
             raise Exception(error_message)
 
