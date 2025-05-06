@@ -63,6 +63,7 @@ def print_price_ids(price_ids: Dict[str, str]):
     print(f"STRIPE_PRICE_PERFORMANCE_5000={price_ids.get('performance_5000', '')}")
     print(f"STRIPE_PRICE_PERFORMANCE_7500={price_ids.get('performance_7500', '')}")
     print(f"STRIPE_PRICE_PERFORMANCE_10000={price_ids.get('performance_10000', '')}")
+    print(f"STRIPE_PRICE_PERFORMANCE_MEETINGS={price_ids.get('performance_meetings', '')}")
     
     print("\n# Channel Prices - Fixed Plan")
     print(f"STRIPE_PRICE_EMAIL_FIXED={price_ids.get('email_fixed', '')}")
