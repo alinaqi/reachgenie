@@ -4172,3 +4172,36 @@ async def check_trial_status(user_id: UUID) -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Error checking trial status: {str(e)}")
         return (False, f"Error checking trial status: {str(e)}")
+
+async def check_subscription_status(user_id: UUID) -> tuple[bool, str]:
+    """
+    Check if a user has an active subscription.
+    
+    Args:
+        user_id (UUID): The ID of the user to check
+        
+    Returns:
+        tuple[bool, str]: A tuple containing (is_subscription_active, error_message)
+    """
+    try:
+        # Get user info with subscription details
+        user_query = supabase.table('users')\
+            .select('subscription_id, subscription_status')\
+            .eq('id', str(user_id))\
+            .single()
+        user = user_query.execute()
+        
+        if not user.data:
+            return (False, "User not found")
+            
+        if not user.data.get('subscription_id'):
+            return (False, "No active subscription found")
+            
+        if user.data.get('subscription_status') != 'active':
+            return (False, "Subscription is not active")
+            
+        return (True, "")  # Subscription is active
+        
+    except Exception as e:
+        logger.error(f"Error checking subscription status: {str(e)}")
+        return (False, f"Error checking subscription status: {str(e)}")
