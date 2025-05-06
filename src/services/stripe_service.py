@@ -293,5 +293,42 @@ class StripeService:
             logger.error(f"Error creating Stripe billing meter: {str(e)}")
             raise
 
+    async def create_metered_price_for_meetings(self, product_id: str) -> Dict:
+        """
+        Create a metered price for meetings booked in the Performance Plan.
+        
+        Args:
+            product_id: The ID of the Performance Plan product
+            
+        Returns:
+            Created price object
+        """
+        try:
+            if not self.settings.stripe_meetings_booked_meter_id:
+                raise ValueError("STRIPE_MEETINGS_BOOKED_METER_ID not configured")
+
+            price = stripe.Price.create(
+                product=product_id,
+                currency="usd",
+                unit_amount=6000,  # $60.00 per meeting
+                billing_scheme="per_unit",
+                recurring={
+                    "usage_type": "metered",
+                    "interval": "month",
+                    "meter": self.settings.stripe_meetings_booked_meter_id
+                },
+                metadata={
+                    "type": "meetings_usage",
+                    "plan_type": "performance"
+                }
+            )
+            
+            logger.info(f"Created metered price for meetings: {price.id}")
+            return price
+            
+        except Exception as e:
+            logger.error(f"Error creating metered price for meetings: {str(e)}")
+            raise
+
 # Create a global instance
 stripe_service = StripeService() 
