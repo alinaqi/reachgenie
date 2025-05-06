@@ -186,6 +186,15 @@ class StripeService:
                 )
                 price_ids[f"performance_{tier}"] = price.id
             
+            # Create metered price for meetings (performance plan only)
+            if self.settings.stripe_meetings_booked_meter_id:
+                try:
+                    metered_price = await self.create_metered_price_for_meetings(performance_product.id)
+                    price_ids["performance_meetings"] = metered_price.id
+                except Exception as e:
+                    logger.error(f"Failed to create metered price for meetings: {str(e)}")
+                    # Continue with other prices even if metered price creation fails
+            
             # Create prices for channels
             # Fixed plan channels
             price = await self.create_price(
