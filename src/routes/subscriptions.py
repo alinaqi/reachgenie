@@ -10,7 +10,7 @@ from src.services.subscriptions import get_or_create_stripe_customer, get_price_
 logger = logging.getLogger(__name__)
 
 # Initialize router
-router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
+router = APIRouter(prefix="/api", tags=["Subscriptions"])
 
 # Initialize settings
 settings = get_settings()
@@ -31,7 +31,7 @@ class CreateSubscriptionResponse(BaseModel):
     session_id: str
     session_url: str
 
-@router.post("/", response_model=CreateSubscriptionResponse)
+@router.post("/subscriptions", response_model=CreateSubscriptionResponse)
 async def create_subscription(
     request: CreateSubscriptionRequest,
     current_user: dict = Depends(get_current_user)
