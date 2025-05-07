@@ -400,11 +400,17 @@ class StripeService:
             subscription_items = []
             items = stripe.SubscriptionItem.list(subscription=subscription.id)
             for item in items.data:
+                logger.info(f"Subscription item: {item}")
+
                 price = item.price
                 product = stripe.Product.retrieve(price.product)
                 
                 # Format the price amount
                 amount = price.unit_amount / 100  # Convert cents to dollars
+
+                currency = price.currency.upper()
+
+                interval = price.recurring.interval
                 
                 # Get quantity (default to 1 if not specified)
                 quantity = getattr(item, 'quantity', 1)
@@ -413,7 +419,7 @@ class StripeService:
                 item_details = {
                     "name": product.name,
                     "quantity": quantity,
-                    "price": f"${amount:.2f} per month"
+                    "price": f"{currency} {amount:.2f} per {interval}"
                 }
                 
                 subscription_items.append(item_details)
