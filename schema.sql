@@ -182,6 +182,31 @@ CREATE TABLE IF NOT EXISTS email_log_details (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Booked Meetings table
+CREATE TABLE IF NOT EXISTS booked_meetings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    item_id UUID NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('email', 'call')),
+    booked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reported_to_stripe BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS booked_meetings_user_id_idx ON booked_meetings(user_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_company_id_idx ON booked_meetings(company_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_item_id_idx ON booked_meetings(item_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_type_idx ON booked_meetings(type);
+CREATE INDEX IF NOT EXISTS booked_meetings_reported_to_stripe_idx ON booked_meetings(reported_to_stripe);
+
+-- Add comments to explain the columns
+COMMENT ON TABLE booked_meetings IS 'Tracks all booked meetings from both email and call campaigns';
+COMMENT ON COLUMN booked_meetings.item_id IS 'References either email_logs.id or calls.id depending on type';
+COMMENT ON COLUMN booked_meetings.type IS 'Type of meeting booking (email or call)';
+COMMENT ON COLUMN booked_meetings.reported_to_stripe IS 'Indicates whether the meeting has been reported to Stripe for billing';
+
 -- Password Reset Tokens table
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
