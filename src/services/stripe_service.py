@@ -434,7 +434,9 @@ class StripeService:
                 item_details = {
                     "name": product.name,
                     "quantity": quantity,
-                    "price": f"{currency} {amount:.2f} per {interval}"
+                    "price": f"{amount:.2f}",
+                    "currency": currency,
+                    "interval": interval
                 }
                 
                 subscription_items.append(item_details)
