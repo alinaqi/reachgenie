@@ -142,6 +142,7 @@ from src.routes.accounts import accounts_router
 from src.routes.subscriptions import router as subscriptions_router
 from src.routes.checkout_sessions import router as checkout_sessions_router
 from src.routes.stripe_webhooks import router as stripe_webhooks_router
+from src.services.stripe_service import StripeService
 
 # Configure logger
 logging.basicConfig(
@@ -412,6 +413,19 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
         # if user is on a trial plan and the trial has expired, set the message for the user
         if not has_access:
             user["upgrade_message"] = error_message
+    
+    # Get subscription details if user has a Stripe customer ID
+    if user.get("stripe_customer_id"):
+        try:
+            stripe_service = StripeService()
+            subscription_details = stripe_service.get_subscription_details(user["id"])
+            user["subscription_details"] = subscription_details
+        except Exception as e:
+            logger.error(f"Error fetching subscription details: {str(e)}")
+            user["subscription_details"] = {
+                "has_subscription": False,
+                "error": str(e)
+            }
 
     return user
 
