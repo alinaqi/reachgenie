@@ -22,37 +22,37 @@ class StripeService:
         self.products = {
             "fixed": {
                 "name": "ReachGenie - Fixed Plan",
-                "description": "Fixed monthly pricing with base fee + lead tier cost",
+                "description": "Predictable monthly pricing with base fee and lead tier costs",
                 "metadata": {"plan_type": "fixed"}
             },
             "performance": {
                 "name": "ReachGenie - Performance Plan",
-                "description": "Performance-based pricing with lower base fee + lead tier cost + per-meeting cost",
+                "description": "Pay-as-you-go pricing with lower base fee and per-meeting charges",
                 "metadata": {"plan_type": "performance"}
             },
             "email_channel": {
                 "name": "ReachGenie - Email Channel",
-                "description": "Email outreach channel",
+                "description": "Professional email outreach automation",
                 "metadata": {"addon_type": "channel", "channel": "email"}
             },
             "phone_channel": {
                 "name": "ReachGenie - Phone Channel",
-                "description": "Phone outreach channel",
+                "description": "Direct phone call outreach and management",
                 "metadata": {"addon_type": "channel", "channel": "phone"}
             },
             "linkedin_channel": {
                 "name": "ReachGenie - LinkedIn Channel",
-                "description": "LinkedIn outreach channel",
+                "description": "LinkedIn connection and messaging automation",
                 "metadata": {"addon_type": "channel", "channel": "linkedin"}
             },
             "whatsapp_channel": {
                 "name": "ReachGenie - WhatsApp Channel",
-                "description": "WhatsApp outreach channel",
+                "description": "WhatsApp business messaging integration",
                 "metadata": {"addon_type": "channel", "channel": "whatsapp"}
             },
             "meetings": {
                 "name": "ReachGenie - Meetings Booked",
-                "description": "Usage-based pricing for meetings booked through ReachGenie",
+                "description": "Usage-based billing for successful meeting bookings",
                 "metadata": {"type": "meetings_usage", "plan_type": "performance"}
             }
         }
