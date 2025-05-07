@@ -398,7 +398,7 @@ class StripeService:
             
             # Extract subscription items
             subscription_items = []
-            for item in subscription.items.data:
+            for item in subscription.items.list().data:
                 price = item.price
                 product = stripe.Product.retrieve(price.product)
                 
