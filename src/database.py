@@ -4256,3 +4256,41 @@ async def check_user_campaign_access(user_id: UUID, campaign_type: str) -> tuple
     except Exception as e:
         logger.error(f"Error checking user campaign access: {str(e)}")
         return (False, f"Error checking campaign access: {str(e)}")
+
+async def create_booked_meeting(
+    user_id: UUID,
+    company_id: UUID,
+    item_id: UUID,
+    type: str,
+    reported_to_stripe: bool = False
+) -> Dict:
+    """
+    Create a record in the booked_meetings table to track a booked meeting.
+    
+    Args:
+        user_id: UUID of the user who owns the company
+        company_id: UUID of the company
+        item_id: UUID of either email_logs.id or calls.id
+        type: Type of meeting booking ('email' or 'call')
+        reported_to_stripe: Whether the meeting has been reported to Stripe
+        
+    Returns:
+        Dict containing the created booked meeting record
+    """
+    try:
+        response = supabase.table('booked_meetings').insert({
+            'user_id': str(user_id),
+            'company_id': str(company_id),
+            'item_id': str(item_id),
+            'type': type,
+            'reported_to_stripe': reported_to_stripe
+        }).execute()
+        
+        if not response.data:
+            raise Exception("Failed to create booked meeting record")
+            
+        return response.data[0]
+        
+    except Exception as e:
+        logger.error(f"Error creating booked meeting record: {str(e)}")
+        raise
