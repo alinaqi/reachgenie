@@ -418,7 +418,7 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
     if user.get("stripe_customer_id"):
         try:
             stripe_service = StripeService()
-            subscription_details = stripe_service.get_subscription_details(user["id"])
+            subscription_details = await stripe_service.get_subscription_details(user["id"])
             user["subscription_details"] = subscription_details
         except Exception as e:
             logger.error(f"Error fetching subscription details: {str(e)}")
