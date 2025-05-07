@@ -129,6 +129,7 @@ class UserInDB(UserBase):
     channels_active: Optional[Dict[str, Any]] = None
     billing_period_start: Optional[datetime] = None
     billing_period_end: Optional[datetime] = None
+    subscription_details: Optional[Dict[str, Any]] = None
 
     class Config:
         json_schema_extra = {

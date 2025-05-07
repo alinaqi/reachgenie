@@ -374,7 +374,7 @@ class StripeService:
             logger.error(f"Error reporting meeting booking: {str(e)}")
             raise
 
-    def get_subscription_details(self, user_id: str) -> Dict[str, Any]:
+    async def get_subscription_details(self, user_id: str) -> Dict[str, Any]:
         """
         Get subscription details for a user
         
@@ -386,7 +386,7 @@ class StripeService:
         """
         try:
             # Get user details using get_user_by_id
-            user = get_user_by_id(user_id)
+            user = await get_user_by_id(user_id)
             if not user or not user.get('subscription_id'):
                 return {
                     "has_subscription": False,
