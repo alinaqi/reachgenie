@@ -412,6 +412,8 @@ class StripeService:
                 currency = price.currency.upper()
 
                 interval = price.recurring.interval
+
+                usage_type = price.recurring.usage_type
                 
                 # Get quantity (default to 1 if not specified)
                 quantity = getattr(item, 'quantity', 1)
@@ -436,7 +438,8 @@ class StripeService:
                     "quantity": quantity,
                     "price": f"{amount:.2f}",
                     "currency": currency,
-                    "interval": interval
+                    "interval": interval,
+                    "usage_type": usage_type
                 }
                 
                 subscription_items.append(item_details)
