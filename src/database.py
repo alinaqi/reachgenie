@@ -4294,3 +4294,22 @@ async def create_booked_meeting(
     except Exception as e:
         logger.error(f"Error creating booked meeting record: {str(e)}")
         raise
+
+async def get_booked_meetings_count(user_id: str, start_date: datetime, end_date: datetime) -> int:
+    """
+    Get the count of booked meetings for a user within a specific date range.
+    
+    Args:
+        user_id: The ID of the user
+        start_date: Start date of the billing period
+        end_date: End date of the billing period
+        
+    Returns:
+        int: Count of booked meetings
+    """
+    try:
+        response = supabase.table('booked_meetings').select('id', count='exact').eq('user_id', user_id).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat()).execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting booked meetings count: {str(e)}")
+        return 0
