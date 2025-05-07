@@ -2,9 +2,10 @@
 Stripe service module for handling all Stripe-related functionality.
 """
 import stripe
-from typing import Dict
+from typing import Dict, Any
 import logging
 from src.config import get_settings
+from src.database import get_user_by_id
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -372,6 +373,58 @@ class StripeService:
         except Exception as e:
             logger.error(f"Error reporting meeting booking: {str(e)}")
             raise
+
+    def get_subscription_details(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get subscription details for a user
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Dict with subscription items and their details
+        """
+        try:
+            # Get user details using get_user_by_id
+            user = get_user_by_id(user_id)
+            if not user or not user.get('subscription_id'):
+                return {
+                    "has_subscription": False,
+                    "message": "No active subscription"
+                }
+            
+            # Get subscription from Stripe
+            subscription = stripe.Subscription.retrieve(user['subscription_id'])
+            
+            # Extract subscription items
+            subscription_items = []
+            for item in subscription.items.data:
+                price = item.price
+                product = stripe.Product.retrieve(price.product)
+                
+                # Format the price amount
+                amount = price.unit_amount / 100  # Convert cents to dollars
+                
+                # Create item description
+                item_details = {
+                    "name": product.name,
+                    "quantity": item.quantity,
+                    "price": f"${amount:.2f} per month"
+                }
+                
+                subscription_items.append(item_details)
+            
+            return {
+                "has_subscription": True,
+                "subscription_items": subscription_items
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting subscription details: {str(e)}")
+            return {
+                "has_subscription": False,
+                "message": str(e)
+            }
 
 # Create a global instance
 stripe_service = StripeService() 

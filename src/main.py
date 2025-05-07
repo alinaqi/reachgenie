@@ -424,7 +424,7 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
             logger.error(f"Error fetching subscription details: {str(e)}")
             user["subscription_details"] = {
                 "has_subscription": False,
-                "error": str(e)
+                "message": str(e)
             }
 
     return user
