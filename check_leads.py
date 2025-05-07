@@ -14,12 +14,20 @@ supabase = create_client(supabase_url, supabase_key)
 
 def get_lead_count():
     """Get the total number of leads in the database"""
-    response = supabase.table('leads').select('count', count='exact').execute()
+    response = supabase.table('leads')\
+        .select('count', count='exact')\
+        .is_('deleted_at', None)\
+        .execute()
     return response.count
 
 def get_latest_leads(limit=5):
     """Get the most recent leads from the database"""
-    response = supabase.table('leads').select('*').order('created_at', desc=True).limit(limit).execute()
+    response = supabase.table('leads')\
+        .select('*')\
+        .is_('deleted_at', None)\
+        .order('created_at', desc=True)\
+        .limit(limit)\
+        .execute()
     return response.data
 
 def get_db_schema():

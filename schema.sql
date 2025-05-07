@@ -11,6 +11,17 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add new columns to users table
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+ADD COLUMN IF NOT EXISTS plan_type TEXT CHECK (plan_type IN ('trial', 'fixed', 'performance')),
+ADD COLUMN IF NOT EXISTS lead_tier INTEGER CHECK (lead_tier IN (2500, 5000, 7500, 10000)),
+ADD COLUMN IF NOT EXISTS channels_active JSONB,
+ADD COLUMN IF NOT EXISTS subscription_id TEXT,
+ADD COLUMN IF NOT EXISTS subscription_status TEXT CHECK (subscription_status IN ('active', 'past_due', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'unpaid')),
+ADD COLUMN IF NOT EXISTS billing_period_start TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS billing_period_end TIMESTAMP WITH TIME ZONE;
+
 -- Companies table
 CREATE TABLE IF NOT EXISTS companies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -61,6 +72,7 @@ CREATE TABLE IF NOT EXISTS leads (
     company_facebook TEXT,
     company_twitter TEXT,
     company_revenue TEXT,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -169,6 +181,31 @@ CREATE TABLE IF NOT EXISTS email_log_details (
     reminder_type VARCHAR(2),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Booked Meetings table
+CREATE TABLE IF NOT EXISTS booked_meetings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    item_id UUID NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('email', 'call')),
+    booked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reported_to_stripe BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS booked_meetings_user_id_idx ON booked_meetings(user_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_company_id_idx ON booked_meetings(company_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_item_id_idx ON booked_meetings(item_id);
+CREATE INDEX IF NOT EXISTS booked_meetings_type_idx ON booked_meetings(type);
+CREATE INDEX IF NOT EXISTS booked_meetings_reported_to_stripe_idx ON booked_meetings(reported_to_stripe);
+
+-- Add comments to explain the columns
+COMMENT ON TABLE booked_meetings IS 'Tracks all booked meetings from both email and call campaigns';
+COMMENT ON COLUMN booked_meetings.item_id IS 'References either email_logs.id or calls.id depending on type';
+COMMENT ON COLUMN booked_meetings.type IS 'Type of meeting booking (email or call)';
+COMMENT ON COLUMN booked_meetings.reported_to_stripe IS 'Indicates whether the meeting has been reported to Stripe for billing';
 
 -- Password Reset Tokens table
 CREATE TABLE IF NOT EXISTS password_reset_tokens (

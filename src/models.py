@@ -122,6 +122,14 @@ class UserInDB(UserBase):
     verified: bool = False
     created_at: datetime
     company_roles: Optional[List[UserCompanyRole]] = None
+    plan_type: str
+    upgrade_message: Optional[str] = None
+    subscription_status: Optional[str] = None
+    lead_tier: Optional[int] = None
+    channels_active: Optional[Dict[str, Any]] = None
+    billing_period_start: Optional[datetime] = None
+    billing_period_end: Optional[datetime] = None
+    subscription_details: Optional[Dict[str, Any]] = None
 
     class Config:
         json_schema_extra = {

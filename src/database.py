@@ -25,12 +25,95 @@ logging.basicConfig(
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
+# Constants
+TRIAL_PLAN_LEAD_LIMIT = 500
+
 async def get_user_by_email(email: str):
     response = supabase.table('users').select('*').eq('email', email).execute()
     return response.data[0] if response.data else None
 
+async def check_user_lead_limit(company_id: UUID) -> tuple[bool, str]:
+    """
+    Check if a company's owner has reached their lead limit based on their plan type.
+    For trial users, checks against TRIAL_PLAN_LEAD_LIMIT.
+    For subscription users, checks against their lead_tier within billing period.
+    
+    Args:
+        company_id: UUID of the company
+        
+    Returns:
+        tuple[bool, str]: (can_add_lead, error_message)
+    """
+    try:
+        # Get company details with owner's user info
+        company_query = supabase.table('companies')\
+            .select('*, users!companies_user_id_fkey(plan_type, subscription_id, subscription_status, lead_tier, billing_period_start, billing_period_end)')\
+            .eq('id', str(company_id))\
+            .single()
+        company = company_query.execute()
+        
+        if not company.data:
+            return (False, "Company not found")
+            
+        # Get user's info
+        user = company.data['users']
+        
+        # Check if user has active subscription
+        if user.get('subscription_id') and user.get('subscription_status') == 'active':
+            # Get all companies owned by this user
+            companies = supabase.table('companies')\
+                .select('id')\
+                .eq('user_id', company.data['user_id'])\
+                .execute()
+                
+            company_ids = [c['id'] for c in companies.data]
+            
+            # Count leads created within billing period across all user's companies
+            leads_count = supabase.table('leads')\
+                .select('count', count='exact')\
+                .in_('company_id', company_ids)\
+                .gte('created_at', user['billing_period_start'])\
+                .lte('created_at', user['billing_period_end'])\
+                .execute()
+                
+            if leads_count.count >= user['lead_tier']:
+                return (False, f"You have reached your monthly lead limit of {user['lead_tier']} leads")
+                
+            return (True, "")
+            
+        # If not subscription, check trial limit
+        if user['plan_type'] == 'trial':
+            # Get all companies owned by this user
+            companies = supabase.table('companies')\
+                .select('id')\
+                .eq('user_id', company.data['user_id'])\
+                .execute()
+                
+            company_ids = [c['id'] for c in companies.data]
+            
+            # Count all leads across user's companies
+            leads_count = supabase.table('leads')\
+                .select('count', count='exact')\
+                .in_('company_id', company_ids)\
+                .execute()
+                
+            if leads_count.count >= TRIAL_PLAN_LEAD_LIMIT:
+                return (False, f"Trial plan limit of {TRIAL_PLAN_LEAD_LIMIT} leads reached")
+                
+            return (True, "")
+            
+        return (False, "No active subscription or trial found")
+        
+    except Exception as e:
+        logger.error(f"Error checking user lead limit: {str(e)}")
+        return (False, f"Error checking lead limit: {str(e)}")
+
 async def create_user(email: str, password_hash: str):
-    user_data = {'email': email, 'password_hash': password_hash}
+    user_data = {
+        'email': email, 
+        'password_hash': password_hash,
+        'plan_type': 'trial'  # Set default plan type
+    }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0]
 
@@ -98,6 +181,12 @@ async def get_products_by_company(company_id: UUID):
 
 async def create_lead(company_id: UUID, lead_data: dict):
     try:
+        # First check trial user limit
+        can_add_lead, error_message = await check_user_lead_limit(company_id)
+        if not can_add_lead:
+            raise Exception(error_message)
+
+        # Proceed with lead creation
         lead_data['company_id'] = str(company_id)
         print("\nAttempting to insert lead with data:")
         print(lead_data)
@@ -111,7 +200,9 @@ async def create_lead(company_id: UUID, lead_data: dict):
 
 async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: int = 20, search_term: Optional[str] = None):
     # Build base query
-    base_query = supabase.table('leads').select('*', count='exact').eq('company_id', str(company_id))
+    base_query = supabase.table('leads').select('*', count='exact')\
+        .eq('company_id', str(company_id))\
+        .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     # Add search filter if search_term is provided
     if search_term:
@@ -199,34 +290,24 @@ async def get_lead_by_id(lead_id: UUID):
 
 async def delete_lead(lead_id: UUID) -> bool:
     """
-    Delete a lead from the database and all related records in the correct order:
-    1. email_log_details
-    2. email_logs
-    3. lead
+    Soft delete a lead by setting its deleted_at timestamp
     
     Args:
         lead_id: UUID of the lead to delete
         
     Returns:
-        bool: True if lead was deleted successfully, False otherwise
+        bool: True if lead was marked as deleted successfully, False otherwise
     """
     try:
-        # First get all email logs for this lead
-        email_logs = supabase.table('email_logs').select('id').eq('lead_id', str(lead_id)).execute()
-        
-        if email_logs.data:
-            # Delete all email_log_details for these email logs
-            for log in email_logs.data:
-                supabase.table('email_log_details').delete().eq('email_logs_id', str(log['id'])).execute()
-        
-        # Now delete the email logs
-        supabase.table('email_logs').delete().eq('lead_id', str(lead_id)).execute()
-        
-        # Finally delete the lead
-        response = supabase.table('leads').delete().eq('id', str(lead_id)).execute()
+        # Update the lead with current timestamp in deleted_at
+        response = supabase.table('leads')\
+            .update({"deleted_at": datetime.now(timezone.utc).isoformat()})\
+            .eq('id', str(lead_id))\
+            .execute()
+            
         return bool(response.data)
     except Exception as e:
-        logger.error(f"Error deleting lead {lead_id}: {str(e)}")
+        logger.error(f"Error soft deleting lead {lead_id}: {str(e)}")
         return False
 
 async def get_product_by_id(product_id: UUID):
@@ -341,8 +422,12 @@ async def update_call_webhook_data(bland_call_id: str, duration: str, sentiment:
         return None
 
 async def get_calls_by_companies(company_ids: List[str]):
-    # Get all leads for the companies
-    leads_response = supabase.table('leads').select('id').in_('company_id', company_ids).execute()
+    # Get all leads for the companies (excluding soft-deleted)
+    leads_response = supabase.table('leads')\
+        .select('id')\
+        .in_('company_id', company_ids)\
+        .is_('deleted_at', None)\
+        .execute()
     lead_ids = [lead['id'] for lead in leads_response.data]
     
     # Get all products for the companies
@@ -376,7 +461,7 @@ async def get_calls_by_companies(company_ids: List[str]):
             call['product_name'] = call['products']['product_name'] if call.get('products') else None
             unique_calls.append(call)
     
-    return unique_calls 
+    return unique_calls
 
 async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
     """
@@ -502,16 +587,6 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, 
 async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
     """
     Get leads with email addresses for a campaign with pagination support
-    
-    Args:
-        campaign_id: UUID of the campaign
-        count: If True, return only the count of leads
-        page: Page number (1-indexed)
-        limit: Number of leads per page
-        
-    Returns:
-        If count=True: Total number of leads
-        If count=False: Dict containing paginated leads data and metadata
     """
     # First get the campaign to get company_id
     campaign = await get_campaign_by_id(campaign_id)
@@ -523,7 +598,8 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             .eq('company_id', campaign['company_id'])\
             .neq('email', None)\
             .neq('email', '')\
-            .eq('do_not_contact', False)
+            .eq('do_not_contact', False)\
+            .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     if count:
         # Get count using the filter chain
@@ -557,23 +633,14 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
 async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
     """
     Get leads with phone numbers for a company with pagination support
-    
-    Args:
-        company_id: UUID of the company
-        count: If True, return only the count of leads
-        page: Page number (1-indexed)
-        limit: Number of leads per page
-        
-    Returns:
-        If count=True: Total number of leads
-        If count=False: Dict containing paginated leads data and metadata
     """
     def apply_filters(query):
         return query\
             .eq('company_id', str(company_id))\
             .neq('phone_number', None)\
             .neq('phone_number', '')\
-            .eq('do_not_contact', False)
+            .eq('do_not_contact', False)\
+            .is_('deleted_at', None)  # Exclude soft-deleted leads
     
     if count:
         # Get count using the filter chain
@@ -1267,7 +1334,8 @@ async def create_unverified_user(email: str, name: Optional[str] = None):
         'email': email,
         'name': name,
         'password_hash': 'PENDING_INVITE',  # Temporary value that can't be used to log in
-        'verified': False
+        'verified': False,
+        'plan_type': 'trial'  # Set default plan type
     }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0] if response.data else None
@@ -1645,7 +1713,11 @@ async def get_lead_by_email(email: str):
     """
     Get a lead by email address
     """
-    response = supabase.table('leads').select('*').eq('email', email).execute()
+    response = supabase.table('leads')\
+        .select('*')\
+        .eq('email', email)\
+        .is_('deleted_at', None)\
+        .execute()
     return response.data[0] if response.data else None
 
 async def get_lead_by_phone(phone: str):
@@ -1655,7 +1727,11 @@ async def get_lead_by_phone(phone: str):
     fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
     
     for field in fields:
-        response = supabase.table('leads').select('*').eq(field, phone).execute()
+        response = supabase.table('leads')\
+            .select('*')\
+            .eq(field, phone)\
+            .is_('deleted_at', None)\
+            .execute()
         if response.data:
             return response.data[0]
     
@@ -4089,3 +4165,151 @@ async def check_account_email_exists_in_other_companies(company_id: UUID, accoun
     except Exception as e:
         logger.error(f"Error checking account email existence: {str(e)}")
         return False
+
+async def check_user_access_status(user_id: UUID) -> tuple[bool, str]:
+    """
+    Check if a user has either an active subscription or a valid trial.
+    
+    Args:
+        user_id (UUID): The ID of the user to check
+        
+    Returns:
+        tuple[bool, str]: A tuple containing (has_access, message)
+                         has_access: True if user has either active subscription or valid trial
+                         message: Empty string if access granted, otherwise contains reason for no access
+    """
+    try:
+        # Get user info with all required fields
+        user_query = supabase.table('users')\
+            .select('subscription_id, subscription_status, plan_type, created_at')\
+            .eq('id', str(user_id))\
+            .single()
+        user = user_query.execute()
+        
+        if not user.data:
+            return (False, "User not found")
+            
+        # First check for active subscription
+        if user.data.get('subscription_id') and user.data.get('subscription_status') == 'active':
+            return (True, "")  # Active subscription exists
+            
+        # If no active subscription, check trial status
+        if user.data['plan_type'] != 'trial':
+            return (False, "No active subscription or trial found")
+            
+        # Check if trial has expired (7 days from creation)
+        created_at = datetime.fromisoformat(user.data['created_at'].replace('Z', '+00:00'))
+        trial_expiry = created_at + timedelta(days=7)
+        
+        if datetime.now(timezone.utc) > trial_expiry:
+            return (False, "Your trial plan has expired. Please upgrade to a paid plan to continue using the platform.")
+            
+        return (True, "")  # Trial is still valid
+        
+    except Exception as e:
+        logger.error(f"Error checking user access status: {str(e)}")
+        return (False, f"Error checking user access status: {str(e)}")
+
+async def check_user_campaign_access(user_id: UUID, campaign_type: str) -> tuple[bool, str]:
+    """
+    Check if a user has access to create a campaign of the specified type based on their subscription and active channels.
+    
+    Args:
+        user_id (UUID): The ID of the user to check
+        campaign_type (str): The type of campaign being created ('email', 'call', or 'email_and_call')
+        
+    Returns:
+        tuple[bool, str]: A tuple containing (has_access, error_message)
+                         has_access: True if user can create the campaign type
+                         error_message: Empty string if access granted, otherwise contains reason for denial
+    """
+    try:
+        # Get user details with subscription and channels
+        user_query = supabase.table('users')\
+            .select('subscription_id, subscription_status, channels_active')\
+            .eq('id', str(user_id))\
+            .single()
+        user = user_query.execute()
+        
+        if not user.data:
+            return (False, "User not found")
+            
+        # Check if user has an active subscription
+        if user.data.get('subscription_id'):
+            if user.data.get('subscription_status') != 'active':
+                return (False, "Your subscription is not active. Please upgrade your plan.")
+                
+            # Get active channels
+            channels = user.data.get('channels_active', {})
+            
+            # Validate campaign type based on purchased channels
+            if campaign_type == 'email' and not channels.get('email'):
+                return (False, "Email channel is not active in your subscription. Please upgrade your plan to include email campaigns.")
+            elif campaign_type == 'call' and not channels.get('phone'):
+                return (False, "Phone channel is not active in your subscription. Please upgrade your plan to include call campaigns.")
+            elif campaign_type == 'email_and_call' and (not channels.get('email') or not channels.get('phone')):
+                return (False, "Both email and phone channels are required for this campaign type. Please upgrade your plan to include both channels.")
+                
+        # If no subscription or all checks pass, allow access
+        return (True, "")
+        
+    except Exception as e:
+        logger.error(f"Error checking user campaign access: {str(e)}")
+        return (False, f"Error checking campaign access: {str(e)}")
+
+async def create_booked_meeting(
+    user_id: UUID,
+    company_id: UUID,
+    item_id: UUID,
+    type: str,
+    reported_to_stripe: bool = False
+) -> Dict:
+    """
+    Create a record in the booked_meetings table to track a booked meeting.
+    
+    Args:
+        user_id: UUID of the user who owns the company
+        company_id: UUID of the company
+        item_id: UUID of either email_logs.id or calls.id
+        type: Type of meeting booking ('email' or 'call')
+        reported_to_stripe: Whether the meeting has been reported to Stripe
+        
+    Returns:
+        Dict containing the created booked meeting record
+    """
+    try:
+        response = supabase.table('booked_meetings').insert({
+            'user_id': str(user_id),
+            'company_id': str(company_id),
+            'item_id': str(item_id),
+            'type': type,
+            'reported_to_stripe': reported_to_stripe
+        }).execute()
+        
+        if not response.data:
+            raise Exception("Failed to create booked meeting record")
+            
+        return response.data[0]
+        
+    except Exception as e:
+        logger.error(f"Error creating booked meeting record: {str(e)}")
+        raise
+
+async def get_booked_meetings_count(user_id: str, start_date: datetime, end_date: datetime) -> int:
+    """
+    Get the count of booked meetings for a user within a specific date range.
+    
+    Args:
+        user_id: The ID of the user
+        start_date: Start date of the billing period
+        end_date: End date of the billing period
+        
+    Returns:
+        int: Count of booked meetings
+    """
+    try:
+        response = supabase.table('booked_meetings').select('id', count='exact').eq('user_id', user_id).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat()).execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        logger.error(f"Error getting booked meetings count: {str(e)}")
+        return 0

@@ -4,8 +4,9 @@ import pycronofy
 import logging
 from typing import Dict
 from fastapi import HTTPException
-from src.database import get_company_by_id, update_company_cronofy_tokens, update_email_log_has_booked, update_call_log_has_booked
+from src.database import get_company_by_id, update_company_cronofy_tokens, update_email_log_has_booked, update_call_log_has_booked, get_user_by_id, create_booked_meeting
 from src.config import get_settings
+from src.services.stripe_service import stripe_service
 import uuid
 
 # Configure logging
@@ -25,6 +26,7 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
         email: Lead's email address
         start_time: datetime for when the meeting should start
         email_subject: Subject line to use for the event summary
+        campaign_type: Type of campaign ('email' or 'call')
         
     Returns:
         Dict containing the event details
@@ -46,6 +48,11 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
     company = await get_company_by_id(company_id)
     if not company or not company.get('cronofy_access_token'):
         raise HTTPException(status_code=400, detail="No Cronofy connection found")
+    
+    # Get company owner's user details for Stripe customer ID
+    user = await get_user_by_id(UUID(company['user_id']))
+    if not user:
+        raise HTTPException(status_code=400, detail="Company owner not found")
     
     # Initialize Cronofy client
     cronofy = pycronofy.Client(
@@ -84,6 +91,25 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
             # Update the call log to indicate that the meeting has been booked
             await update_call_log_has_booked(log_id)
 
+        # Report meeting to Stripe if user has a customer ID
+        reported_to_stripe = False
+        if user.get('stripe_customer_id'):
+            try:
+                await stripe_service.report_meeting_booked(user['stripe_customer_id'])
+                reported_to_stripe = True
+            except Exception as stripe_error:
+                logger.error(f"Failed to report meeting to Stripe: {str(stripe_error)}")
+                # Don't fail the booking if Stripe reporting fails
+
+        # Create record in booked_meetings table
+        await create_booked_meeting(
+            user_id=UUID(company['user_id']),
+            company_id=company_id,
+            item_id=log_id,
+            type=campaign_type,
+            reported_to_stripe=reported_to_stripe
+        )
+
         return {
             "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
         }
@@ -119,6 +145,25 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
                 elif campaign_type == "call":
                     # Update the call log to indicate that the meeting has been booked
                     await update_call_log_has_booked(log_id)
+
+                # Report meeting to Stripe if user has a customer ID
+                reported_to_stripe = False
+                if user.get('stripe_customer_id'):
+                    try:
+                        await stripe_service.report_meeting_booked(user['stripe_customer_id'])
+                        reported_to_stripe = True
+                    except Exception as stripe_error:
+                        logger.error(f"Failed to report meeting to Stripe: {str(stripe_error)}")
+                        # Don't fail the booking if Stripe reporting fails
+
+                # Create record in booked_meetings table
+                await create_booked_meeting(
+                    user_id=UUID(company['user_id']),
+                    company_id=company_id,
+                    item_id=log_id,
+                    type=campaign_type,
+                    reported_to_stripe=reported_to_stripe
+                )
 
                 return {
                     "message": f"Meeting scheduled for {start_time.strftime('%Y-%m-%d %H:%M')} UTC"
