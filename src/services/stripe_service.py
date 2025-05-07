@@ -5,7 +5,8 @@ import stripe
 from typing import Dict, Any
 import logging
 from src.config import get_settings
-from src.database import get_user_by_id
+from src.database import get_user_by_id, get_booked_meetings_count
+from datetime import datetime
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -414,6 +415,20 @@ class StripeService:
                 
                 # Get quantity (default to 1 if not specified)
                 quantity = getattr(item, 'quantity', 1)
+                
+                # For metered items (meetings), get the actual count from booked_meetings table
+                if price.recurring and price.recurring.usage_type == "metered":
+                    # Get user's billing period
+                    billing_period_start = user.get('billing_period_start')
+                    billing_period_end = user.get('billing_period_end')
+                    
+                    if billing_period_start and billing_period_end:
+                        # Convert string dates to datetime objects
+                        start_date = datetime.fromisoformat(billing_period_start)
+                        end_date = datetime.fromisoformat(billing_period_end)
+                        
+                        # Get booked meetings count using the database function
+                        quantity = await get_booked_meetings_count(user_id, start_date, end_date)
                 
                 # Create item description
                 item_details = {
