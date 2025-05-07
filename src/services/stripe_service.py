@@ -398,17 +398,21 @@ class StripeService:
             
             # Extract subscription items
             subscription_items = []
-            for item in subscription.items:
+            items = stripe.SubscriptionItem.list(subscription=subscription.id)
+            for item in items.data:
                 price = item.price
                 product = stripe.Product.retrieve(price.product)
                 
                 # Format the price amount
                 amount = price.unit_amount / 100  # Convert cents to dollars
                 
+                # Get quantity (default to 1 if not specified)
+                quantity = getattr(item, 'quantity', 1)
+                
                 # Create item description
                 item_details = {
                     "name": product.name,
-                    "quantity": item.quantity,
+                    "quantity": quantity,
                     "price": f"${amount:.2f} per month"
                 }
                 
