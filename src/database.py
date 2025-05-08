@@ -4335,3 +4335,38 @@ async def update_user_subscription_cancellation(user_id: UUID, canceled_at: date
     except Exception as e:
         logger.error(f"Error updating user subscription cancellation: {str(e)}")
         return None
+
+async def update_user_subscription_details(subscription_id: str, plan_type: str, lead_tier: int, channels_active: Dict) -> Dict:
+    """
+    Update user's subscription details in the database
+    
+    Args:
+        subscription_id: Stripe subscription ID
+        plan_type: New plan type (fixed or performance)
+        lead_tier: New lead tier
+        channels_active: Dict of active channels
+        
+    Returns:
+        Updated user record
+    """
+    try:
+        # Get user by subscription ID
+        response = supabase.table("users").select("id").eq("subscription_id", subscription_id).execute()
+        if not response.data:
+            raise Exception(f"No user found with subscription ID: {subscription_id}")
+        
+        user_id = response.data[0]["id"]
+        
+        # Update user's subscription details
+        update_data = {
+            "plan_type": plan_type,
+            "lead_tier": lead_tier,
+            "channels_active": channels_active
+        }
+        
+        response = supabase.table("users").update(update_data).eq("id", user_id).execute()
+        return response.data[0] if response.data else None
+        
+    except Exception as e:
+        logger.error(f"Error updating user subscription details: {str(e)}")
+        raise
