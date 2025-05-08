@@ -7,6 +7,8 @@ import logging
 from src.config import get_settings
 from src.database import get_user_by_id, get_booked_meetings_count
 from datetime import datetime
+import json
+from src.services.subscriptions import get_price_id_for_plan, get_price_id_for_channel
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -373,6 +375,67 @@ class StripeService:
             
         except Exception as e:
             logger.error(f"Error reporting meeting booking: {str(e)}")
+            raise
+
+    async def update_subscription_items(self, subscription_id: str, new_plan_type: str, new_lead_tier: int, new_channels: Dict[str, bool]) -> Dict:
+        """
+        Update subscription by removing all items and adding new ones.
+        For metered usage (meetings in performance plan), the usage data is preserved by Stripe.
+        
+        Args:
+            subscription_id: Stripe subscription ID
+            new_plan_type: Plan type ('fixed' or 'performance')
+            new_lead_tier: Lead tier (2500, 5000, 7500, 10000)
+            new_channels: Dict of channel selections {email: True, phone: False, etc}
+            
+        Returns:
+            Updated subscription object
+        """
+        try:
+            # 1. Retrieve the current subscription
+            stripe.Subscription.retrieve(subscription_id)
+            
+            # 2. Prepare new subscription items
+            new_items = []
+            
+            # Add base package
+            base_price_id = await get_price_id_for_plan(new_plan_type, new_lead_tier)
+            new_items.append({"price": base_price_id})
+            
+            # Add active channels
+            for channel, is_active in new_channels.items():
+                if is_active:
+                    channel_price_id = await get_price_id_for_channel(channel, new_plan_type)
+                    if channel_price_id:
+                        new_items.append({"price": channel_price_id})
+            
+            # Add meetings usage item for performance plan
+            if new_plan_type == "performance":
+                new_items.append({"price": self.settings.stripe_price_performance_meetings})
+            
+            # 3. Update subscription with new items in a single call
+            updated_subscription = stripe.Subscription.modify(
+                subscription_id,
+                items=[],  # Remove all existing items
+                proration_behavior="always_invoice",
+                metadata={
+                    "plan_type": new_plan_type,
+                    "lead_tier": str(new_lead_tier),
+                    "active_channels": json.dumps(new_channels)
+                }
+            )
+            
+            # 4. Add new items
+            updated_subscription = stripe.Subscription.modify(
+                subscription_id,
+                items=new_items,
+                proration_behavior="always_invoice"
+            )
+            
+            return updated_subscription
+            
+        except Exception as e:
+            logger.error(f"Error updating subscription items: {str(e)}")
             raise
 
     async def get_subscription_details(self, user_id: str) -> Dict[str, Any]:
