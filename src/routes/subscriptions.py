@@ -7,6 +7,8 @@ import logging
 from src.services.subscriptions import get_or_create_stripe_customer, get_price_id_for_plan, get_price_id_for_channel
 from datetime import datetime
 from src.database import get_user_by_id, update_user_subscription_cancellation
+from typing import Optional
+from src.services.stripe_service import StripeService
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -32,6 +34,14 @@ class CreateSubscriptionRequest(BaseModel):
 class CreateSubscriptionResponse(BaseModel):
     session_id: str
     session_url: str
+
+class ChangeSubscriptionRequest(BaseModel):
+    plan_type: Optional[str]  # fixed or performance
+    lead_tier: Optional[int]  # 2500, 5000, 7500, or 10000
+    channels: Optional[Channel]
+
+class ChangeSubscriptionResponse(BaseModel):
+    subscription_id: str
 
 @router.post("/subscriptions", response_model=CreateSubscriptionResponse)
 async def create_subscription(
@@ -184,6 +194,50 @@ async def cancel_subscription(
         )
     except Exception as e:
         logger.error(f"Error in cancel_subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/subscriptions/change", response_model=ChangeSubscriptionResponse)
+async def change_subscription(
+    request: ChangeSubscriptionRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Change an existing subscription's plan type, lead tier, or channels
+    """
+    try:
+        # Get user details
+        user = await get_user_by_id(current_user["id"])
+        
+        if not user or not user.get("subscription_id"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found"
+            )
+        
+        # Update subscription items
+        stripe_service = StripeService()
+        updated_subscription = await stripe_service.update_subscription_items(
+            user["subscription_id"],
+            request.plan_type,
+            request.lead_tier,
+            request.channels.dict() if request.channels
+        )
+        
+        return {
+            "subscription_id": updated_subscription.id
+        }
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error in change_subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error in change_subscription: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
