@@ -121,7 +121,10 @@ async def create_subscription(
                 }
             },
             metadata={
-                "user_id": current_user["id"]
+                "user_id": current_user["id"],
+                "plan_type": request.plan_type,
+                "lead_tier": str(request.lead_tier),
+                "channels": ",".join([k for k, v in channels_dict.items() if v])
             }
         )
         
