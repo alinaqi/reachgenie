@@ -6,7 +6,7 @@ from src.auth import get_current_user
 import logging
 from src.services.subscriptions import get_or_create_stripe_customer, get_price_id_for_plan, get_price_id_for_channel
 from datetime import datetime
-from src.services.supabase import supabase
+from src.database import get_user_by_id, update_user_subscription_cancellation
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -141,16 +141,16 @@ async def cancel_subscription(
     3. Updates the user's subscription status
     """
     try:
-        # Get user's subscription ID
-        response = supabase.table("users").select("subscription_id").eq("id", current_user["id"]).execute()
+        # Get user details including subscription ID
+        user = await get_user_by_id(current_user["id"])
         
-        if not response.data or not response.data[0].get("subscription_id"):
+        if not user or not user.get("subscription_id"):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No active subscription found"
             )
             
-        subscription_id = response.data[0]["subscription_id"]
+        subscription_id = user["subscription_id"]
         
         # Cancel subscription in Stripe immediately with refund
         stripe.Subscription.delete(
@@ -158,20 +158,22 @@ async def cancel_subscription(
             prorate=True  # Enable prorated refund for unused time
         )
         
+        # Get current timestamp
+        canceled_at = datetime.now()
+        
         # Update user's subscription status in database
-        supabase.table("users").update({
-            "subscription_id": None,
-            "subscription_status": "canceled",
-            "cancellation_date": datetime.now().isoformat(),
-            "plan_type": None,
-            "lead_tier": None,
-            "channels_active": None
-        }).eq("id", current_user["id"]).execute()
+        updated_user = await update_user_subscription_cancellation(current_user["id"], canceled_at)
+        
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update user subscription status"
+            )
         
         return {
             "status": "success",
             "message": "Subscription has been canceled immediately with a prorated refund",
-            "cancellation_date": datetime.now().isoformat()
+            "canceled_at": canceled_at.isoformat()
         }
         
     except stripe.error.StripeError as e:
