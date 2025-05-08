@@ -20,7 +20,8 @@ ADD COLUMN IF NOT EXISTS channels_active JSONB,
 ADD COLUMN IF NOT EXISTS subscription_id TEXT,
 ADD COLUMN IF NOT EXISTS subscription_status TEXT CHECK (subscription_status IN ('active', 'past_due', 'canceled', 'incomplete', 'incomplete_expired', 'trialing', 'unpaid')),
 ADD COLUMN IF NOT EXISTS billing_period_start TIMESTAMP WITH TIME ZONE,
-ADD COLUMN IF NOT EXISTS billing_period_end TIMESTAMP WITH TIME ZONE;
+ADD COLUMN IF NOT EXISTS billing_period_end TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS subscription_canceled_at TIMESTAMP WITH TIME ZONE;
 
 -- Companies table
 CREATE TABLE IF NOT EXISTS companies (
