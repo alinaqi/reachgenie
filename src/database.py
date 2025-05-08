@@ -4313,3 +4313,25 @@ async def get_booked_meetings_count(user_id: str, start_date: datetime, end_date
     except Exception as e:
         logger.error(f"Error getting booked meetings count: {str(e)}")
         return 0
+
+async def update_user_subscription_cancellation(user_id: UUID, canceled_at: datetime) -> Optional[dict]:
+    """
+    Update user record when subscription is canceled
+    
+    Args:
+        user_id: UUID of the user
+        canceled_at: Timestamp when the subscription was canceled
+        
+    Returns:
+        Updated user record if successful, None otherwise
+    """
+    try:
+        response = supabase.table('users').update({
+            "subscription_status": "canceled",
+            "subscription_canceled_at": canceled_at.isoformat()
+        }).eq('id', str(user_id)).execute()
+        
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating user subscription cancellation: {str(e)}")
+        return None
