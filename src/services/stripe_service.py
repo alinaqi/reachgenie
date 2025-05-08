@@ -392,11 +392,12 @@ class StripeService:
             Updated subscription object
         """
         try:
-            # 1. Retrieve the current subscription
+            # 1. Retrieve the current subscription and its items
             subscription = stripe.Subscription.retrieve(subscription_id)
+            subscription_items = stripe.SubscriptionItem.list(subscription=subscription_id)
             
             # 2. Mark all existing items for deletion
-            items = [{"id": item.id, "deleted": True} for item in subscription.items.data]
+            items = [{"id": item.id, "deleted": True} for item in subscription_items.data]
             
             # 3. Add new items
             # Add base package
