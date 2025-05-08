@@ -34,13 +34,16 @@ async def update_subscription_status(subscription: stripe.Subscription):
         # Convert Unix timestamps to datetime objects
         billing_period_start = datetime.fromtimestamp(subscription.current_period_start)
         billing_period_end = datetime.fromtimestamp(subscription.current_period_end)
-            
-        # Update the user's subscription status and billing period
-        supabase.table("users").update({
+        
+        # Prepare update data
+        update_data = {
             "subscription_status": subscription.status,
             "billing_period_start": billing_period_start.isoformat(),
             "billing_period_end": billing_period_end.isoformat()
-        }).eq("stripe_customer_id", customer_id).execute()
+        }
+   
+        # Update the user's subscription status and billing period
+        supabase.table("users").update(update_data).eq("stripe_customer_id", customer_id).execute()
         
         logger.info(f"Updated subscription status to {subscription.status} and billing period for customer {customer_id}")
         
