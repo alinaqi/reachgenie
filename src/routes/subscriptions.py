@@ -212,10 +212,7 @@ async def change_subscription(
         user = await get_user_by_id(current_user["id"])
         
         if not user or not user.get("subscription_id"):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No active subscription found"
-            )
+            raise Exception("No active subscription found")
         
         # Update subscription items
         stripe_service = StripeService()
