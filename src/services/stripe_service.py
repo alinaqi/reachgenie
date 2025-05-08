@@ -5,7 +5,7 @@ import stripe
 from typing import Dict, Any
 import logging
 from src.config import get_settings
-from src.database import get_user_by_id, get_booked_meetings_count
+from src.database import get_user_by_id, get_booked_meetings_count, update_user_subscription_details
 from datetime import datetime
 import json
 from src.services.subscriptions import get_price_id_for_plan, get_price_id_for_channel
@@ -381,6 +381,7 @@ class StripeService:
         """
         Update subscription by marking existing items as deleted and adding new ones in a single call.
         For metered usage (meetings in performance plan), the usage data is preserved by Stripe.
+        Also updates the user record in the database with new subscription details.
         
         Args:
             subscription_id: Stripe subscription ID
@@ -425,6 +426,14 @@ class StripeService:
                     "lead_tier": str(new_lead_tier),
                     "active_channels": json.dumps(new_channels)
                 }
+            )
+            
+            # 5. Update user record in database
+            await update_user_subscription_details(
+                subscription_id,
+                new_plan_type,
+                new_lead_tier,
+                new_channels
             )
             
             return updated_subscription
