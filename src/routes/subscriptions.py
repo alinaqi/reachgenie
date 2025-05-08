@@ -223,7 +223,7 @@ async def change_subscription(
             user["subscription_id"],
             request.plan_type,
             request.lead_tier,
-            request.channels.dict() if request.channels
+            request.channels.dict()
         )
         
         return {
