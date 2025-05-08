@@ -380,8 +380,7 @@ class StripeService:
     async def update_subscription_items(self, subscription_id: str, new_plan_type: str, new_lead_tier: int, new_channels: Dict[str, bool]) -> Dict:
         """
         Update subscription by marking existing items as deleted and adding new ones in a single call.
-        For metered usage (meetings in performance plan), the usage data is preserved by Stripe.
-        Also updates the user record in the database with new subscription details.
+        Preserves metered/usage-based items to maintain usage history.
         
         Args:
             subscription_id: Stripe subscription ID
@@ -397,8 +396,21 @@ class StripeService:
             subscription = stripe.Subscription.retrieve(subscription_id)
             subscription_items = stripe.SubscriptionItem.list(subscription=subscription_id)
             
-            # 2. Mark all existing items for deletion
-            items = [{"id": item.id, "deleted": True} for item in subscription_items.data]
+            # 2. Separate metered and non-metered items
+            items = []
+            current_plan_type = subscription.metadata.get("plan_type")
+            
+            for item in subscription_items.data:
+                # If it's a metered item and we're staying on performance plan, keep it
+                if (item.price.recurring and 
+                    item.price.recurring.usage_type == "metered" and 
+                    current_plan_type == "performance" and 
+                    new_plan_type == "performance"):
+                    # Keep the metered item as is
+                    continue
+                else:
+                    # Mark non-metered items for deletion
+                    items.append({"id": item.id, "deleted": True})
             
             # 3. Add new items
             # Add base package
@@ -412,8 +424,8 @@ class StripeService:
                     if channel_price_id:
                         items.append({"price": channel_price_id})
             
-            # Add meetings usage item for performance plan
-            if new_plan_type == "performance":
+            # Add meetings usage item only if switching to performance plan
+            if new_plan_type == "performance" and current_plan_type != "performance":
                 items.append({"price": self.settings.stripe_price_performance_meetings})
             
             # 4. Update subscription with all changes in a single call
