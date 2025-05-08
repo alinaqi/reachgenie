@@ -9,6 +9,7 @@ from datetime import datetime
 from src.database import get_user_by_id, update_user_subscription_cancellation
 from typing import Optional
 from src.services.stripe_service import StripeService
+import json
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -112,11 +113,15 @@ async def create_subscription(
             line_items=line_items,
             success_url=f"{settings.frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{settings.frontend_url}/subscription/cancel",
+            subscription_data={
+                "metadata": {
+                    "plan_type": request.plan_type,
+                    "lead_tier": str(request.lead_tier),
+                    "active_channels": json.dumps(channels_dict)
+                }
+            },
             metadata={
-                "user_id": current_user["id"],
-                "plan_type": request.plan_type,
-                "lead_tier": str(request.lead_tier),
-                "channels": ",".join([k for k, v in channels_dict.items() if v])
+                "user_id": current_user["id"]
             }
         )
         
