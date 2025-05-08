@@ -379,7 +379,7 @@ class StripeService:
 
     async def update_subscription_items(self, subscription_id: str, new_plan_type: str, new_lead_tier: int, new_channels: Dict[str, bool]) -> Dict:
         """
-        Update subscription by removing all items and adding new ones.
+        Update subscription by marking existing items as deleted and adding new ones in a single call.
         For metered usage (meetings in performance plan), the usage data is preserved by Stripe.
         
         Args:
@@ -393,43 +393,37 @@ class StripeService:
         """
         try:
             # 1. Retrieve the current subscription
-            stripe.Subscription.retrieve(subscription_id)
+            subscription = stripe.Subscription.retrieve(subscription_id)
             
-            # 2. Prepare new subscription items
-            new_items = []
+            # 2. Mark all existing items for deletion
+            items = [{"id": item.id, "deleted": True} for item in subscription.items.data]
             
+            # 3. Add new items
             # Add base package
             base_price_id = await get_price_id_for_plan(new_plan_type, new_lead_tier)
-            new_items.append({"price": base_price_id})
+            items.append({"price": base_price_id})
             
             # Add active channels
             for channel, is_active in new_channels.items():
                 if is_active:
                     channel_price_id = await get_price_id_for_channel(channel, new_plan_type)
                     if channel_price_id:
-                        new_items.append({"price": channel_price_id})
+                        items.append({"price": channel_price_id})
             
             # Add meetings usage item for performance plan
             if new_plan_type == "performance":
-                new_items.append({"price": self.settings.stripe_price_performance_meetings})
+                items.append({"price": self.settings.stripe_price_performance_meetings})
             
-            # 3. Update subscription with new items in a single call
+            # 4. Update subscription with all changes in a single call
             updated_subscription = stripe.Subscription.modify(
                 subscription_id,
-                items=[],  # Remove all existing items
+                items=items,
                 proration_behavior="always_invoice",
                 metadata={
                     "plan_type": new_plan_type,
                     "lead_tier": str(new_lead_tier),
                     "active_channels": json.dumps(new_channels)
                 }
-            )
-            
-            # 4. Add new items
-            updated_subscription = stripe.Subscription.modify(
-                subscription_id,
-                items=new_items,
-                proration_behavior="always_invoice"
             )
             
             return updated_subscription
