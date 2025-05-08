@@ -5,6 +5,8 @@ from src.config import get_settings
 from src.auth import get_current_user
 import logging
 from src.services.subscriptions import get_or_create_stripe_customer, get_price_id_for_plan, get_price_id_for_channel
+from datetime import datetime
+from src.services.supabase import supabase
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -124,4 +126,63 @@ async def create_subscription(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e.detail)
+        )
+
+@router.post("/subscriptions/cancel", response_model=dict)
+async def cancel_subscription(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Cancel the current user's subscription immediately with a prorated refund
+    
+    This endpoint:
+    1. Retrieves the user's active subscription
+    2. Cancels it immediately in Stripe with a prorated refund
+    3. Updates the user's subscription status
+    """
+    try:
+        # Get user's subscription ID
+        response = supabase.table("users").select("subscription_id").eq("id", current_user["id"]).execute()
+        
+        if not response.data or not response.data[0].get("subscription_id"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found"
+            )
+            
+        subscription_id = response.data[0]["subscription_id"]
+        
+        # Cancel subscription in Stripe immediately with refund
+        stripe.Subscription.delete(
+            subscription_id,
+            prorate=True  # Enable prorated refund for unused time
+        )
+        
+        # Update user's subscription status in database
+        supabase.table("users").update({
+            "subscription_id": None,
+            "subscription_status": "canceled",
+            "cancellation_date": datetime.now().isoformat(),
+            "plan_type": None,
+            "lead_tier": None,
+            "channels_active": None
+        }).eq("id", current_user["id"]).execute()
+        
+        return {
+            "status": "success",
+            "message": "Subscription has been canceled immediately with a prorated refund",
+            "cancellation_date": datetime.now().isoformat()
+        }
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error in cancel_subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error in cancel_subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         ) 
