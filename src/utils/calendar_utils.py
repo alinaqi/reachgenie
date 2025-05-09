@@ -91,9 +91,9 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
             # Update the call log to indicate that the meeting has been booked
             await update_call_log_has_booked(log_id)
 
-        # Report meeting to Stripe if user has a customer ID
+        # Report meeting to Stripe if user has a customer ID and is on the performance plan
         reported_to_stripe = False
-        if user.get('stripe_customer_id'):
+        if user.get('stripe_customer_id') and user['plan_type'] == 'performance':
             try:
                 await stripe_service.report_meeting_booked(user['stripe_customer_id'])
                 reported_to_stripe = True
@@ -146,9 +146,9 @@ async def book_appointment(company_id: UUID, log_id: UUID, email: str, start_tim
                     # Update the call log to indicate that the meeting has been booked
                     await update_call_log_has_booked(log_id)
 
-                # Report meeting to Stripe if user has a customer ID
+                # Report meeting to Stripe if user has a customer ID and is on the performance plan
                 reported_to_stripe = False
-                if user.get('stripe_customer_id'):
+                if user.get('stripe_customer_id') and user['plan_type'] == 'performance':
                     try:
                         await stripe_service.report_meeting_booked(user['stripe_customer_id'])
                         reported_to_stripe = True

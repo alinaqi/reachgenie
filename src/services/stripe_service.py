@@ -5,8 +5,10 @@ import stripe
 from typing import Dict, Any
 import logging
 from src.config import get_settings
-from src.database import get_user_by_id, get_booked_meetings_count
+from src.database import get_user_by_id, get_booked_meetings_count, update_user_subscription_details
 from datetime import datetime
+import json
+from src.services.subscriptions import get_price_id_for_plan, get_price_id_for_channel
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -373,6 +375,83 @@ class StripeService:
             
         except Exception as e:
             logger.error(f"Error reporting meeting booking: {str(e)}")
+            raise
+
+    async def update_subscription_items(self, subscription_id: str, new_plan_type: str, new_lead_tier: int, new_channels: Dict[str, bool]) -> Dict:
+        """
+        Update subscription by marking existing items as deleted and adding new ones in a single call.
+        Preserves metered/usage-based items to maintain usage history.
+        
+        Args:
+            subscription_id: Stripe subscription ID
+            new_plan_type: Plan type ('fixed' or 'performance')
+            new_lead_tier: Lead tier (2500, 5000, 7500, 10000)
+            new_channels: Dict of channel selections {email: True, phone: False, etc}
+            
+        Returns:
+            Updated subscription object
+        """
+        try:
+            # 1. Retrieve the current subscription and its items
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            subscription_items = stripe.SubscriptionItem.list(subscription=subscription_id)
+            
+            # 2. Separate metered and non-metered items
+            items = []
+            current_plan_type = subscription.metadata.get("plan_type")
+            
+            for item in subscription_items.data:
+                # If it's a metered item and we're staying on performance plan, keep it
+                if (item.price.recurring and 
+                    item.price.recurring.usage_type == "metered" and 
+                    current_plan_type == "performance" and 
+                    new_plan_type == "performance"):
+                    # Keep the metered item as is
+                    continue
+                else:
+                    # Mark non-metered items for deletion
+                    items.append({"id": item.id, "deleted": True})
+            
+            # 3. Add new items
+            # Add base package
+            base_price_id = await get_price_id_for_plan(new_plan_type, new_lead_tier)
+            items.append({"price": base_price_id})
+            
+            # Add active channels
+            for channel, is_active in new_channels.items():
+                if is_active:
+                    channel_price_id = await get_price_id_for_channel(channel, new_plan_type)
+                    if channel_price_id:
+                        items.append({"price": channel_price_id})
+            
+            # Add meetings usage item only if switching to performance plan
+            if new_plan_type == "performance" and current_plan_type != "performance":
+                items.append({"price": self.settings.stripe_price_performance_meetings})
+            
+            # 4. Update subscription with all changes in a single call
+            updated_subscription = stripe.Subscription.modify(
+                subscription_id,
+                items=items,
+                proration_behavior="always_invoice",
+                metadata={
+                    "plan_type": new_plan_type,
+                    "lead_tier": str(new_lead_tier),
+                    "active_channels": json.dumps(new_channels)
+                }
+            )
+            
+            # 5. Update user record in database
+            await update_user_subscription_details(
+                subscription_id,
+                new_plan_type,
+                new_lead_tier,
+                new_channels
+            )
+            
+            return updated_subscription
+            
+        except Exception as e:
+            logger.error(f"Error updating subscription items: {str(e)}")
             raise
 
     async def get_subscription_details(self, user_id: str) -> Dict[str, Any]:
