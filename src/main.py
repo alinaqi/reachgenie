@@ -1303,7 +1303,7 @@ async def create_lead_endpoint(
                 lead["financials"] = {"value": lead["financials"]}
                 
         # Process JSON fields
-        for field in ["hiring_positions", "location_move", "job_change"]:
+        for field in ["hiring_positions", "location_move", "job_change", "enriched_data"]:
             if lead.get(field) and isinstance(lead[field], str):
                 try:
                     lead[field] = json.loads(lead[field])
