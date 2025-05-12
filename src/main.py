@@ -3524,44 +3524,20 @@ async def enrich_lead(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=403, detail="Not authorized to access this company")
     
-    # Generate insights using Perplexity API
-    insights = await generate_company_insights(lead, perplexity_service)
+    await get_or_generate_insights_for_lead(lead)
     
-    if not insights:
-        raise HTTPException(status_code=500, detail="Failed to generate company insights")
+    # Get updated lead data
+    lead = await get_lead_by_id(lead_id)
     
-    # Parse the insights JSON if it's a string
-    enriched_data = {}
-    try:
-        if isinstance(insights, str):
-            # Try to extract JSON from the string response
-            insights_str = insights.strip()
-            # Check if the response is already in JSON format
+    # Process enriched_data field to ensure it's a JSON object
+    if lead.get("enriched_data"):
+        if isinstance(lead["enriched_data"], str):
             try:
-                enriched_data = json.loads(insights_str)
+                lead["enriched_data"] = json.loads(lead["enriched_data"])
             except json.JSONDecodeError:
-                # If not, look for JSON within the string (common with LLM responses)
-                import re
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                if json_match:
-                    potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                    enriched_data = json.loads(potential_json)
-                else:
-                    # If we can't extract structured JSON, store as raw text
-                    enriched_data = {"raw_insights": insights_str}
-        else:
-            enriched_data = insights
-    except Exception as e:
-        logger.error(f"Error parsing insights: {str(e)}")
-        enriched_data = {"raw_insights": insights if isinstance(insights, str) else str(insights)}
+                lead["enriched_data"] = None
     
-    # Update the lead with enriched data
-    updated_lead = await update_lead_enrichment(lead_id, enriched_data)
-    
-    if not updated_lead:
-        raise HTTPException(status_code=500, detail="Failed to update lead with enrichment data")
-    
-    return {"status": "success", "data": updated_lead}
+    return {"status": "success", "data": lead}
 
 @app.get("/api/companies/{company_id}/leads/{lead_id}/callscript", response_model=CallScriptResponse, tags=["Leads"])
 async def get_lead_call_script(
