@@ -173,14 +173,33 @@ class PerplexityService:
                 
                 if response.status_code == 200:
                     result = response.json()
+
                     if result and "choices" in result and result["choices"]:
                         try:
                             content = result["choices"][0]["message"]["content"]
                             logger.info(f"Raw content from Perplexity: {content}")
                             
-                            # Clean the content before parsing
-                            cleaned_content = self._clean_json_string(content)
-                            insights_dict = json.loads(cleaned_content)
+                            # Enhanced content cleaning
+                            content = content.strip()
+                            
+                            # Find the first { and last }
+                            start_idx = content.find('{')
+                            end_idx = content.rfind('}')
+                            
+                            if start_idx == -1 or end_idx == -1:
+                                logger.error("No valid JSON object found in response")
+                                return None
+                                
+                            # Extract just the JSON part
+                            json_str = content[start_idx:end_idx + 1]
+                            
+                            # Remove any newlines or extra spaces at the start of lines
+                            json_str = '\n'.join(line.strip() for line in json_str.splitlines())
+                            
+                            logger.info(f"Cleaned JSON string: {json_str}")
+                            
+                            # Parse the JSON
+                            insights_dict = json.loads(json_str)
                             
                             # Validate the structure
                             required_keys = ["businessOverview", "prospectProfessionalInterests", "painPoints", "buyingTriggers", "industryChallenges"]
@@ -188,17 +207,26 @@ class PerplexityService:
                             
                             # Check all required keys exist
                             if not all(key in insights_dict for key in required_keys):
+                                logger.error(f"Missing required keys. Found keys: {list(insights_dict.keys())}")
                                 raise ValueError("Missing required top-level keys")
                             
                             # Check businessOverview structure
                             if not all(key in insights_dict["businessOverview"] for key in business_overview_keys):
+                                logger.error(f"Missing businessOverview keys. Found keys: {list(insights_dict['businessOverview'].keys())}")
                                 raise ValueError("Missing required businessOverview keys")
-
+                            
                             # Return validated and formatted JSON string
                             return json.dumps(insights_dict)
                             
-                        except (json.JSONDecodeError, ValueError) as e:
-                            logger.error(f"Error parsing Perplexity response: {str(e)}")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"JSON decode error: {str(e)}")
+                            logger.error(f"Problematic content: {content}")
+                            return None
+                        except ValueError as e:
+                            logger.error(f"Validation error: {str(e)}")
+                            return None
+                        except Exception as e:
+                            logger.error(f"Unexpected error while processing response: {str(e)}")
                             return None
                 else:
                     logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
@@ -206,6 +234,7 @@ class PerplexityService:
                     
         except Exception as e:
             logger.error(f"Error getting company insights: {str(e)}")
+            logger.error(f"Full traceback:", exc_info=True)
             return None
 
 # Create a singleton instance
