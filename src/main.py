@@ -1282,44 +1282,13 @@ async def create_lead_endpoint(
         # Get the created lead with all details
         lead = await get_lead_by_id(created_lead['id'])
         
-        # Enrich the lead with company insights and update in background
-        try:
-            # Generate insights using Perplexity API
-            insights = await generate_company_insights(lead, perplexity_service)
-            
-            if insights:
-                # Parse the insights JSON if it's a string
-                enriched_data = {}
-                try:
-                    if isinstance(insights, str):
-                        # Try to extract JSON from the string response
-                        insights_str = insights.strip()
-                        # Check if the response is already in JSON format
-                        try:
-                            enriched_data = json.loads(insights_str)
-                        except json.JSONDecodeError:
-                            # If not, look for JSON within the string (common with LLM responses)
-                            import re
-                            json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                            if json_match:
-                                potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                enriched_data = json.loads(potential_json)
-                            else:
-                                # If we can't extract structured JSON, store as raw text
-                                enriched_data = {"raw_insights": insights_str}
-                    else:
-                        enriched_data = insights
-                        
-                    # Update the lead with enriched data
-                    updated_lead = await update_lead_enrichment(created_lead['id'], enriched_data)
-                    if updated_lead:
-                        lead = updated_lead
-                except Exception as e:
-                    logger.error(f"Error parsing or storing insights during lead creation: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error enriching lead during creation: {str(e)}")
-            # Continue with the created lead even if enrichment fails
+        # Enrich the lead with company insights and update
+        await get_or_generate_insights_for_lead(lead)
+        # Continue with the created lead even if enrichment fails
         
+        # Get the created lead with all details so we can get the updated enriched_data
+        lead = await get_lead_by_id(created_lead['id'])
+
         # Process fields for response
         if lead.get("industries") and isinstance(lead["industries"], str):
             lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
@@ -1334,7 +1303,7 @@ async def create_lead_endpoint(
                 lead["financials"] = {"value": lead["financials"]}
                 
         # Process JSON fields
-        for field in ["hiring_positions", "location_move", "job_change"]:
+        for field in ["hiring_positions", "location_move", "job_change", "enriched_data"]:
             if lead.get(field) and isinstance(lead[field], str):
                 try:
                     lead[field] = json.loads(lead[field])
@@ -2217,15 +2186,29 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('last_name'):
                 lead_data['last_name'] = last_name or (' '.join(lead_data['name'].split(' ')[1:]) if lead_data.get('name') else '')
 
-            # Skip only if we have no name information at all
-            if not lead_data.get('name') and not lead_data.get('first_name') and not lead_data.get('last_name'):
-                print("\nSkipping record - no name information available")
+            # Skip if required fields are missing
+            if not lead_data.get('name'):
+                print("\nSkipping record - missing required field: name")
                 logger.info(f"Skipping record due to missing name: {row}")
+                skipped_count += 1
+                continue
+
+            # Skip if either email or phone_number is missing
+            if not lead_data.get('email') or not lead_data.get('phone_number'):
+                print("\nSkipping record - missing required field: email or phone_number")
+                logger.info(f"Skipping record due to missing email or phone_number: {row}")
+                skipped_count += 1
+                continue
+
+            # Skip if either company or website is missing
+            if not lead_data.get('company') or not lead_data.get('website'):
+                print("\nSkipping record - missing required field: company or website")
+                logger.info(f"Skipping record due to missing company or website: {row}")
                 skipped_count += 1
                 continue
             
             # Handle phone number priority (Mobile > Direct > Office)
-            phone_number = lead_data.get('phone_number', '').strip()  # First try the direct phone_number field
+            phone_number = lead_data.get('phone_number', '').strip()
             if not phone_number:
                 phone_number = lead_data.get('mobile', '').strip()
             if not phone_number:
@@ -2287,44 +2270,12 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 print(created_lead)
                 lead_count += 1
                 
-                # Enrich the lead with company insights in the background
-                try:
-                    # Get complete lead data
-                    lead = await get_lead_by_id(created_lead['id'])
-                    
-                    # Generate insights using Perplexity API
-                    insights = await generate_company_insights(lead, perplexity_service)
-                    
-                    if insights:
-                        # Parse the insights JSON if it's a string
-                        enriched_data = {}
-                        try:
-                            if isinstance(insights, str):
-                                # Try to extract JSON from the string response
-                                insights_str = insights.strip()
-                                # Check if the response is already in JSON format
-                                try:
-                                    enriched_data = json.loads(insights_str)
-                                except json.JSONDecodeError:
-                                    # If not, look for JSON within the string (common with LLM responses)
-                                    import re
-                                    json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                                    if json_match:
-                                        potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                        enriched_data = json.loads(potential_json)
-                                    else:
-                                        # If we can't extract structured JSON, store as raw text
-                                        enriched_data = {"raw_insights": insights_str}
-                            else:
-                                enriched_data = insights
-                                
-                            # Update the lead with enriched data
-                            await update_lead_enrichment(created_lead['id'], enriched_data)
-                        except Exception as e:
-                            logger.error(f"Error parsing or storing insights during CSV upload: {str(e)}")
-                except Exception as e:
-                    logger.error(f"Error enriching lead during CSV upload: {str(e)}")
-                    # Continue processing other leads even if enrichment fails
+                # Get complete lead data
+                lead = await get_lead_by_id(created_lead['id'])
+
+                # Enrich the lead with company insights
+                await get_or_generate_insights_for_lead(lead)
+                # Continue processing other leads even if enrichment fails
                     
             except Exception as e:
                 logger.error(f"Error creating lead: {str(e)}")
@@ -3587,44 +3538,20 @@ async def enrich_lead(
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=403, detail="Not authorized to access this company")
     
-    # Generate insights using Perplexity API
-    insights = await generate_company_insights(lead, perplexity_service)
+    await get_or_generate_insights_for_lead(lead)
     
-    if not insights:
-        raise HTTPException(status_code=500, detail="Failed to generate company insights")
+    # Get updated lead data
+    lead = await get_lead_by_id(lead_id)
     
-    # Parse the insights JSON if it's a string
-    enriched_data = {}
-    try:
-        if isinstance(insights, str):
-            # Try to extract JSON from the string response
-            insights_str = insights.strip()
-            # Check if the response is already in JSON format
+    # Process enriched_data field to ensure it's a JSON object
+    if lead.get("enriched_data"):
+        if isinstance(lead["enriched_data"], str):
             try:
-                enriched_data = json.loads(insights_str)
+                lead["enriched_data"] = json.loads(lead["enriched_data"])
             except json.JSONDecodeError:
-                # If not, look for JSON within the string (common with LLM responses)
-                import re
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                if json_match:
-                    potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                    enriched_data = json.loads(potential_json)
-                else:
-                    # If we can't extract structured JSON, store as raw text
-                    enriched_data = {"raw_insights": insights_str}
-        else:
-            enriched_data = insights
-    except Exception as e:
-        logger.error(f"Error parsing insights: {str(e)}")
-        enriched_data = {"raw_insights": insights if isinstance(insights, str) else str(insights)}
+                lead["enriched_data"] = None
     
-    # Update the lead with enriched data
-    updated_lead = await update_lead_enrichment(lead_id, enriched_data)
-    
-    if not updated_lead:
-        raise HTTPException(status_code=500, detail="Failed to update lead with enrichment data")
-    
-    return {"status": "success", "data": updated_lead}
+    return {"status": "success", "data": lead}
 
 @app.get("/api/companies/{company_id}/leads/{lead_id}/callscript", response_model=CallScriptResponse, tags=["Leads"])
 async def get_lead_call_script(
