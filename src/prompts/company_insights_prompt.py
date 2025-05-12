@@ -16,8 +16,8 @@ buyingTriggers: Identify 3-5 specific events or conditions that would likely tri
 industryChallenges: Discuss specific challenges in their industry and how they affect the business
 
 Required Format:
-{
-  "businessOverview": {
+{{
+  "businessOverview": {{
     "companyName": "<company name>",
     "businessModel": "<detailed 2-3 sentence description of how the company operates and generates revenue>",
     "keyProductsServices": [
@@ -26,7 +26,7 @@ Required Format:
       "<product/service 3>",
       "<product/service 4>"
     ]
-  },
+  }},
   "prospectProfessionalInterests": [
     "<specific professional interest 1>",
     "<specific professional interest 2>",
@@ -55,7 +55,7 @@ Required Format:
     "<specific challenge 4>",
     "<specific challenge 5>"
   ]
-}
+}}
 
 IMPORTANT:
 1. Use the EXACT key names shown
