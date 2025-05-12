@@ -1282,44 +1282,13 @@ async def create_lead_endpoint(
         # Get the created lead with all details
         lead = await get_lead_by_id(created_lead['id'])
         
-        # Enrich the lead with company insights and update in background
-        try:
-            # Generate insights using Perplexity API
-            insights = await generate_company_insights(lead, perplexity_service)
-            
-            if insights:
-                # Parse the insights JSON if it's a string
-                enriched_data = {}
-                try:
-                    if isinstance(insights, str):
-                        # Try to extract JSON from the string response
-                        insights_str = insights.strip()
-                        # Check if the response is already in JSON format
-                        try:
-                            enriched_data = json.loads(insights_str)
-                        except json.JSONDecodeError:
-                            # If not, look for JSON within the string (common with LLM responses)
-                            import re
-                            json_match = re.search(r'```json\s*([\s\S]*?)\s*```|{[\s\S]*}', insights_str)
-                            if json_match:
-                                potential_json = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                                enriched_data = json.loads(potential_json)
-                            else:
-                                # If we can't extract structured JSON, store as raw text
-                                enriched_data = {"raw_insights": insights_str}
-                    else:
-                        enriched_data = insights
-                        
-                    # Update the lead with enriched data
-                    updated_lead = await update_lead_enrichment(created_lead['id'], enriched_data)
-                    if updated_lead:
-                        lead = updated_lead
-                except Exception as e:
-                    logger.error(f"Error parsing or storing insights during lead creation: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error enriching lead during creation: {str(e)}")
-            # Continue with the created lead even if enrichment fails
+        # Enrich the lead with company insights and update
+        await get_or_generate_insights_for_lead(lead)
+        # Continue with the created lead even if enrichment fails
         
+        # Get the created lead with all details so we can get the updated enriched_data
+        lead = await get_lead_by_id(created_lead['id'])
+
         # Process fields for response
         if lead.get("industries") and isinstance(lead["industries"], str):
             lead["industries"] = [ind.strip() for ind in lead["industries"].split(",")]
