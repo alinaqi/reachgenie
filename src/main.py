@@ -2186,15 +2186,29 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('last_name'):
                 lead_data['last_name'] = last_name or (' '.join(lead_data['name'].split(' ')[1:]) if lead_data.get('name') else '')
 
-            # Skip only if we have no name information at all
-            if not lead_data.get('name') and not lead_data.get('first_name') and not lead_data.get('last_name'):
-                print("\nSkipping record - no name information available")
+            # Skip if required fields are missing
+            if not lead_data.get('name'):
+                print("\nSkipping record - missing required field: name")
                 logger.info(f"Skipping record due to missing name: {row}")
+                skipped_count += 1
+                continue
+
+            # Skip if either email or phone_number is missing
+            if not lead_data.get('email') or not lead_data.get('phone_number'):
+                print("\nSkipping record - missing required field: email or phone_number")
+                logger.info(f"Skipping record due to missing email or phone_number: {row}")
+                skipped_count += 1
+                continue
+
+            # Skip if either company or website is missing
+            if not lead_data.get('company') or not lead_data.get('website'):
+                print("\nSkipping record - missing required field: company or website")
+                logger.info(f"Skipping record due to missing company or website: {row}")
                 skipped_count += 1
                 continue
             
             # Handle phone number priority (Mobile > Direct > Office)
-            phone_number = lead_data.get('phone_number', '').strip()  # First try the direct phone_number field
+            phone_number = lead_data.get('phone_number', '').strip()
             if not phone_number:
                 phone_number = lead_data.get('mobile', '').strip()
             if not phone_number:
