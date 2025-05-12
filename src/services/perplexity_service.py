@@ -122,17 +122,17 @@ class PerplexityService:
 
     async def get_company_insights(self, company_name: str, company_website: str, company_description: str, lead_title: str = "", lead_department: str = "") -> Optional[str]:
         """
-        Get company insights using Perplexity API.
+        Get company insights using Perplexity API
         
         Args:
             company_name: Name of the company
-            company_website: Company's website URL
+            company_website: Company website URL
             company_description: Description of the company
-            lead_title: The lead's job title
-            lead_department: The lead's department
+            lead_title: Job title of the lead (optional)
+            lead_department: Department of the lead (optional)
             
         Returns:
-            String containing formatted company insights or None if the request fails
+            JSON string containing company insights in a specific format
         """
         try:
             headers = {
@@ -154,7 +154,7 @@ class PerplexityService:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a leads researcher that analyzes leads/prospects and provides detailed insights about pain points, needs, and motivations. Provide analysis in a clear, structured json format."
+                        "content": "You are a leads researcher that analyzes leads/prospects and provides detailed insights about pain points, needs, and motivations. Always respond with valid JSON in the exact format specified."
                     },
                     {
                         "role": "user",
@@ -174,16 +174,38 @@ class PerplexityService:
                 if response.status_code == 200:
                     result = response.json()
                     if result and "choices" in result and result["choices"]:
-                        content = result["choices"][0]["message"]["content"]
-                        logger.info(f"Raw content from Perplexity: {content}")
-                        return content.strip()
+                        try:
+                            content = result["choices"][0]["message"]["content"]
+                            logger.info(f"Raw content from Perplexity: {content}")
+                            
+                            # Clean the content before parsing
+                            cleaned_content = self._clean_json_string(content)
+                            insights_dict = json.loads(cleaned_content)
+                            
+                            # Validate the structure
+                            required_keys = ["businessOverview", "prospectProfessionalInterests", "painPoints", "buyingTriggers", "industryChallenges"]
+                            business_overview_keys = ["companyName", "businessModel", "keyProductsServices"]
+                            
+                            # Check all required keys exist
+                            if not all(key in insights_dict for key in required_keys):
+                                raise ValueError("Missing required top-level keys")
+                            
+                            # Check businessOverview structure
+                            if not all(key in insights_dict["businessOverview"] for key in business_overview_keys):
+                                raise ValueError("Missing required businessOverview keys")
+
+                            # Return validated and formatted JSON string
+                            return json.dumps(insights_dict)
+                            
+                        except (json.JSONDecodeError, ValueError) as e:
+                            logger.error(f"Error parsing Perplexity response: {str(e)}")
+                            return None
                 else:
                     logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
                     return None
-            
+                    
         except Exception as e:
-            logger.error(f"Error getting company insights from Perplexity: {str(e)}")
-            logger.exception("Full traceback:")
+            logger.error(f"Error getting company insights: {str(e)}")
             return None
 
 # Create a singleton instance
