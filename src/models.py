@@ -477,12 +477,13 @@ class JobChange(BaseModel):
     date: Optional[str]
 
 class CreateLeadRequest(BaseModel):
-    name: Optional[str] = None
+    name: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    email: Optional[str] = None
-    company: Optional[str] = None
-    phone_number: Optional[str] = None
+    email: str
+    company: str
+    phone_number: str
+    website: str
     company_size: Optional[str] = None
     job_title: Optional[str] = None
     lead_source: Optional[str] = None
@@ -495,7 +496,6 @@ class CreateLeadRequest(BaseModel):
     direct_phone: Optional[str] = None
     office_phone: Optional[str] = None
     hq_location: Optional[str] = None
-    website: Optional[str] = None
     headcount: Optional[int] = None
     industries: Optional[List[str]] = None
     department: Optional[str] = None
