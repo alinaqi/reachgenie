@@ -463,15 +463,26 @@ async def get_calls_by_companies(company_ids: List[str]):
     
     return unique_calls
 
-async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] = None, campaign_run_id: Optional[UUID] = None, lead_id: Optional[UUID] = None, page_number: int = 1, limit: int = 20):
+async def get_calls_by_company_id(
+    company_id: UUID,
+    campaign_id: Optional[UUID] = None,
+    campaign_run_id: Optional[UUID] = None,
+    lead_id: Optional[UUID] = None,
+    sentiment: Optional[str] = None,
+    has_meeting_booked: Optional[bool] = None,
+    page_number: int = 1,
+    limit: int = 20
+):
     """
-    Get paginated calls for a company, optionally filtered by campaign ID, campaign run ID, or lead ID
+    Get paginated calls for a company, optionally filtered by campaign ID, campaign run ID, lead ID, sentiment, or meeting booked status
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
         campaign_run_id: Optional UUID of the campaign run to filter by
         lead_id: Optional UUID of the lead to filter by
+        sentiment: Optional string to filter by sentiment (positive or negative)
+        has_meeting_booked: Optional boolean to filter by meeting booked status
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
         
@@ -494,8 +505,16 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
     # Add lead filter if provided
     if lead_id:
         base_query = base_query.eq('lead_id', str(lead_id))
+        
+    # Add sentiment filter if provided
+    if sentiment:
+        base_query = base_query.eq('sentiment', sentiment)
+        
+    # Add meeting booked filter if provided
+    if has_meeting_booked is not None:
+        base_query = base_query.eq('has_meeting_booked', has_meeting_booked)
 
-    # Get total count
+    # Get total count with the same filters
     total_count_query = supabase.table('calls').select(
         'id,leads(*),campaigns!inner(*)', count='exact'
     ).eq('campaigns.company_id', str(company_id))
@@ -506,6 +525,10 @@ async def get_calls_by_company_id(company_id: UUID, campaign_id: Optional[UUID] 
         total_count_query = total_count_query.eq('campaign_run_id', str(campaign_run_id))
     if lead_id:
         total_count_query = total_count_query.eq('lead_id', str(lead_id))
+    if sentiment:
+        total_count_query = total_count_query.eq('sentiment', sentiment)
+    if has_meeting_booked is not None:
+        total_count_query = total_count_query.eq('has_meeting_booked', has_meeting_booked)
         
     count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
