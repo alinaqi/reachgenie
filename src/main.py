@@ -105,7 +105,8 @@ from src.database import (
     get_call_log_by_bland_id,
     get_campaign_lead_count,
     check_user_access_status,
-    check_user_campaign_access
+    check_user_campaign_access,
+    has_pending_upload_tasks
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1724,16 +1725,16 @@ async def run_campaign(
     try:
         logger.info(f"Running campaign {campaign_id}")
         
-        # Get the campaign
+        # Get campaign details
         campaign = await get_campaign_by_id(campaign_id)
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
-
-        # Get company details and validate email credentials
-        company = await get_company_by_id(campaign["company_id"])
+            
+        # Get company details
+        company = await get_company_by_id(campaign['company_id'])
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
-
+            
         # Check if the company owner user is on an active subscription, or has a trial that is still valid
         has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
         if not has_access:
@@ -1743,6 +1744,13 @@ async def run_campaign(
         companies = await get_companies_by_user_id(current_user["id"])
         if not companies or not any(str(company["id"]) == str(campaign["company_id"]) for company in companies):
             raise HTTPException(status_code=404, detail="Campaign not found")
+            
+        # Check for pending upload tasks
+        if await has_pending_upload_tasks(UUID(campaign['company_id'])):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot run campaign while there are pending file uploads in the company. Please wait for all uploads to complete."
+            )
         
         # Only validate email credentials if campaign type is email or email_and_call
         if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
