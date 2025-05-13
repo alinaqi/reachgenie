@@ -1749,7 +1749,7 @@ async def run_campaign(
         if await has_pending_upload_tasks(UUID(campaign['company_id'])):
             raise HTTPException(
                 status_code=400,
-                detail="Cannot run campaign while there are pending file uploads in the company. Please wait for all uploads to complete."
+                detail="Cannot run campaign at this time. There are leads being processed from recent file uploads. Please wait for all lead processing to complete before running the campaign."
             )
         
         # Only validate email credentials if campaign type is email or email_and_call
