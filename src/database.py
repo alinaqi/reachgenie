@@ -4370,3 +4370,26 @@ async def update_user_subscription_details(subscription_id: str, plan_type: str,
     except Exception as e:
         logger.error(f"Error updating user subscription details: {str(e)}")
         raise
+
+async def has_pending_upload_tasks(company_id: UUID) -> bool:
+    """
+    Check if a company has any pending or processing upload tasks using count query.
+    
+    Args:
+        company_id: UUID of the company to check
+        
+    Returns:
+        bool: True if there are pending/processing tasks, False otherwise
+    """
+    try:
+        response = supabase.table('upload_tasks')\
+            .select('count', count='exact')\
+            .eq('company_id', str(company_id))\
+            .in_('status', ['pending', 'processing'])\
+            .execute()
+            
+        count = response.count if hasattr(response, 'count') else 0
+        return count > 0
+    except Exception as e:
+        logger.error(f"Error checking pending upload tasks: {str(e)}")
+        return False
