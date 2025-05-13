@@ -14,7 +14,8 @@ from src.database import (
     get_pending_scheduled_campaigns,
     create_campaign_run,
     mark_campaign_as_triggered,
-    get_campaign_lead_count
+    get_campaign_lead_count,
+    has_pending_upload_tasks
 )
 from src.main import run_company_campaign
 
@@ -48,8 +49,17 @@ async def process_scheduled_campaigns():
             # Process each campaign in the batch
             for campaign in campaigns:
                 campaign_id = UUID(campaign['id'])
+                company_id = UUID(campaign['company_id'])
                 
                 try:
+                    # Check for pending upload tasks
+                    if await has_pending_upload_tasks(company_id):
+                        logger.info(
+                            f"Skipping scheduled campaign {campaign_id} for company {company_id} "
+                            "due to pending upload tasks"
+                        )
+                        continue
+                    
                     logger.info(
                         f"\nProcessing scheduled campaign - "
                         f"ID: {campaign_id}, "
