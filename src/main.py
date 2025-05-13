@@ -1520,18 +1520,26 @@ async def get_company_calls(
     campaign_id: Optional[UUID] = Query(None, description="Filter calls by campaign ID"),
     campaign_run_id: Optional[UUID] = Query(None, description="Filter calls by campaign run ID"),
     lead_id: Optional[UUID] = Query(None, description="Filter calls by lead ID"),
+    sentiment: Optional[str] = Query(None, description="Filter calls by sentiment (positive or negative)"),
+    has_meeting_booked: Optional[bool] = Query(None, description="Filter calls by meeting booked status"),
+    from_date: Optional[datetime] = Query(None, description="Filter calls created from this date (inclusive)"),
+    to_date: Optional[datetime] = Query(None, description="Filter calls created up to this date (inclusive)"),
     page_number: int = Query(default=1, ge=1, description="Page number to fetch"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of items per page"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get paginated list of calls for a company, optionally filtered by campaign ID, campaign run ID, or lead ID
+    Get paginated list of calls for a company, optionally filtered by campaign ID, campaign run ID, lead ID, sentiment, meeting booked status, or date range
     
     Args:
         company_id: UUID of the company
         campaign_id: Optional UUID of the campaign to filter by
         campaign_run_id: Optional UUID of the campaign run to filter by
         lead_id: Optional UUID of the lead to filter by
+        sentiment: Optional string to filter by sentiment (positive or negative)
+        has_meeting_booked: Optional boolean to filter by meeting booked status
+        from_date: Optional datetime to filter calls created from this date (inclusive)
+        to_date: Optional datetime to filter calls created up to this date (inclusive)
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
         current_user: Current authenticated user
@@ -1550,7 +1558,26 @@ async def get_company_calls(
         if not campaign or str(campaign["company_id"]) != str(company_id):
             raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return await get_calls_by_company_id(company_id, campaign_id, campaign_run_id, lead_id, page_number, limit)
+    # Validate sentiment value if provided
+    if sentiment and sentiment.lower() not in ['positive', 'negative']:
+        raise HTTPException(status_code=400, detail="Sentiment must be either 'positive' or 'negative'")
+    
+    # Validate date range if provided
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=400, detail="from_date must be before or equal to to_date")
+    
+    return await get_calls_by_company_id(
+        company_id=company_id,
+        campaign_id=campaign_id,
+        campaign_run_id=campaign_run_id,
+        lead_id=lead_id,
+        sentiment=sentiment.lower() if sentiment else None,
+        has_meeting_booked=has_meeting_booked,
+        from_date=from_date,
+        to_date=to_date,
+        page_number=page_number,
+        limit=limit
+    )
 
 @app.post("/api/companies/{company_id}/campaigns", response_model=EmailCampaignInDB, tags=["Campaigns & Emails"])
 async def create_company_campaign(
