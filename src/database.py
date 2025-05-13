@@ -470,11 +470,13 @@ async def get_calls_by_company_id(
     lead_id: Optional[UUID] = None,
     sentiment: Optional[str] = None,
     has_meeting_booked: Optional[bool] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
     page_number: int = 1,
     limit: int = 20
 ):
     """
-    Get paginated calls for a company, optionally filtered by campaign ID, campaign run ID, lead ID, sentiment, or meeting booked status
+    Get paginated calls for a company, optionally filtered by campaign ID, campaign run ID, lead ID, sentiment, meeting booked status, or date range
     
     Args:
         company_id: UUID of the company
@@ -483,6 +485,8 @@ async def get_calls_by_company_id(
         lead_id: Optional UUID of the lead to filter by
         sentiment: Optional string to filter by sentiment (positive or negative)
         has_meeting_booked: Optional boolean to filter by meeting booked status
+        from_date: Optional datetime to filter calls created from this date (inclusive)
+        to_date: Optional datetime to filter calls created up to this date (inclusive)
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
         
@@ -513,6 +517,12 @@ async def get_calls_by_company_id(
     # Add meeting booked filter if provided
     if has_meeting_booked is not None:
         base_query = base_query.eq('has_meeting_booked', has_meeting_booked)
+        
+    # Add date range filters if provided
+    if from_date:
+        base_query = base_query.gte('created_at', from_date.isoformat())
+    if to_date:
+        base_query = base_query.lte('created_at', to_date.isoformat())
 
     # Get total count with the same filters
     total_count_query = supabase.table('calls').select(
@@ -529,6 +539,10 @@ async def get_calls_by_company_id(
         total_count_query = total_count_query.eq('sentiment', sentiment)
     if has_meeting_booked is not None:
         total_count_query = total_count_query.eq('has_meeting_booked', has_meeting_booked)
+    if from_date:
+        total_count_query = total_count_query.gte('created_at', from_date.isoformat())
+    if to_date:
+        total_count_query = total_count_query.lte('created_at', to_date.isoformat())
         
     count_response = total_count_query.execute()
     total = count_response.count if count_response.count is not None else 0
