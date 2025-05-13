@@ -55,8 +55,8 @@ async def process_scheduled_campaigns():
                     # Check for pending upload tasks
                     if await has_pending_upload_tasks(company_id):
                         logger.info(
-                            f"Skipping scheduled campaign {campaign_id} for company {company_id} "
-                            "due to pending upload tasks"
+                            f"Skipping scheduled campaign {campaign_id} for company {company_id}. "
+                            "There are leads being processed from recent file uploads."
                         )
                         continue
                     
