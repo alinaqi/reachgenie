@@ -1787,6 +1787,8 @@ async def run_campaign(
         background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
         
         return {"message": "Campaign request initiated successfully"}
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Unable to run campaign: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
