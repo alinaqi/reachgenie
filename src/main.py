@@ -144,6 +144,7 @@ from src.routes.subscriptions import router as subscriptions_router
 from src.routes.checkout_sessions import router as checkout_sessions_router
 from src.routes.stripe_webhooks import router as stripe_webhooks_router
 from src.services.stripe_service import StripeService
+import chardet
 
 # Configure logger
 logging.basicConfig(
@@ -2015,8 +2016,35 @@ async def process_leads_upload(
             response = storage.download(file_url)
             if not response:
                 raise Exception("No data received from storage")
+            
+            # Detect the file encoding
+            raw_data = response
+            result = chardet.detect(raw_data)
+            detected_encoding = result['encoding']
+            confidence = result['confidence']
+            
+            logger.info(f"Detected file encoding: {detected_encoding} with confidence: {confidence}")
+            
+            # If confidence is low or encoding is None, fallback to common encodings
+            if not detected_encoding or confidence < 0.6:
+                encodings_to_try = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+            else:
+                encodings_to_try = [detected_encoding]
+            
+            # Try different encodings
+            csv_text = None
+            for encoding in encodings_to_try:
+                try:
+                    csv_text = raw_data.decode(encoding)
+                    logger.info(f"Successfully decoded file using {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    logger.warning(f"Failed to decode with {encoding} encoding, trying next...")
+                    continue
+            
+            if csv_text is None:
+                raise Exception("Failed to decode file with any known encoding")
                 
-            csv_text = response.decode('utf-8')
             csv_data = csv.DictReader(io.StringIO(csv_text))
             
             # Validate CSV structure
