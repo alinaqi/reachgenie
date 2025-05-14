@@ -210,7 +210,7 @@ async def create_lead(company_id: UUID, lead_data: dict):
                 # Same lead, safe update
                 lead_id = email_match['id']
                 lead_data['company_id'] = str(company_id)
-                logger.info(f"\nAttempting to update lead with data: {lead_data}")
+                logger.info(f"\nAttempting to update lead with data, third case: {lead_data}")
                 response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
                 return response.data[0]
             else:

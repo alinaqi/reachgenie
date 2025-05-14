@@ -1277,14 +1277,14 @@ async def create_lead_endpoint(
             elif lead_dict.get('office_phone'):
                 lead_dict['phone_number'] = lead_dict['office_phone']
     
-        # Create the lead in the database
+        # Create/Update the lead in the database
         created_lead = await create_lead(company_id, lead_dict)
         
         # Get the created lead with all details
         lead = await get_lead_by_id(created_lead['id'])
         
         # Enrich the lead with company insights and update
-        await get_or_generate_insights_for_lead(lead)
+        await get_or_generate_insights_for_lead(lead, force_creation=True)
         # Continue with the created lead even if enrichment fails
         
         # Get the created lead with all details so we can get the updated enriched_data
