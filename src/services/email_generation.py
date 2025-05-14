@@ -8,12 +8,21 @@ import json
 import logging
 logger = logging.getLogger(__name__)
 
-async def get_or_generate_insights_for_lead(lead: dict):
-    """Get or generate insights for a lead"""
+async def get_or_generate_insights_for_lead(lead: dict, force_creation: bool = False):
+    """
+    Get or generate insights for a lead
     
-    # Check if lead already has enriched data
+    Args:
+        lead: The lead information dictionary
+        force_creation: If True, will regenerate insights even if they already exist
+        
+    Returns:
+        Generated insights or None if generation fails
+    """
+    
+    # Check if lead already has enriched data and we're not forcing regeneration
     insights = None
-    if lead.get('enriched_data'):
+    if not force_creation and lead.get('enriched_data'):
         logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
         # We have enriched data, use it directly
         if isinstance(lead['enriched_data'], str):
@@ -25,9 +34,9 @@ async def get_or_generate_insights_for_lead(lead: dict):
         else:
             insights = json.dumps(lead['enriched_data'])
     
-    # Generate company insights if we don't have any
-    if not insights:
-        logger.info(f"Generating new insights for lead: {lead['email']}")
+    # Generate company insights if we don't have any or if force_creation is True
+    if force_creation or not insights:
+        logger.info(f"{'Regenerating' if force_creation else 'Generating new'} insights for lead: {lead['email']}")
         insights = await generate_company_insights(lead, perplexity_service)
         
         # Save the insights to the lead's enriched_data if we generated new ones

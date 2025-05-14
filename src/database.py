@@ -186,16 +186,39 @@ async def create_lead(company_id: UUID, lead_data: dict):
         if not can_add_lead:
             raise Exception(error_message)
 
-        # Proceed with lead creation
-        lead_data['company_id'] = str(company_id)
-        print("\nAttempting to insert lead with data:")
-        print(lead_data)
-        response = supabase.table('leads').insert(lead_data).execute()
-        print("\nDatabase response:")
-        print(response)
-        return response.data[0]
+        matches = await find_existing_leads(email=lead_data['email'], phone=lead_data['phone_number'], company_id=company_id)
+        if len(matches) == 0:
+            # Insert new lead
+            lead_data['company_id'] = str(company_id)
+            logger.info(f"\nAttempting to insert lead with data: {lead_data}")
+            response = supabase.table('leads').insert(lead_data).execute()
+            return response.data[0]
+        elif len(matches) == 1:
+            # Safe update
+            lead_id = matches[0]['id']
+
+            lead_data['company_id'] = str(company_id)
+            logger.info(f"\nAttempting to update lead with data: {lead_data}")
+            response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
+            return response.data[0]
+        else:
+            # Two matches — possible conflict
+            email_match = next((m for m in matches if m['email'] == lead_data['email']), None)
+            phone_match = next((m for m in matches if m['phone_number'] == lead_data['phone_number']), None)
+
+            if email_match and phone_match and email_match['id'] == phone_match['id']:
+                # Same lead, safe update
+                lead_id = email_match['id']
+                lead_data['company_id'] = str(company_id)
+                logger.info(f"\nAttempting to update lead with data, third case: {lead_data}")
+                response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
+                return response.data[0]
+            else:
+                # Two different leads, raise an error for conflict
+                raise Exception(f"Different leads found for the email and phone number")
+
     except Exception as e:
-        print(f"\nError in create_lead: {str(e)}")
+        logger.info(f"\nError in create_lead: {str(e)}")
         raise e
 
 async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: int = 20, search_term: Optional[str] = None):
@@ -4430,3 +4453,30 @@ async def has_pending_upload_tasks(company_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error checking pending upload tasks: {str(e)}")
         return False
+
+async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[Dict]:
+    """
+    Find existing leads in a company that match either the email or phone number.
+    
+    Args:
+        email: Email address to search for
+        phone: Phone number to search for
+        company_id: UUID of the company to search in
+        
+    Returns:
+        List[Dict]: List of matching leads, if any
+    """
+    try:
+        # Build query to find leads with matching email or phone
+        response = supabase.table('leads')\
+            .select('id, email, phone_number, name')\
+            .eq('company_id', str(company_id))\
+            .is_('deleted_at', None)\
+            .or_(f'email.eq.{email},phone_number.eq.{phone}')\
+            .execute()
+            
+        return response.data if response.data else []
+        
+    except Exception as e:
+        logger.error(f"Error finding existing leads: {str(e)}")
+        return []

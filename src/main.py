@@ -144,6 +144,9 @@ from src.routes.subscriptions import router as subscriptions_router
 from src.routes.checkout_sessions import router as checkout_sessions_router
 from src.routes.stripe_webhooks import router as stripe_webhooks_router
 from src.services.stripe_service import StripeService
+import chardet
+from email_validator import validate_email, EmailNotValidError
+from src.utils.string_utils import validate_phone_number
 
 # Configure logger
 logging.basicConfig(
@@ -1218,7 +1221,7 @@ async def create_lead_endpoint(
 ):
     """
     Create a single lead for a company.
-    
+
     Args:
         company_id: UUID of the company
         lead_data: Lead information
@@ -1231,27 +1234,26 @@ async def create_lead_endpoint(
         404: Company not found
         403: User doesn't have access to this company
     """
-    # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # Get company details
-    company = await get_company_by_id(company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    # Check if the company owner user is on an active subscription, or has a trial that is still valid
-    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
-    
-    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
-    if not has_access:
-        raise HTTPException(status_code=403, detail=error_message)
-
     try:
-        # Process lead data
-        lead_dict = lead_data.dict(exclude_unset=True)
+        # Validate company access
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+            raise HTTPException(status_code=404, detail="Company not found")
         
+        # Get company details
+        company = await get_company_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if the company owner user is on an active subscription, or has a trial that is still valid
+        has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
+
+        # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+        if not has_access:
+            raise HTTPException(status_code=403, detail=error_message)
+        # Convert lead data to dict
+        lead_dict = lead_data.dict(exclude_unset=True)
+
         # Handle name fields
         if not lead_dict.get('name') and (lead_dict.get('first_name') or lead_dict.get('last_name')):
             first_name = lead_dict.get('first_name', '')
@@ -1267,24 +1269,48 @@ async def create_lead_endpoint(
                 lead_dict['first_name'] = name_parts[0]
                 lead_dict['last_name'] = ""
         
-        # Handle phone number prioritization
-        if not lead_dict.get('phone_number'):
-            # Try mobile first, then direct, then office
-            if lead_dict.get('mobile'):
-                lead_dict['phone_number'] = lead_dict['mobile']
-            elif lead_dict.get('direct_phone'):
-                lead_dict['phone_number'] = lead_dict['direct_phone']
-            elif lead_dict.get('office_phone'):
-                lead_dict['phone_number'] = lead_dict['office_phone']
+        # Validate email format
+        email = lead_dict.get('email', '').strip()
+        try:
+            # Validate and normalize the email
+            email_info = validate_email(email, check_deliverability=False)
+            lead_dict['email'] = email_info.normalized
+        except EmailNotValidError as e:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid email format: {str(e)}"
+            )
+
+        # Handle phone number priority and validation
+        phone_number = None
+        phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
+        
+        # Try each phone field in priority order
+        for field in phone_fields:
+            if lead_dict.get(field):
+                is_valid, formatted_number = validate_phone_number(lead_dict[field])
+                if is_valid:
+                    phone_number = formatted_number
+                    break
+        
+        # If no valid phone number found in any field
+        if not phone_number:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid phone number provided. Phone number must be in E.164 format (e.g., +1234567890)"
+            )
+        
+        # Update the lead data with the validated phone number
+        lead_dict['phone_number'] = phone_number
     
-        # Create the lead in the database
+        # Create/Update the lead in the database
         created_lead = await create_lead(company_id, lead_dict)
         
         # Get the created lead with all details
         lead = await get_lead_by_id(created_lead['id'])
         
         # Enrich the lead with company insights and update
-        await get_or_generate_insights_for_lead(lead)
+        await get_or_generate_insights_for_lead(lead, force_creation=True)
         # Continue with the created lead even if enrichment fails
         
         # Get the created lead with all details so we can get the updated enriched_data
@@ -1315,7 +1341,8 @@ async def create_lead_endpoint(
             "status": "success",
             "data": lead
         }
-    
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Error creating lead: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create lead: {str(e)}")
@@ -2015,8 +2042,35 @@ async def process_leads_upload(
             response = storage.download(file_url)
             if not response:
                 raise Exception("No data received from storage")
+            
+            # Detect the file encoding
+            raw_data = response
+            result = chardet.detect(raw_data)
+            detected_encoding = result['encoding']
+            confidence = result['confidence']
+            
+            logger.info(f"Detected file encoding: {detected_encoding} with confidence: {confidence}")
+            
+            # If confidence is low or encoding is None, fallback to common encodings
+            if not detected_encoding or confidence < 0.6:
+                encodings_to_try = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+            else:
+                encodings_to_try = [detected_encoding]
+            
+            # Try different encodings
+            csv_text = None
+            for encoding in encodings_to_try:
+                try:
+                    csv_text = raw_data.decode(encoding)
+                    logger.info(f"Successfully decoded file using {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    logger.warning(f"Failed to decode with {encoding} encoding, trying next...")
+                    continue
+            
+            if csv_text is None:
+                raise Exception("Failed to decode file with any known encoding")
                 
-            csv_text = response.decode('utf-8')
             csv_data = csv.DictReader(io.StringIO(csv_text))
             
             # Validate CSV structure
@@ -2230,31 +2284,46 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 skipped_count += 1
                 continue
 
-            # Skip if either email or phone_number is missing
-            if not lead_data.get('email') or not lead_data.get('phone_number'):
-                print("\nSkipping record - missing required field: email or phone_number")
-                logger.info(f"Skipping record due to missing email or phone_number: {row}")
+            # Validate email format
+            email = lead_data.get('email','').strip()
+            try:
+                # Validate and normalize the email
+                email_info = validate_email(email, check_deliverability=False)
+                lead_data['email'] = email_info.normalized
+            except EmailNotValidError as e:
+                logger.info(f"Skipping record - invalid email format: {email}")
+                logger.info(f"Email validation error: {str(e)}")
                 skipped_count += 1
                 continue
 
-            # Skip if either company or website is missing
-            if not lead_data.get('company') or not lead_data.get('website'):
-                print("\nSkipping record - missing required field: company or website")
-                logger.info(f"Skipping record due to missing company or website: {row}")
+            # Handle phone number priority and validation
+            phone_number = None
+            phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
+            
+            # Try each phone field in priority order
+            for field in phone_fields:
+                if lead_data.get(field):
+                    is_valid, formatted_number = validate_phone_number(lead_data[field])
+                    if is_valid:
+                        phone_number = formatted_number
+                        break
+            
+            # If no valid phone number found in any field
+            if not phone_number:
+                logger.info(f"Skipping record - no valid phone number found in any field")
+                logger.info(f"Invalid phone numbers in record: {row}")
                 skipped_count += 1
                 continue
             
-            # Handle phone number priority (Mobile > Direct > Office)
-            phone_number = lead_data.get('phone_number', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('mobile', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('direct_phone', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('office_phone', '').strip()
-            if not phone_number and 'phone_number' in row:  # Fallback to raw data if no phone number found
-                phone_number = row['phone_number'].strip()
+            # Update the lead data with the validated phone number
             lead_data['phone_number'] = phone_number
+
+            # Skip if either company or website is missing
+            if not lead_data.get('company') or not lead_data.get('website'):
+                logger.info(f"Skipping record - missing required field: company or website")
+                logger.info(f"Skipping record due to missing company or website: {row}")
+                skipped_count += 1
+                continue
             
             # Handle hiring positions
             hiring_positions = []

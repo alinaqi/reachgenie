@@ -22,3 +22,4 @@ bugsnag==4.6.1
 anthropic
 pytz==2025.2
 stripe==12.0.1
+chardet==5.2.0
