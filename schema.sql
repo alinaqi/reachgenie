@@ -77,6 +77,12 @@ CREATE TABLE IF NOT EXISTS leads (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add unique composite index on leads table for company_id and email
+CREATE UNIQUE INDEX IF NOT EXISTS leads_company_id_email_unique_idx ON leads (company_id, email) WHERE deleted_at IS NULL;
+
+-- Add unique composite index on leads table for company_id and phone_number
+CREATE UNIQUE INDEX IF NOT EXISTS leads_company_id_phone_unique_idx ON leads (company_id, phone_number) WHERE deleted_at IS NULL;
+
 -- Calls table
 CREATE TABLE IF NOT EXISTS calls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
