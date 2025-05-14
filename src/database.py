@@ -4430,3 +4430,30 @@ async def has_pending_upload_tasks(company_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error checking pending upload tasks: {str(e)}")
         return False
+
+async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[Dict]:
+    """
+    Find existing leads in a company that match either the email or phone number.
+    
+    Args:
+        email: Email address to search for
+        phone: Phone number to search for
+        company_id: UUID of the company to search in
+        
+    Returns:
+        List[Dict]: List of matching leads, if any
+    """
+    try:
+        # Build query to find leads with matching email or phone
+        response = supabase.table('leads')\
+            .select('id, email, phone_number, name')\
+            .eq('company_id', str(company_id))\
+            .is_('deleted_at', None)\
+            .or_(f'email.eq.{email},phone_number.eq.{phone}')\
+            .execute()
+            
+        return response.data if response.data else []
+        
+    except Exception as e:
+        logger.error(f"Error finding existing leads: {str(e)}")
+        return []
