@@ -145,6 +145,8 @@ from src.routes.checkout_sessions import router as checkout_sessions_router
 from src.routes.stripe_webhooks import router as stripe_webhooks_router
 from src.services.stripe_service import StripeService
 import chardet
+from email_validator import validate_email, EmailNotValidError
+from src.utils.string_utils import validate_phone_number
 
 # Configure logger
 logging.basicConfig(
@@ -2258,31 +2260,46 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 skipped_count += 1
                 continue
 
-            # Skip if either email or phone_number is missing
-            if not lead_data.get('email') or not lead_data.get('phone_number'):
-                print("\nSkipping record - missing required field: email or phone_number")
-                logger.info(f"Skipping record due to missing email or phone_number: {row}")
+            # Validate email format
+            email = lead_data.get('email','').strip()
+            try:
+                # Validate and normalize the email
+                email_info = validate_email(email, check_deliverability=False)
+                lead_data['email'] = email_info.normalized
+            except EmailNotValidError as e:
+                logger.info(f"Skipping record - invalid email format: {email}")
+                logger.info(f"Email validation error: {str(e)}")
                 skipped_count += 1
                 continue
 
-            # Skip if either company or website is missing
-            if not lead_data.get('company') or not lead_data.get('website'):
-                print("\nSkipping record - missing required field: company or website")
-                logger.info(f"Skipping record due to missing company or website: {row}")
+            # Handle phone number priority and validation
+            phone_number = None
+            phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
+            
+            # Try each phone field in priority order
+            for field in phone_fields:
+                if lead_data.get(field):
+                    is_valid, formatted_number = validate_phone_number(lead_data[field])
+                    if is_valid:
+                        phone_number = formatted_number
+                        break
+            
+            # If no valid phone number found in any field
+            if not phone_number:
+                logger.info(f"Skipping record - no valid phone number found in any field")
+                logger.info(f"Invalid phone numbers in record: {row}")
                 skipped_count += 1
                 continue
             
-            # Handle phone number priority (Mobile > Direct > Office)
-            phone_number = lead_data.get('phone_number', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('mobile', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('direct_phone', '').strip()
-            if not phone_number:
-                phone_number = lead_data.get('office_phone', '').strip()
-            if not phone_number and 'phone_number' in row:  # Fallback to raw data if no phone number found
-                phone_number = row['phone_number'].strip()
+            # Update the lead data with the validated phone number
             lead_data['phone_number'] = phone_number
+
+            # Skip if either company or website is missing
+            if not lead_data.get('company') or not lead_data.get('website'):
+                logger.info(f"Skipping record - missing required field: company or website")
+                logger.info(f"Skipping record due to missing company or website: {row}")
+                skipped_count += 1
+                continue
             
             # Handle hiring positions
             hiring_positions = []
