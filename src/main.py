@@ -1341,7 +1341,8 @@ async def create_lead_endpoint(
             "status": "success",
             "data": lead
         }
-    
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Error creating lead: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create lead: {str(e)}")
