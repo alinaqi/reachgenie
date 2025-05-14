@@ -1221,7 +1221,7 @@ async def create_lead_endpoint(
 ):
     """
     Create a single lead for a company.
-    
+
     Args:
         company_id: UUID of the company
         lead_data: Lead information
@@ -1234,27 +1234,26 @@ async def create_lead_endpoint(
         404: Company not found
         403: User doesn't have access to this company
     """
-    # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # Get company details
-    company = await get_company_by_id(company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    # Check if the company owner user is on an active subscription, or has a trial that is still valid
-    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
-    
-    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
-    if not has_access:
-        raise HTTPException(status_code=403, detail=error_message)
-
     try:
-        # Process lead data
-        lead_dict = lead_data.dict(exclude_unset=True)
+        # Validate company access
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+            raise HTTPException(status_code=404, detail="Company not found")
         
+        # Get company details
+        company = await get_company_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if the company owner user is on an active subscription, or has a trial that is still valid
+        has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
+
+        # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+        if not has_access:
+            raise HTTPException(status_code=403, detail=error_message)
+        # Convert lead data to dict
+        lead_dict = lead_data.dict(exclude_unset=True)
+
         # Handle name fields
         if not lead_dict.get('name') and (lead_dict.get('first_name') or lead_dict.get('last_name')):
             first_name = lead_dict.get('first_name', '')
@@ -1270,15 +1269,39 @@ async def create_lead_endpoint(
                 lead_dict['first_name'] = name_parts[0]
                 lead_dict['last_name'] = ""
         
-        # Handle phone number prioritization
-        if not lead_dict.get('phone_number'):
-            # Try mobile first, then direct, then office
-            if lead_dict.get('mobile'):
-                lead_dict['phone_number'] = lead_dict['mobile']
-            elif lead_dict.get('direct_phone'):
-                lead_dict['phone_number'] = lead_dict['direct_phone']
-            elif lead_dict.get('office_phone'):
-                lead_dict['phone_number'] = lead_dict['office_phone']
+        # Validate email format
+        email = lead_dict.get('email', '').strip()
+        try:
+            # Validate and normalize the email
+            email_info = validate_email(email, check_deliverability=False)
+            lead_dict['email'] = email_info.normalized
+        except EmailNotValidError as e:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid email format: {str(e)}"
+            )
+
+        # Handle phone number priority and validation
+        phone_number = None
+        phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
+        
+        # Try each phone field in priority order
+        for field in phone_fields:
+            if lead_dict.get(field):
+                is_valid, formatted_number = validate_phone_number(lead_dict[field])
+                if is_valid:
+                    phone_number = formatted_number
+                    break
+        
+        # If no valid phone number found in any field
+        if not phone_number:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid phone number provided. Phone number must be in E.164 format (e.g., +1234567890)"
+            )
+        
+        # Update the lead data with the validated phone number
+        lead_dict['phone_number'] = phone_number
     
         # Create/Update the lead in the database
         created_lead = await create_lead(company_id, lead_dict)
