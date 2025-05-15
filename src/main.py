@@ -107,7 +107,7 @@ from src.database import (
     check_user_access_status,
     check_user_campaign_access,
     has_pending_upload_tasks,
-    create_skipped_lead_record
+    create_skipped_row_record
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -2292,7 +2292,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('name'):
                 print("\nSkipping record - missing required field: name")
                 logger.info(f"Skipping record due to missing name: {row}")
-                await create_skipped_lead_record(
+                await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_name",
                     row_data=row
@@ -2309,7 +2309,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             except EmailNotValidError as e:
                 logger.info(f"Skipping record - invalid email format: {email}")
                 logger.info(f"Email validation error: {str(e)}")
-                await create_skipped_lead_record(
+                await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_email",
                     row_data=row
@@ -2333,7 +2333,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not phone_number:
                 logger.info(f"Skipping record - no valid phone number found in any field")
                 logger.info(f"Invalid phone numbers in record: {row}")
-                await create_skipped_lead_record(
+                await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_phone",
                     row_data=row
@@ -2348,7 +2348,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('company') or not lead_data.get('website'):
                 logger.info(f"Skipping record - missing required field: company or website")
                 logger.info(f"Skipping record due to missing company or website: {row}")
-                await create_skipped_lead_record(
+                await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_company_name_or_website",
                     row_data=row
@@ -2417,7 +2417,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             except Exception as e:
                 logger.error(f"Error creating lead: {str(e)}")
                 logger.error(f"Lead data that failed: {lead_data}")
-                await create_skipped_lead_record(
+                await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="lead_creation_error",
                     row_data=row
