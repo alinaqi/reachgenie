@@ -4611,3 +4611,25 @@ async def get_skipped_leads_by_task(
     except Exception as e:
         logger.error(f"Error in get_skipped_leads_by_task: {str(e)}")
         raise e
+
+async def get_upload_task_file_url(upload_task_id: UUID) -> Optional[str]:
+    """
+    Get the file_url for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID
+        
+    Returns:
+        Optional[str]: The file URL if found, None otherwise
+    """
+    try:
+        response = supabase.table('upload_tasks')\
+            .select('file_url')\
+            .eq('id', str(upload_task_id))\
+            .single()\
+            .execute()
+        
+        return response.data.get('file_url') if response.data else None
+    except Exception as e:
+        logger.error(f"Error in get_upload_task_file_url: {str(e)}")
+        raise e
