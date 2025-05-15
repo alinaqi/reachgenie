@@ -4498,7 +4498,7 @@ async def create_skipped_lead_record(
         dict: Created skipped lead record
     """
     try:
-        result = await supabase.table('skipped_leads').insert({
+        result = supabase.table('skipped_leads').insert({
             'upload_task_id': str(upload_task_id),
             'category': category,
             'row_data': json.dumps(row_data)  # Convert dict to JSON string
