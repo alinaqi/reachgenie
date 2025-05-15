@@ -406,8 +406,8 @@ COMMENT ON COLUMN upload_tasks.file_url IS 'Storage URL where the uploaded file 
 COMMENT ON COLUMN upload_tasks.file_name IS 'Original name of the uploaded file';
 COMMENT ON COLUMN upload_tasks.type IS 'Type of upload task: leads (for lead CSV uploads) or do_not_email (for do not contact list uploads)';
 
--- Skipped Leads table
-CREATE TABLE IF NOT EXISTS skipped_leads (
+-- Skipped Rows table
+CREATE TABLE IF NOT EXISTS skipped_rows (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     upload_task_id UUID REFERENCES upload_tasks(id) NOT NULL,
     category TEXT NOT NULL,
@@ -416,10 +416,10 @@ CREATE TABLE IF NOT EXISTS skipped_leads (
 );
 
 -- Add indexes for faster querying
-CREATE INDEX IF NOT EXISTS skipped_leads_upload_task_id_idx ON skipped_leads(upload_task_id);
-CREATE INDEX IF NOT EXISTS skipped_leads_category_idx ON skipped_leads(category);
+CREATE INDEX IF NOT EXISTS skipped_rows_upload_task_id_idx ON skipped_rows(upload_task_id);
+CREATE INDEX IF NOT EXISTS skipped_rows_category_idx ON skipped_rows(category);
 
 -- Add comments to explain the columns
-COMMENT ON TABLE skipped_leads IS 'Stores information about leads that were skipped during the upload process';
-COMMENT ON COLUMN skipped_leads.category IS 'Reason category for why the lead was skipped (e.g., invalid_email, missing_name)';
-COMMENT ON COLUMN skipped_leads.row_data IS 'Original row data that was skipped';
+COMMENT ON TABLE skipped_rows IS 'Stores information about rows that were skipped during the upload process';
+COMMENT ON COLUMN skipped_rows.category IS 'Reason category for why the row was skipped (e.g., invalid_email, missing_name)';
+COMMENT ON COLUMN skipped_rows.row_data IS 'Original row data that was skipped';
