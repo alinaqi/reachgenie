@@ -4493,24 +4493,24 @@ async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[
         logger.error(f"Error finding existing leads: {str(e)}")
         return []
 
-async def create_skipped_lead_record(
+async def create_skipped_row_record(
     upload_task_id: UUID,
     category: str,
     row_data: dict
 ):
     """
-    Create a record in the skipped_leads table for a lead that was skipped during upload.
+    Create a record in the skipped_rows table for a row that was skipped during upload.
     
     Args:
         upload_task_id (UUID): ID of the upload task
-        category (str): Category/reason for skipping the lead
+        category (str): Category/reason for skipping the row
         row_data (dict): Original row data that was skipped
         
     Returns:
-        dict: Created skipped lead record
+        dict: Created skipped row record
     """
     try:
-        result = supabase.table('skipped_leads').insert({
+        result = supabase.table('skipped_rows').insert({
             'upload_task_id': str(upload_task_id),
             'category': category,
             'row_data': json.dumps(row_data)  # Convert dict to JSON string
@@ -4521,9 +4521,8 @@ async def create_skipped_lead_record(
         else:
             return None
     except Exception as e:
-        logger.error(f"Error creating skipped lead record: {str(e)}")
+        logger.error(f"Error creating skipped row record: {str(e)}")
         return None
-
 async def get_upload_tasks_by_company(
     company_id: UUID,
     page_number: int = 1,
@@ -4573,30 +4572,30 @@ async def get_upload_tasks_by_company(
         logger.error(f"Error in get_upload_tasks_by_company: {str(e)}")
         raise e
 
-async def get_skipped_leads_by_task(
+async def get_skipped_rows_by_task(
     upload_task_id: UUID,
     page_number: int = 1,
     limit: int = 20
 ) -> Dict[str, Any]:
     """
-    Get paginated skipped leads for a specific upload task.
+    Get paginated skipped rows for a specific upload task.
     
     Args:
-        upload_task_id (UUID): Upload task ID to filter skipped leads
+        upload_task_id (UUID): Upload task ID to filter skipped rows
         page_number (int): Page number for pagination (default: 1)
         limit (int): Number of items per page (default: 20)
         
     Returns:
         Dict containing:
-            - items: List of skipped leads
-            - total: Total number of skipped leads
+            - items: List of skipped rows
+            - total: Total number of skipped rows
             - page: Current page number
             - page_size: Number of items per page
             - total_pages: Total number of pages
     """
     try:
         # Build base query
-        base_query = supabase.table('skipped_leads').select('*', count='exact')\
+        base_query = supabase.table('skipped_rows').select('*', count='exact')\
             .eq('upload_task_id', str(upload_task_id))
         
         # Get total count
@@ -4620,7 +4619,7 @@ async def get_skipped_leads_by_task(
             "total_pages": total_pages
         }
     except Exception as e:
-        logger.error(f"Error in get_skipped_leads_by_task: {str(e)}")
+        logger.error(f"Error in get_skipped_rows_by_task: {str(e)}")
         raise e
 
 async def get_upload_task_file_url(upload_task_id: UUID) -> Optional[str]:
