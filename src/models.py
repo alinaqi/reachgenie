@@ -1230,7 +1230,7 @@ class PaginatedUploadTaskResponse(BaseModel):
             }
         }
 
-class SkippedLeadResponse(BaseModel):
+class SkippedRowResponse(BaseModel):
     id: UUID
     upload_task_id: UUID
     category: str
@@ -1247,8 +1247,8 @@ class SkippedLeadResponse(BaseModel):
         except (json.JSONDecodeError, TypeError):
             return v
 
-class PaginatedSkippedLeadResponse(BaseModel):
-    items: List[SkippedLeadResponse]
+class PaginatedSkippedRowResponse(BaseModel):
+    items: List[SkippedRowResponse]
     total: int
     page: int
     page_size: int
