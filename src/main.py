@@ -2340,7 +2340,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 logger.info(f"Skipping record due to missing company or website: {row}")
                 await create_skipped_lead_record(
                     upload_task_id=task_id,
-                    category="missing_company_website",
+                    category="missing_company_name_or_website",
                     row_data=row
                 )
                 skipped_count += 1
