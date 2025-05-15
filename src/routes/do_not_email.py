@@ -178,7 +178,13 @@ async def upload_do_not_email_list(
         
         # Create task record
         task_id = uuid.uuid4()
-        await create_upload_task(task_id, company_id, current_user["id"], file_name)
+        await create_upload_task(
+            task_id=task_id,
+            company_id=company_id,
+            user_id=current_user["id"],
+            file_url=file_name,
+            file_name=file.filename
+        )
         
         # Add background task
         background_tasks.add_task(
