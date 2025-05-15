@@ -1171,6 +1171,8 @@ class UploadTaskResponse(BaseModel):
     id: UUID
     company_id: UUID
     user_id: UUID
+    file_url: str
+    file_name: str
     status: str
     result: Union[Dict[str, Any], str]
     created_at: datetime
@@ -1200,6 +1202,8 @@ class PaginatedUploadTaskResponse(BaseModel):
                         "id": "123e4567-e89b-12d3-a456-426614174000",
                         "company_id": "123e4567-e89b-12d3-a456-426614174001",
                         "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "file_url": "company_id/abc123.csv",
+                        "file_name": "leads_march_2024.csv",
                         "status": "completed",
                         "result": {
                             "leads_saved": 2,
@@ -1212,6 +1216,8 @@ class PaginatedUploadTaskResponse(BaseModel):
                         "id": "123e4567-e89b-12d3-a456-426614174003",
                         "company_id": "123e4567-e89b-12d3-a456-426614174001",
                         "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "file_url": "company_id/def456.csv",
+                        "file_name": "leads_april_2024.csv",
                         "status": "failed",
                         "result": "Invalid file format",
                         "created_at": "2024-01-01T12:00:00Z"
