@@ -2401,7 +2401,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 lead = await get_lead_by_id(created_lead['id'])
 
                 # Enrich the lead with company insights
-                await get_or_generate_insights_for_lead(lead)
+                await get_or_generate_insights_for_lead(lead, force_creation=True)
                 # Continue processing other leads even if enrichment fails
                     
             except Exception as e:
