@@ -1166,4 +1166,40 @@ class AccountEmailCheckResponse(BaseModel):
                 "message": "Account email already exists in another company"
             }
         }
+
+class UploadTaskResponse(BaseModel):
+    id: UUID
+    company_id: UUID
+    user_id: UUID
+    status: str
+    result: str
+    created_at: datetime
+
+class PaginatedUploadTaskResponse(BaseModel):
+    items: List[UploadTaskResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "company_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "status": "completed",
+                        "result": "{\"leads_saved\": 2, \"leads_skipped\": 5, \"unmapped_headers\": [   ]}",
+                        "created_at": "2024-01-01T12:00:00Z",
+                       
+                    }
+                ],
+                "total": 50,
+                "page": 1,
+                "page_size": 20,
+                "total_pages": 3
+            }
+        }
  
