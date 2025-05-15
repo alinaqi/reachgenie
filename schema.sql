@@ -379,3 +379,47 @@ CREATE TABLE IF NOT EXISTS call_queue (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Upload Tasks table
+CREATE TABLE IF NOT EXISTS upload_tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID REFERENCES companies(id) NOT NULL,
+    user_id UUID REFERENCES users(id) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    total_leads INTEGER DEFAULT 0,
+    processed_leads INTEGER DEFAULT 0,
+    skipped_leads INTEGER DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Add indexes for faster querying
+CREATE INDEX IF NOT EXISTS upload_tasks_company_id_idx ON upload_tasks(company_id);
+CREATE INDEX IF NOT EXISTS upload_tasks_user_id_idx ON upload_tasks(user_id);
+CREATE INDEX IF NOT EXISTS upload_tasks_status_idx ON upload_tasks(status);
+
+-- Add comments to explain the columns
+COMMENT ON TABLE upload_tasks IS 'Tracks lead upload tasks and their progress';
+COMMENT ON COLUMN upload_tasks.total_leads IS 'Total number of leads in the upload file';
+COMMENT ON COLUMN upload_tasks.processed_leads IS 'Number of leads successfully processed';
+COMMENT ON COLUMN upload_tasks.skipped_leads IS 'Number of leads skipped due to validation errors';
+COMMENT ON COLUMN upload_tasks.error_message IS 'Error message if the upload task failed';
+
+-- Skipped Leads table
+CREATE TABLE IF NOT EXISTS skipped_leads (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    upload_task_id UUID REFERENCES upload_tasks(id) NOT NULL,
+    category TEXT NOT NULL,
+    row_data TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for faster querying
+CREATE INDEX IF NOT EXISTS skipped_leads_upload_task_id_idx ON skipped_leads(upload_task_id);
+CREATE INDEX IF NOT EXISTS skipped_leads_category_idx ON skipped_leads(category);
+
+-- Add comments to explain the columns
+COMMENT ON TABLE skipped_leads IS 'Stores information about leads that were skipped during the upload process';
+COMMENT ON COLUMN skipped_leads.category IS 'Reason category for why the lead was skipped (e.g., invalid_email, missing_name)';
+COMMENT ON COLUMN skipped_leads.row_data IS 'Original row data that was skipped';
