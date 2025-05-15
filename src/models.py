@@ -1223,4 +1223,50 @@ class PaginatedUploadTaskResponse(BaseModel):
                 "total_pages": 3
             }
         }
+
+class SkippedLeadResponse(BaseModel):
+    id: UUID
+    upload_task_id: UUID
+    category: str
+    row_data: Union[Dict[str, Any], str]
+    created_at: datetime
+
+    @field_validator('row_data', mode='before')
+    @classmethod
+    def validate_row_data(cls, v: str) -> Union[Dict[str, Any], str]:
+        if not v:
+            return v
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return v
+
+class PaginatedSkippedLeadResponse(BaseModel):
+    items: List[SkippedLeadResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "upload_task_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "category": "missing_name",
+                        "row_data": {
+                            "email": "test@example.com",
+                            "company": "Test Corp"
+                        },
+                        "created_at": "2024-01-01T12:00:00Z"
+                    }
+                ],
+                "total": 50,
+                "page": 1,
+                "page_size": 20,
+                "total_pages": 3
+            }
+        }
  
