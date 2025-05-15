@@ -1174,12 +1174,12 @@ class UploadTaskResponse(BaseModel):
     file_name: str
     type: str
     status: str
-    result: Union[Dict[str, Any], str]
+    result: Optional[Union[Dict[str, Any], str]] = None
     created_at: datetime
 
     @field_validator('result', mode='before')
     @classmethod
-    def validate_result(cls, v: str) -> Union[Dict[str, Any], str]:
+    def validate_result(cls, v: str) -> Optional[Union[Dict[str, Any], str]]:
         if not v:
             return v
         try:
