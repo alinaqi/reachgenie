@@ -5,13 +5,16 @@ from src.auth import get_current_user
 from src.database import (
     get_upload_task_file_url,
     get_companies_by_user_id,
-    get_upload_task_company_id
+    get_upload_task_company_id,
+    get_task_status
 )
 from src.config import get_settings
 from supabase import create_client, Client
 import os
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get(
     "/api/upload-tasks/{upload_task_id}/download",
@@ -22,26 +25,30 @@ async def download_upload_file(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Download the file associated with an upload task.
+    Download a file associated with an upload task.
     
     Args:
         upload_task_id: UUID of the upload task
         current_user: Current authenticated user
         
     Returns:
-        StreamingResponse: The file as a streaming download
+        StreamingResponse with the file content
     """
-    # Get the company_id for the upload task
+    # Get upload task details
+    task = await get_task_status(upload_task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Upload task not found")
+        
+    # Validate company access
     company_id = await get_upload_task_company_id(upload_task_id)
     if not company_id:
         raise HTTPException(status_code=404, detail="Upload task not found")
-    
-    # Check if user has access to the company
+        
     companies = await get_companies_by_user_id(current_user["id"])
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=403, detail="Not authorized to access this upload task")
+        raise HTTPException(status_code=403, detail="You don't have access to this file")
     
-    # Get the file URL
+    # Get file path
     file_path = await get_upload_task_file_url(upload_task_id)
     if not file_path:
         raise HTTPException(status_code=404, detail="File not found")
@@ -54,15 +61,18 @@ async def download_upload_file(
             settings.SUPABASE_SERVICE_KEY
         )
         
+        # Determine storage bucket based on task type
+        storage_bucket = "leads-uploads" if task["type"] == "leads" else "do-not-email-uploads"
+        
         # Download file from Supabase storage
-        storage = supabase.storage.from_("leads-uploads")
+        storage = supabase.storage.from_(storage_bucket)
         file_data = storage.download(file_path)
         
         if not file_data:
             raise HTTPException(status_code=404, detail="File not found in storage")
         
-        # Get original filename from path
-        filename = os.path.basename(file_path)
+        # Get original filename from task
+        filename = task.get("file_name", os.path.basename(file_path))
         
         # Create streaming response
         return StreamingResponse(
@@ -74,4 +84,5 @@ async def download_upload_file(
         )
             
     except Exception as e:
+        logger.error(f"Error downloading file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}") 
