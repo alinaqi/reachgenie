@@ -1171,7 +1171,6 @@ class UploadTaskResponse(BaseModel):
     id: UUID
     company_id: UUID
     user_id: UUID
-    file_url: str
     file_name: str
     status: str
     result: Union[Dict[str, Any], str]
