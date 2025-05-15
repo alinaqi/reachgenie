@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from uuid import UUID
-import httpx
 from src.auth import get_current_user
 from src.database import (
     get_upload_task_file_url,
     get_companies_by_user_id,
     get_upload_task_company_id
 )
+from src.config import get_settings
+from supabase import create_client, Client
 import os
-from urllib.parse import urlparse
 
 router = APIRouter()
 
@@ -42,30 +42,36 @@ async def download_upload_file(
         raise HTTPException(status_code=403, detail="Not authorized to access this upload task")
     
     # Get the file URL
-    file_url = await get_upload_task_file_url(upload_task_id)
-    if not file_url:
+    file_path = await get_upload_task_file_url(upload_task_id)
+    if not file_path:
         raise HTTPException(status_code=404, detail="File not found")
     
     try:
-        # Create async HTTP client
-        async with httpx.AsyncClient() as client:
-            # Get the file from Supabase storage
-            response = await client.get(file_url)
-            response.raise_for_status()
+        # Initialize Supabase client with service role for storage access
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Download file from Supabase storage
+        storage = supabase.storage.from_("leads-uploads")
+        file_data = storage.download(file_path)
+        
+        if not file_data:
+            raise HTTPException(status_code=404, detail="File not found in storage")
+        
+        # Get original filename from path
+        filename = os.path.basename(file_path)
+        
+        # Create streaming response
+        return StreamingResponse(
+            content=iter([file_data]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
             
-            # Get original filename from URL
-            filename = os.path.basename(urlparse(file_url).path)
-            
-            # Create streaming response
-            return StreamingResponse(
-                content=response.iter_bytes(),
-                media_type="application/octet-stream",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"'
-                }
-            )
-            
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}") 
