@@ -1046,7 +1046,8 @@ async def upload_leads(
             company_id=company_id,
             user_id=current_user["id"],
             file_url=file_name,
-            file_name=file.filename
+            file_name=file.filename,
+            type='leads'
         )
         
         # Add background task
