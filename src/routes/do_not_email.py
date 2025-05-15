@@ -183,7 +183,8 @@ async def upload_do_not_email_list(
             company_id=company_id,
             user_id=current_user["id"],
             file_url=file_name,
-            file_name=file.filename
+            file_name=file.filename,
+            type='do_not_email'
         )
         
         # Add background task
