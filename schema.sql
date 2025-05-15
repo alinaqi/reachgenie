@@ -387,6 +387,7 @@ CREATE TABLE IF NOT EXISTS upload_tasks (
     user_id UUID REFERENCES users(id) NOT NULL,
     file_url TEXT NOT NULL,
     file_name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'leads' CHECK (type IN ('leads', 'do_not_email')),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     result TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -397,11 +398,13 @@ CREATE TABLE IF NOT EXISTS upload_tasks (
 CREATE INDEX IF NOT EXISTS upload_tasks_company_id_idx ON upload_tasks(company_id);
 CREATE INDEX IF NOT EXISTS upload_tasks_user_id_idx ON upload_tasks(user_id);
 CREATE INDEX IF NOT EXISTS upload_tasks_status_idx ON upload_tasks(status);
+CREATE INDEX IF NOT EXISTS upload_tasks_type_idx ON upload_tasks(type);
 
 -- Add comments to explain the columns
 COMMENT ON TABLE upload_tasks IS 'Tracks lead upload tasks and their progress';
 COMMENT ON COLUMN upload_tasks.file_url IS 'Storage URL where the uploaded file is stored';
 COMMENT ON COLUMN upload_tasks.file_name IS 'Original name of the uploaded file';
+COMMENT ON COLUMN upload_tasks.type IS 'Type of upload task: leads (for lead CSV uploads) or do_not_email (for do not contact list uploads)';
 
 -- Skipped Leads table
 CREATE TABLE IF NOT EXISTS skipped_leads (
