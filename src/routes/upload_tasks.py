@@ -10,7 +10,7 @@ from src.models import PaginatedUploadTaskResponse
 router = APIRouter()
 
 @router.get(
-    "/companies/{company_id}/upload-tasks",
+    "/api/companies/{company_id}/upload-tasks",
     response_model=PaginatedUploadTaskResponse,
     tags=["Upload Tasks"]
 )

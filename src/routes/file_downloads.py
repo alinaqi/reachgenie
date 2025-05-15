@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 router = APIRouter()
 
 @router.get(
-    "/upload-tasks/{upload_task_id}/download",
+    "/api/upload-tasks/{upload_task_id}/download",
     tags=["Upload Tasks"]
 )
 async def download_upload_file(

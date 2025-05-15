@@ -9,7 +9,7 @@ from src.models import PaginatedSkippedLeadResponse
 router = APIRouter()
 
 @router.get(
-    "/upload-tasks/{upload_task_id}/skipped-leads",
+    "/api/upload-tasks/{upload_task_id}/skipped-leads",
     response_model=PaginatedSkippedLeadResponse,
     tags=["Upload Tasks"]
 )
