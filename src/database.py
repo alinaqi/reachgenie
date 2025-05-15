@@ -4633,3 +4633,27 @@ async def get_upload_task_file_url(upload_task_id: UUID) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error in get_upload_task_file_url: {str(e)}")
         raise e
+
+async def get_upload_task_company_id(upload_task_id: UUID) -> Optional[UUID]:
+    """
+    Get the company_id for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID
+        
+    Returns:
+        Optional[UUID]: The company ID if found, None otherwise
+    """
+    try:
+        response = supabase.table('upload_tasks')\
+            .select('company_id')\
+            .eq('id', str(upload_task_id))\
+            .single()\
+            .execute()
+        
+        if response.data and 'company_id' in response.data:
+            return UUID(response.data['company_id'])
+        return None
+    except Exception as e:
+        logger.error(f"Error in get_upload_task_company_id: {str(e)}")
+        raise e

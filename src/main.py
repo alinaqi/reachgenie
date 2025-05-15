@@ -150,6 +150,7 @@ from email_validator import validate_email, EmailNotValidError
 from src.utils.string_utils import validate_phone_number
 from src.routes.upload_tasks import router as upload_tasks_router
 from src.routes.skipped_leads import router as skipped_leads_router
+from src.routes.file_downloads import router as file_downloads_router
 
 # Configure logger
 logging.basicConfig(
@@ -4048,6 +4049,7 @@ app.include_router(checkout_sessions_router)
 app.include_router(stripe_webhooks_router)  # Add the new stripe webhooks router
 app.include_router(upload_tasks_router)
 app.include_router(skipped_leads_router)  # Add this line
+app.include_router(file_downloads_router)  # Add this line
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
