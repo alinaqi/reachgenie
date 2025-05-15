@@ -4480,3 +4480,34 @@ async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[
     except Exception as e:
         logger.error(f"Error finding existing leads: {str(e)}")
         return []
+
+async def create_skipped_lead_record(
+    upload_task_id: UUID,
+    category: str,
+    row_data: dict
+) -> dict:
+    """
+    Create a record in the skipped_leads table for a lead that was skipped during upload.
+    
+    Args:
+        upload_task_id (UUID): ID of the upload task
+        category (str): Category/reason for skipping the lead
+        row_data (dict): Original row data that was skipped
+        
+    Returns:
+        dict: Created skipped lead record
+    """
+    try:
+        result = await supabase.table('skipped_leads').insert({
+            'upload_task_id': str(upload_task_id),
+            'category': category,
+            'row_data': json.dumps(row_data)  # Convert dict to JSON string
+        }).execute()
+
+        if len(result.data) > 0:
+            return {"success": True, "data": result.data[0]}
+        else:
+            return {"success": False, "error": "No data returned from insert"}
+    except Exception as e:
+        logger.error(f"Error creating skipped lead record: {str(e)}")
+        return {"success": False, "error": str(e)}
