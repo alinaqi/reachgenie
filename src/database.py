@@ -951,13 +951,22 @@ async def get_product_icps(product_id: UUID) -> List[Dict[str, Any]]:
     return response.data[0].get('ideal_icps') or []
 
 # Task management functions
-async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str):
-    """Create a new upload task record"""
+async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str, file_name: str):
+    """Create a new upload task record
+    
+    Args:
+        task_id: UUID of the task
+        company_id: UUID of the company
+        user_id: UUID of the user
+        file_url: Storage URL where the file is stored
+        file_name: Original name of the uploaded file
+    """
     data = {
         'id': str(task_id),
         'company_id': str(company_id),
         'user_id': str(user_id),
         'file_url': file_url,
+        'file_name': file_name,
         'status': 'pending',
         'created_at': datetime.now().isoformat()
     }
