@@ -1172,8 +1172,18 @@ class UploadTaskResponse(BaseModel):
     company_id: UUID
     user_id: UUID
     status: str
-    result: str
+    result: Union[Dict[str, Any], str]
     created_at: datetime
+
+    @field_validator('result', mode='before')
+    @classmethod
+    def validate_result(cls, v: str) -> Union[Dict[str, Any], str]:
+        if not v:
+            return v
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return v
 
 class PaginatedUploadTaskResponse(BaseModel):
     items: List[UploadTaskResponse]
@@ -1191,9 +1201,20 @@ class PaginatedUploadTaskResponse(BaseModel):
                         "company_id": "123e4567-e89b-12d3-a456-426614174001",
                         "user_id": "123e4567-e89b-12d3-a456-426614174002",
                         "status": "completed",
-                        "result": "{\"leads_saved\": 2, \"leads_skipped\": 5, \"unmapped_headers\": [   ]}",
-                        "created_at": "2024-01-01T12:00:00Z",
-                       
+                        "result": {
+                            "leads_saved": 2,
+                            "leads_skipped": 5,
+                            "unmapped_headers": []
+                        },
+                        "created_at": "2024-01-01T12:00:00Z"
+                    },
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174003",
+                        "company_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "status": "failed",
+                        "result": "Invalid file format",
+                        "created_at": "2024-01-01T12:00:00Z"
                     }
                 ],
                 "total": 50,
