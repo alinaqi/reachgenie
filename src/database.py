@@ -4561,3 +4561,53 @@ async def get_upload_tasks_by_company(
     except Exception as e:
         logger.error(f"Error in get_upload_tasks_by_company: {str(e)}")
         raise e
+
+async def get_skipped_leads_by_task(
+    upload_task_id: UUID,
+    page_number: int = 1,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """
+    Get paginated skipped leads for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID to filter skipped leads
+        page_number (int): Page number for pagination (default: 1)
+        limit (int): Number of items per page (default: 20)
+        
+    Returns:
+        Dict containing:
+            - items: List of skipped leads
+            - total: Total number of skipped leads
+            - page: Current page number
+            - page_size: Number of items per page
+            - total_pages: Total number of pages
+    """
+    try:
+        # Build base query
+        base_query = supabase.table('skipped_leads').select('*', count='exact')\
+            .eq('upload_task_id', str(upload_task_id))
+        
+        # Get total count
+        count_response = base_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset and total pages
+        offset = (page_number - 1) * limit
+        total_pages = ceil(total / limit) if total > 0 else 0
+        
+        # Get paginated results
+        response = base_query.range(offset, offset + limit - 1)\
+            .order('created_at', desc=True)\
+            .execute()
+
+        return {
+            "items": response.data,
+            "total": total,
+            "page": page_number,
+            "page_size": limit,
+            "total_pages": total_pages
+        }
+    except Exception as e:
+        logger.error(f"Error in get_skipped_leads_by_task: {str(e)}")
+        raise e
