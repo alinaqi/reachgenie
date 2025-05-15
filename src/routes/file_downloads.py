@@ -55,7 +55,13 @@ async def download_upload_file(
         )
         
         # Determine storage bucket based on task type
-        storage_bucket = "leads-uploads" if task["type"] == "leads" else "do-not-email-uploads"
+        if task["type"] == "leads":
+            storage_bucket = "leads-uploads"
+        elif task["type"] == "do_not_email":
+            storage_bucket = "do-not-email-uploads"
+        else:
+            logger.error(f"Invalid upload task type: {task['type']}")
+            raise HTTPException(status_code=400, detail=f"Invalid upload task type: {task['type']}")
         
         # Download file from Supabase storage
         storage = supabase.storage.from_(storage_bucket)
