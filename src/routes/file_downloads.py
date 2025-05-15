@@ -39,19 +39,12 @@ async def download_upload_file(
     if not task:
         raise HTTPException(status_code=404, detail="Upload task not found")
         
-    # Validate company access
-    company_id = await get_upload_task_company_id(upload_task_id)
-    if not company_id:
-        raise HTTPException(status_code=404, detail="Upload task not found")
-        
     companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+    if not companies or not any(str(company["id"]) == str(task['company_id']) for company in companies):
         raise HTTPException(status_code=403, detail="You don't have access to this file")
     
     # Get file path
-    file_path = await get_upload_task_file_url(upload_task_id)
-    if not file_path:
-        raise HTTPException(status_code=404, detail="File not found")
+    file_path = task['file_url']
     
     try:
         # Initialize Supabase client with service role for storage access
