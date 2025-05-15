@@ -4485,7 +4485,7 @@ async def create_skipped_lead_record(
     upload_task_id: UUID,
     category: str,
     row_data: dict
-) -> dict:
+):
     """
     Create a record in the skipped_leads table for a lead that was skipped during upload.
     
@@ -4505,9 +4505,9 @@ async def create_skipped_lead_record(
         }).execute()
 
         if len(result.data) > 0:
-            return {"success": True, "data": result.data[0]}
+            return result.data[0]
         else:
-            return {"success": False, "error": "No data returned from insert"}
+            return None
     except Exception as e:
         logger.error(f"Error creating skipped lead record: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return None
