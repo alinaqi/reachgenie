@@ -6,6 +6,7 @@ import logging
 import math
 import csv
 import io
+from math import ceil
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -4533,37 +4534,30 @@ async def get_upload_tasks_by_company(
             - total_pages: Total number of pages
     """
     try:
-        # Calculate offset
-        offset = (page_number - 1) * limit
+        # Build base query
+        base_query = supabase.table('upload_tasks').select('*', count='exact')\
+            .eq('company_id', str(company_id))
         
         # Get total count
-        count_result = await supabase.table('upload_tasks')\
-            .select('count', count='exact')\
-            .eq('company_id', str(company_id))\
-            .execute()
+        count_response = base_query.execute()
+        total = count_response.count if count_response.count is not None else 0
         
-        total = count_result.count if count_result.count is not None else 0
+        # Calculate offset and total pages
+        offset = (page_number - 1) * limit
+        total_pages = ceil(total / limit) if total > 0 else 0
         
-        # Get paginated data
-        result = await supabase.table('upload_tasks')\
-            .select('*')\
-            .eq('company_id', str(company_id))\
+        # Get paginated results
+        response = base_query.range(offset, offset + limit - 1)\
             .order('created_at', desc=True)\
-            .range(offset, offset + limit - 1)\
             .execute()
-            
+
         return {
-            "data": result.data,
+            "items": response.data,
             "total": total,
             "page": page_number,
-            "total_pages": math.ceil(total / limit)
+            "page_size": limit,
+            "total_pages": total_pages
         }
-        
     except Exception as e:
-        logger.error(f"Error getting upload tasks: {str(e)}")
-        return {
-            "data": [],
-            "total": 0,
-            "page": page_number,
-            "total_pages": 0
-        }
+        logger.error(f"Error in get_upload_tasks_by_company: {str(e)}")
+        raise e
