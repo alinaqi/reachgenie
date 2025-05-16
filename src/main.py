@@ -2402,7 +2402,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             try:
                 print("\nFinal lead_data before database insert:")
                 print(lead_data)
-                created_lead = await create_lead(company_id, lead_data)
+                created_lead = await create_lead(company_id, lead_data, task_id)
                 print("\nCreated lead response:")
                 print(created_lead)
                 lead_count += 1
