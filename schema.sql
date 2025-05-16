@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES companies(id),
+    upload_task_id UUID REFERENCES upload_tasks(id),
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     company TEXT,
