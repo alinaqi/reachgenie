@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import secrets
 import json
+from email_validator import validate_email, EmailNotValidError
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -3155,6 +3156,27 @@ async def process_do_not_email_csv_upload(
                 
                 if not email:
                     logger.info(f"Skipping row - no email address provided: {row}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="missing_email",
+                        row_data=row
+                    )
+                    skipped_count += 1
+                    continue
+
+                # Validate email format
+                try:
+                    # Validate and normalize the email
+                    email_info = validate_email(email, check_deliverability=False)
+                    email = email_info.normalized
+                except EmailNotValidError as e:
+                    logger.info(f"Skipping record - invalid email format: {email}")
+                    logger.info(f"Email validation error: {str(e)}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="invalid_email",
+                        row_data=row
+                    )
                     skipped_count += 1
                     continue
                 
@@ -3171,11 +3193,21 @@ async def process_do_not_email_csv_upload(
                     await update_lead_do_not_contact_by_email(email, company_id)
                 else:
                     logger.error(f"Failed to add {email} to do_not_email list: {result.get('error')}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="do_not_email_creation_error",
+                        row_data=row
+                    )
                     skipped_count += 1
                     
             except Exception as e:
                 logger.error(f"Error processing row: {str(e)}")
                 logger.error(f"Row data that failed: {row}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="processing_error",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
         
