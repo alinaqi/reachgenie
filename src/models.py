@@ -1166,4 +1166,113 @@ class AccountEmailCheckResponse(BaseModel):
                 "message": "Account email already exists in another company"
             }
         }
+
+class UploadTaskResponse(BaseModel):
+    id: UUID
+    company_id: UUID
+    user_id: UUID
+    file_name: str
+    type: str
+    status: str
+    result: Optional[Union[Dict[str, Any], str]] = None
+    created_at: datetime
+
+    @field_validator('result', mode='before')
+    @classmethod
+    def validate_result(cls, v: str) -> Optional[Union[Dict[str, Any], str]]:
+        if not v:
+            return v
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return v
+
+class PaginatedUploadTaskResponse(BaseModel):
+    items: List[UploadTaskResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "company_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "file_name": "leads_march_2024.csv",
+                        "type": "leads",
+                        "status": "completed",
+                        "result": {
+                            "leads_saved": 2,
+                            "leads_skipped": 5,
+                            "unmapped_headers": []
+                        },
+                        "created_at": "2024-01-01T12:00:00Z"
+                    },
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174003",
+                        "company_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "user_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "file_name": "do_not_email_list.csv",
+                        "type": "do_not_email",
+                        "status": "failed",
+                        "result": "Invalid file format",
+                        "created_at": "2024-01-01T12:00:00Z"
+                    }
+                ],
+                "total": 50,
+                "page": 1,
+                "page_size": 20,
+                "total_pages": 3
+            }
+        }
+
+class SkippedRowResponse(BaseModel):
+    id: UUID
+    upload_task_id: UUID
+    category: str
+    row_data: Union[Dict[str, Any], str]
+    created_at: datetime
+
+    @field_validator('row_data', mode='before')
+    @classmethod
+    def validate_row_data(cls, v: str) -> Union[Dict[str, Any], str]:
+        if not v:
+            return v
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return v
+
+class PaginatedSkippedRowResponse(BaseModel):
+    items: List[SkippedRowResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "upload_task_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "category": "missing_name",
+                        "row_data": {
+                            "email": "test@example.com",
+                            "company": "Test Corp"
+                        },
+                        "created_at": "2024-01-01T12:00:00Z"
+                    }
+                ],
+                "total": 50,
+                "page": 1,
+                "page_size": 20,
+                "total_pages": 3
+            }
+        }
  

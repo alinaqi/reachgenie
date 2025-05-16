@@ -6,6 +6,7 @@ import logging
 import math
 import csv
 import io
+from math import ceil
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ from fastapi import HTTPException
 from src.utils.encryption import encrypt_password
 import secrets
 import json
+from email_validator import validate_email, EmailNotValidError
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -179,7 +181,7 @@ async def get_products_by_company(company_id: UUID):
     response = supabase.table('products').select('*').eq('company_id', str(company_id)).eq('deleted', False).execute()
     return response.data
 
-async def create_lead(company_id: UUID, lead_data: dict):
+async def create_lead(company_id: UUID, lead_data: dict, upload_task_id: Optional[UUID] = None):
     try:
         # First check trial user limit
         can_add_lead, error_message = await check_user_lead_limit(company_id)
@@ -190,6 +192,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
         if len(matches) == 0:
             # Insert new lead
             lead_data['company_id'] = str(company_id)
+            if upload_task_id:
+                lead_data['upload_task_id'] = str(upload_task_id)
             logger.info(f"\nAttempting to insert lead with data: {lead_data}")
             response = supabase.table('leads').insert(lead_data).execute()
             return response.data[0]
@@ -198,6 +202,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
             lead_id = matches[0]['id']
 
             lead_data['company_id'] = str(company_id)
+            if upload_task_id:
+                lead_data['upload_task_id'] = str(upload_task_id)
             logger.info(f"\nAttempting to update lead with data: {lead_data}")
             response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
             return response.data[0]
@@ -210,6 +216,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
                 # Same lead, safe update
                 lead_id = email_match['id']
                 lead_data['company_id'] = str(company_id)
+                if upload_task_id:
+                    lead_data['upload_task_id'] = str(upload_task_id)
                 logger.info(f"\nAttempting to update lead with data, third case: {lead_data}")
                 response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
                 return response.data[0]
@@ -950,13 +958,24 @@ async def get_product_icps(product_id: UUID) -> List[Dict[str, Any]]:
     return response.data[0].get('ideal_icps') or []
 
 # Task management functions
-async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str):
-    """Create a new upload task record"""
+async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, file_url: str, file_name: str, type: str = 'leads'):
+    """Create a new upload task record
+    
+    Args:
+        task_id: UUID of the task
+        company_id: UUID of the company
+        user_id: UUID of the user
+        file_url: Storage URL where the file is stored
+        file_name: Original name of the uploaded file
+        type: Type of upload task ('leads' or 'do_not_email')
+    """
     data = {
         'id': str(task_id),
         'company_id': str(company_id),
         'user_id': str(user_id),
         'file_url': file_url,
+        'file_name': file_name,
+        'type': type,
         'status': 'pending',
         'created_at': datetime.now().isoformat()
     }
@@ -3143,6 +3162,27 @@ async def process_do_not_email_csv_upload(
                 
                 if not email:
                     logger.info(f"Skipping row - no email address provided: {row}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="missing_email",
+                        row_data=row
+                    )
+                    skipped_count += 1
+                    continue
+
+                # Validate email format
+                try:
+                    # Validate and normalize the email
+                    email_info = validate_email(email, check_deliverability=False)
+                    email = email_info.normalized
+                except EmailNotValidError as e:
+                    logger.info(f"Skipping record - invalid email format: {email}")
+                    logger.info(f"Email validation error: {str(e)}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="invalid_email",
+                        row_data=row
+                    )
                     skipped_count += 1
                     continue
                 
@@ -3159,11 +3199,21 @@ async def process_do_not_email_csv_upload(
                     await update_lead_do_not_contact_by_email(email, company_id)
                 else:
                     logger.error(f"Failed to add {email} to do_not_email list: {result.get('error')}")
+                    await create_skipped_row_record(
+                        upload_task_id=task_id,
+                        category="do_not_email_creation_error",
+                        row_data=row
+                    )
                     skipped_count += 1
                     
             except Exception as e:
                 logger.error(f"Error processing row: {str(e)}")
                 logger.error(f"Row data that failed: {row}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="processing_error",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
         
@@ -4480,3 +4530,178 @@ async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[
     except Exception as e:
         logger.error(f"Error finding existing leads: {str(e)}")
         return []
+
+async def create_skipped_row_record(
+    upload_task_id: UUID,
+    category: str,
+    row_data: dict
+):
+    """
+    Create a record in the skipped_rows table for a row that was skipped during upload.
+    
+    Args:
+        upload_task_id (UUID): ID of the upload task
+        category (str): Category/reason for skipping the row
+        row_data (dict): Original row data that was skipped
+        
+    Returns:
+        dict: Created skipped row record
+    """
+    try:
+        result = supabase.table('skipped_rows').insert({
+            'upload_task_id': str(upload_task_id),
+            'category': category,
+            'row_data': json.dumps(row_data)  # Convert dict to JSON string
+        }).execute()
+
+        if len(result.data) > 0:
+            return result.data[0]
+        else:
+            return None
+    except Exception as e:
+        logger.error(f"Error creating skipped row record: {str(e)}")
+        return None
+async def get_upload_tasks_by_company(
+    company_id: UUID,
+    page_number: int = 1,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """
+    Get paginated upload tasks for a specific company.
+    
+    Args:
+        company_id (UUID): Company ID to filter tasks
+        page_number (int): Page number for pagination (default: 1)
+        limit (int): Number of items per page (default: 20)
+        
+    Returns:
+        Dict containing:
+            - data: List of upload tasks
+            - total: Total number of tasks
+            - page: Current page number
+            - total_pages: Total number of pages
+    """
+    try:
+        # Build base query
+        base_query = supabase.table('upload_tasks').select('*', count='exact')\
+            .eq('company_id', str(company_id))
+        
+        # Get total count
+        count_response = base_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset and total pages
+        offset = (page_number - 1) * limit
+        total_pages = ceil(total / limit) if total > 0 else 0
+        
+        # Get paginated results
+        response = base_query.range(offset, offset + limit - 1)\
+            .order('created_at', desc=True)\
+            .execute()
+
+        return {
+            "items": response.data,
+            "total": total,
+            "page": page_number,
+            "page_size": limit,
+            "total_pages": total_pages
+        }
+    except Exception as e:
+        logger.error(f"Error in get_upload_tasks_by_company: {str(e)}")
+        raise e
+
+async def get_skipped_rows_by_task(
+    upload_task_id: UUID,
+    page_number: int = 1,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """
+    Get paginated skipped rows for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID to filter skipped rows
+        page_number (int): Page number for pagination (default: 1)
+        limit (int): Number of items per page (default: 20)
+        
+    Returns:
+        Dict containing:
+            - items: List of skipped rows
+            - total: Total number of skipped rows
+            - page: Current page number
+            - page_size: Number of items per page
+            - total_pages: Total number of pages
+    """
+    try:
+        # Build base query
+        base_query = supabase.table('skipped_rows').select('*', count='exact')\
+            .eq('upload_task_id', str(upload_task_id))
+        
+        # Get total count
+        count_response = base_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset and total pages
+        offset = (page_number - 1) * limit
+        total_pages = ceil(total / limit) if total > 0 else 0
+        
+        # Get paginated results
+        response = base_query.range(offset, offset + limit - 1)\
+            .order('created_at', desc=True)\
+            .execute()
+
+        return {
+            "items": response.data,
+            "total": total,
+            "page": page_number,
+            "page_size": limit,
+            "total_pages": total_pages
+        }
+    except Exception as e:
+        logger.error(f"Error in get_skipped_rows_by_task: {str(e)}")
+        raise e
+
+async def get_upload_task_file_url(upload_task_id: UUID) -> Optional[str]:
+    """
+    Get the file_url for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID
+        
+    Returns:
+        Optional[str]: The file URL if found, None otherwise
+    """
+    try:
+        response = supabase.table('upload_tasks')\
+            .select('file_url')\
+            .eq('id', str(upload_task_id))\
+            .single()\
+            .execute()
+        
+        return response.data.get('file_url') if response.data else None
+    except Exception as e:
+        logger.error(f"Error in get_upload_task_file_url: {str(e)}")
+        raise e
+
+async def get_upload_task_company_id(upload_task_id: UUID) -> Optional[UUID]:
+    """
+    Get the company_id for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): Upload task ID
+        
+    Returns:
+        Optional[UUID]: The company ID if found, None otherwise
+    """
+    try:
+        response = supabase.table('upload_tasks')\
+            .select('company_id')\
+            .eq('id', str(upload_task_id))\
+            .single()\
+            .execute()
+        
+        if response.data and 'company_id' in response.data:
+            return UUID(response.data['company_id'])
+        return None
+    except Exception as e:
+        logger.error(f"Error in get_upload_task_company_id: {str(e)}")
+        raise e

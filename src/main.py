@@ -106,7 +106,8 @@ from src.database import (
     get_campaign_lead_count,
     check_user_access_status,
     check_user_campaign_access,
-    has_pending_upload_tasks
+    has_pending_upload_tasks,
+    create_skipped_row_record
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -147,6 +148,9 @@ from src.services.stripe_service import StripeService
 import chardet
 from email_validator import validate_email, EmailNotValidError
 from src.utils.string_utils import validate_phone_number
+from src.routes.upload_tasks import router as upload_tasks_router
+from src.routes.skipped_rows import router as skipped_rows_router
+from src.routes.file_downloads import router as file_downloads_router
 
 # Configure logger
 logging.basicConfig(
@@ -1037,7 +1041,14 @@ async def upload_leads(
         
         # Create task record
         task_id = uuid.uuid4()
-        await create_upload_task(task_id, company_id, current_user["id"], file_name)
+        await create_upload_task(
+            task_id=task_id,
+            company_id=company_id,
+            user_id=current_user["id"],
+            file_url=file_name,
+            file_name=file.filename,
+            type='leads'
+        )
         
         # Add background task
         background_tasks.add_task(
@@ -2281,6 +2292,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('name'):
                 print("\nSkipping record - missing required field: name")
                 logger.info(f"Skipping record due to missing name: {row}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="missing_name",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
 
@@ -2293,6 +2309,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             except EmailNotValidError as e:
                 logger.info(f"Skipping record - invalid email format: {email}")
                 logger.info(f"Email validation error: {str(e)}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="invalid_email",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
 
@@ -2312,6 +2333,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not phone_number:
                 logger.info(f"Skipping record - no valid phone number found in any field")
                 logger.info(f"Invalid phone numbers in record: {row}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="invalid_phone",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
             
@@ -2322,6 +2348,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             if not lead_data.get('company') or not lead_data.get('website'):
                 logger.info(f"Skipping record - missing required field: company or website")
                 logger.info(f"Skipping record due to missing company or website: {row}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="missing_company_name_or_website",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
             
@@ -2371,7 +2402,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             try:
                 print("\nFinal lead_data before database insert:")
                 print(lead_data)
-                created_lead = await create_lead(company_id, lead_data)
+                created_lead = await create_lead(company_id, lead_data, task_id)
                 print("\nCreated lead response:")
                 print(created_lead)
                 lead_count += 1
@@ -2380,12 +2411,17 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 lead = await get_lead_by_id(created_lead['id'])
 
                 # Enrich the lead with company insights
-                await get_or_generate_insights_for_lead(lead)
+                await get_or_generate_insights_for_lead(lead, force_creation=True)
                 # Continue processing other leads even if enrichment fails
                     
             except Exception as e:
                 logger.error(f"Error creating lead: {str(e)}")
                 logger.error(f"Lead data that failed: {lead_data}")
+                await create_skipped_row_record(
+                    upload_task_id=task_id,
+                    category="lead_creation_error",
+                    row_data=row
+                )
                 skipped_count += 1
                 continue
         
@@ -4018,6 +4054,9 @@ app.include_router(accounts_router)
 app.include_router(subscriptions_router)  # Add the new subscriptions router
 app.include_router(checkout_sessions_router)
 app.include_router(stripe_webhooks_router)  # Add the new stripe webhooks router
+app.include_router(upload_tasks_router)
+app.include_router(skipped_rows_router)  # Add this line
+app.include_router(file_downloads_router)  # Add this line
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
