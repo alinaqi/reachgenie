@@ -181,7 +181,7 @@ async def get_products_by_company(company_id: UUID):
     response = supabase.table('products').select('*').eq('company_id', str(company_id)).eq('deleted', False).execute()
     return response.data
 
-async def create_lead(company_id: UUID, lead_data: dict):
+async def create_lead(company_id: UUID, lead_data: dict, upload_task_id: Optional[UUID] = None):
     try:
         # First check trial user limit
         can_add_lead, error_message = await check_user_lead_limit(company_id)
@@ -192,6 +192,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
         if len(matches) == 0:
             # Insert new lead
             lead_data['company_id'] = str(company_id)
+            if upload_task_id:
+                lead_data['upload_task_id'] = str(upload_task_id)
             logger.info(f"\nAttempting to insert lead with data: {lead_data}")
             response = supabase.table('leads').insert(lead_data).execute()
             return response.data[0]
@@ -200,6 +202,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
             lead_id = matches[0]['id']
 
             lead_data['company_id'] = str(company_id)
+            if upload_task_id:
+                lead_data['upload_task_id'] = str(upload_task_id)
             logger.info(f"\nAttempting to update lead with data: {lead_data}")
             response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
             return response.data[0]
@@ -212,6 +216,8 @@ async def create_lead(company_id: UUID, lead_data: dict):
                 # Same lead, safe update
                 lead_id = email_match['id']
                 lead_data['company_id'] = str(company_id)
+                if upload_task_id:
+                    lead_data['upload_task_id'] = str(upload_task_id)
                 logger.info(f"\nAttempting to update lead with data, third case: {lead_data}")
                 response = supabase.table('leads').update(lead_data).eq('id', lead_id).execute()
                 return response.data[0]
