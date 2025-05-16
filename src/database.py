@@ -7,6 +7,7 @@ import math
 import csv
 import io
 from math import ceil
+from dateutil import parser
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -4308,7 +4309,7 @@ async def check_user_access_status(user_id: UUID) -> tuple[bool, str]:
             return (False, "No active subscription or trial found")
             
         # Check if trial has expired (7 days from creation)
-        created_at = datetime.fromisoformat(user.data['created_at'].replace('Z', '+00:00'))
+        created_at = parser.parse(user.data['created_at'])
         trial_expiry = created_at + timedelta(days=7)
         
         if datetime.now(timezone.utc) > trial_expiry:
