@@ -2817,6 +2817,8 @@ async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends
     """Verify the Bland tool secret token"""
     
     token = credentials.credentials
+    logger.info(f"Received token: {token}")
+    logger.info(f"Expected token: {settings.bland_secret_key}")
     
     if token != settings.bland_secret_key:
         raise HTTPException(status_code=401, detail="Invalid secret token")
