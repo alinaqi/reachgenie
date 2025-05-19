@@ -92,7 +92,8 @@ async def main():
                 else:
                     logger.error(f"Failed to mark schedule {schedule['id']} as sent")
     except HTTPException as e:
-        raise e
+        logger.error(f"HTTPException in campaign stats email processing: {str(e.detail)}")
+        bugsnag.notify(e)
     except Exception as e:
         logger.error(f"Error in campaign stats email processing: {str(e)}")
         bugsnag.notify(e)
