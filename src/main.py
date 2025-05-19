@@ -1453,7 +1453,12 @@ async def start_call(
             bland_response = await bland_client.start_call(
                 phone_number=lead['phone_number'],
                 script=script,
-                request_data={"company_uuid": str(company_id), "call_log_id": str(call['id'])},
+                request_data={
+                    "company_uuid": str(company_id), 
+                    "call_log_id": str(call['id']),
+                    "email": lead['email'],
+                    "email_subject": f"'{product['product_name']}' Discovery Call!"
+                },
                 company=company
             )
             
@@ -2812,6 +2817,8 @@ async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends
     """Verify the Bland tool secret token"""
     
     token = credentials.credentials
+    logger.info(f"Received token: {token}")
+    logger.info(f"Expected token: {settings.bland_secret_key}")
     
     if token != settings.bland_secret_key:
         raise HTTPException(status_code=401, detail="Invalid secret token")

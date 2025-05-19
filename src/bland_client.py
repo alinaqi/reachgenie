@@ -76,7 +76,7 @@ class BlandClient:
         language = "en"
         background_track = "none"
         temperature = 0.7
-        final_script = f"Your name is Alex, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
+        final_script = f"Your name is Josh, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
         
         # Default values for new fields
         transfer_phone_number = None
@@ -217,7 +217,7 @@ class BlandClient:
             "url": f"{self.webhook_base_url}/api/calls/book-appointment",
             "method": "POST",
             "headers": {
-                "Authorization": "Bearer {{bland_secret_key}}",
+                "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             },
             "body": {
