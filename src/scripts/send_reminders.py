@@ -198,58 +198,69 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
 async def main():
     """Main function to process reminder emails for all companies"""
     try:
-        campaigns = await get_campaigns(campaign_types=["email", "email_and_call"])
-        logger.info(f"Found {len(campaigns)} campaigns \n")
-
-        for campaign in campaigns:
-            logger.info(f"Processing campaign '{campaign['name']}' ({campaign['id']})")
-            logger.info(f"Number of reminders: {campaign['number_of_reminders']}")
-            #logger.info(f"Days between reminders: {campaign['days_between_reminders']}")
-        
-            # Generate reminder types dynamically based on campaign's number_of_reminders
-            num_reminders = campaign.get('number_of_reminders')
+        page_number = 1
+        while True:
+            # Get campaigns with pagination
+            campaigns_response = await get_campaigns(campaign_types=["email", "email_and_call"], page_number=page_number, limit=20)
+            campaigns = campaigns_response['items']
             
-            reminder_types = []
-            if num_reminders > 0:
-                reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
-
-            logger.info(f"Reminder types: {reminder_types} \n")
-
-            # Create dynamic mapping for reminder type descriptions
-            reminder_descriptions = {None: 'first'}
-            for i in range(1, num_reminders):
-                if i == num_reminders - 1:  # Adjusted condition for last reminder
-                    reminder_descriptions[f'r{i}'] = f'{i+1}th and final'
-                else:
-                    reminder_descriptions[f'r{i}'] = f'{i+1}th'
-
-            # Process each reminder type
-            for reminder_type in reminder_types:
-                # Set the reminder type based on current type
-                next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
-
-                # Fetch all email logs of the campaign that need to send reminder
-                email_logs = await get_email_logs_reminder(campaign['id'], campaign['days_between_reminders'], reminder_type)
-                logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
-
-                # Group email logs by company for batch processing
-                company_logs = {}
-                for log in email_logs:
-                    company_id = str(log['company_id'])
-                    if company_id not in company_logs:
-                        company_logs[company_id] = {
-                            'id': company_id,
-                            'name': log['company_name'],
-                            'account_email': log['account_email'],
-                            'account_password': log['account_password'],
-                            'account_type': log['account_type'],
-                            'logs': []
-                        }
-                    company_logs[company_id]['logs'].append(log)
+            if not campaigns:
+                break
                 
-                # Process reminder for each company
-                for company_data in company_logs.values():
-                    await send_reminder_emails(company_data, reminder_type)
+            logger.info(f"Processing page {page_number} of campaigns")
+            logger.info(f"Found {len(campaigns)} campaigns on this page (Total: {campaigns_response['total']})")
+
+            for campaign in campaigns:
+                logger.info(f"Processing campaign '{campaign['name']}' ({campaign['id']})")
+                logger.info(f"Number of reminders: {campaign['number_of_reminders']}")
+                
+                # Generate reminder types dynamically based on campaign's number_of_reminders
+                num_reminders = campaign.get('number_of_reminders')
+                
+                reminder_types = []
+                if num_reminders > 0:
+                    reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
+
+                logger.info(f"Reminder types: {reminder_types} \n")
+
+                # Create dynamic mapping for reminder type descriptions
+                reminder_descriptions = {None: 'first'}
+                for i in range(1, num_reminders):
+                    if i == num_reminders - 1:  # Adjusted condition for last reminder
+                        reminder_descriptions[f'r{i}'] = f'{i+1}th and final'
+                    else:
+                        reminder_descriptions[f'r{i}'] = f'{i+1}th'
+
+                # Process each reminder type
+                for reminder_type in reminder_types:
+                    # Set the reminder type based on current type
+                    next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
+
+                    # Fetch all email logs of the campaign that need to send reminder
+                    email_logs = await get_email_logs_reminder(campaign['id'], campaign['days_between_reminders'], reminder_type)
+                    logger.info(f"Found {len(email_logs)} email logs for which the {next_reminder_type} reminder needs to be sent.")
+
+                    # Group email logs by company for batch processing
+                    company_logs = {}
+                    for log in email_logs:
+                        company_id = str(log['company_id'])
+                        if company_id not in company_logs:
+                            company_logs[company_id] = {
+                                'id': company_id,
+                                'name': log['company_name'],
+                                'account_email': log['account_email'],
+                                'account_password': log['account_password'],
+                                'account_type': log['account_type'],
+                                'logs': []
+                            }
+                        company_logs[company_id]['logs'].append(log)
+                    
+                    # Process reminder for each company
+                    for company_data in company_logs.values():
+                        await send_reminder_emails(company_data, reminder_type)
+            
+            # Move to next page
+            page_number += 1
             
     except Exception as e:
         logger.error(f"Error in main reminder process: {str(e)}")
