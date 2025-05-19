@@ -1513,6 +1513,10 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
         recording_url = payload.recording_url
         error_message = payload.error_message
         
+        # Log the incoming webhook data for debugging
+        logger.info(f"Processing webhook for call {bland_call_id}")
+        logger.debug(f"Webhook payload: {payload}")
+        
         # Update the call record in the database
         updated_call = await update_call_webhook_data(
             bland_call_id=bland_call_id,
@@ -1530,14 +1534,35 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
             await update_call_queue_on_error(bland_call_id=bland_call_id, error_message=error_message)
 
         if not updated_call:
+            logger.error(f"Call record not found for bland_call_id: {bland_call_id}")
             raise HTTPException(
                 status_code=404,
                 detail="Call record not found"
             )
 
         call_log = await get_call_log_by_bland_id(bland_call_id)
+        if not call_log:
+            logger.error(f"Call log not found for bland_call_id: {bland_call_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="Call log not found"
+            )
+
         campaign = await get_campaign_by_id(call_log['campaign_id'])
+        if not campaign:
+            logger.error(f"Campaign not found for campaign_id: {call_log['campaign_id']}")
+            raise HTTPException(
+                status_code=404,
+                detail="Campaign not found"
+            )
+
         lead = await get_lead_by_id(call_log['lead_id'])
+        if not lead:
+            logger.error(f"Lead not found for lead_id: {call_log['lead_id']}")
+            raise HTTPException(
+                status_code=404,
+                detail="Lead not found"
+            )
 
         # If the campaign is an "email_and_call" campaign, update the has_replied to True in the 'email_logs' table for that particular lead, so that the email reminder is not sent, 
         # since the person has already been contacted via call
@@ -1551,11 +1576,16 @@ async def handle_bland_webhook(payload: BlandWebhookPayload):
 
         return {"status": "success", "message": "Call details updated"}
         
+    except HTTPException as he:
+        # Re-raise HTTP exceptions as they already have proper error details
+        raise he
     except Exception as e:
+        # Log the full error details
+        logger.error(f"Failed to process webhook: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process webhook: {str(e)}"
-        ) 
+            detail=f"Failed to process webhook: {str(e)}. Please check server logs for more details."
+        )
 
 @app.get("/api/companies/{company_id}/calls", response_model=PaginatedCallResponse, tags=["Calls"])
 async def get_company_calls(
