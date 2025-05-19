@@ -20,7 +20,6 @@ from src.database import (
 from src.services.perplexity_service import perplexity_service
 from src.services.email_generation import generate_company_insights
 from src.services.call_generation import generate_call_script
-from src.services.bland_calls import initiate_call
 
 # Configure logging
 logging.basicConfig(
@@ -205,25 +204,49 @@ async def main():
                     # Set the reminder type based on current type
                     next_reminder_type = reminder_descriptions.get(reminder_type, 'first')
 
-                    # Fetch all call logs of the campaign that need to send reminder
-                    call_logs = await get_call_logs_reminder(campaign['id'], campaign['phone_days_between_reminders'], reminder_type)
-                    logger.info(f"Found {len(call_logs)} call logs for which the {next_reminder_type} reminder needs to be sent.")
-
-                    # Group call logs by company for batch processing
-                    company_logs = {}
-                    for log in call_logs:
-                        company_id = str(log['company_id'])
-                        if company_id not in company_logs:
-                            company_logs[company_id] = {
-                                'id': company_id,
-                                'name': log['company_name'],
-                                'logs': []
-                            }
-                        company_logs[company_id]['logs'].append(log)
+                    # Process call logs with keyset pagination
+                    last_id = None
+                    total_processed = 0
                     
-                    # Process reminder for each company
-                    for company_data in company_logs.values():
-                        await send_reminder_calls(company_data, reminder_type)
+                    while True:
+                        # Fetch call logs using keyset pagination
+                        call_logs_response = await get_call_logs_reminder(
+                            campaign['id'],
+                            campaign['phone_days_between_reminders'],
+                            reminder_type,
+                            last_id=last_id,
+                            limit=20
+                        )
+                        
+                        call_logs = call_logs_response['items']
+                        if not call_logs:
+                            break
+                            
+                        total_processed += len(call_logs)
+                        logger.info(f"Processing batch of {len(call_logs)} call logs for {next_reminder_type} reminder (Total processed: {total_processed})")
+
+                        # Group call logs by company for batch processing
+                        company_logs = {}
+                        for log in call_logs:
+                            company_id = str(log['company_id'])
+                            if company_id not in company_logs:
+                                company_logs[company_id] = {
+                                    'id': company_id,
+                                    'name': log['company_name'],
+                                    'logs': []
+                                }
+                            company_logs[company_id]['logs'].append(log)
+                        
+                        # Process reminder for each company
+                        for company_data in company_logs.values():
+                            await send_reminder_calls(company_data, reminder_type)
+                            
+                        # Break if no more records
+                        if not call_logs_response['has_more']:
+                            break
+                            
+                        # Update cursor for next page
+                        last_id = call_logs_response['last_id']
             
             # Move to next page of campaigns
             page_number += 1
