@@ -1453,7 +1453,12 @@ async def start_call(
             bland_response = await bland_client.start_call(
                 phone_number=lead['phone_number'],
                 script=script,
-                request_data={"company_uuid": str(company_id), "call_log_id": str(call['id'])},
+                request_data={
+                    "company_uuid": str(company_id), 
+                    "call_log_id": str(call['id']),
+                    "email": lead['email'],
+                    "email_subject": f"'{product['product_name']}' Discovery Call!"
+                },
                 company=company
             )
             
