@@ -1259,9 +1259,15 @@ async def update_company_voice_agent_settings(company_id: UUID, settings: dict) 
         logger.exception("Full exception details:")
         return None
 
-async def get_email_logs_reminder(campaign_id: UUID, days_between_reminders: int, reminder_type: Optional[str] = None):
+async def get_email_logs_reminder(
+    campaign_id: UUID, 
+    days_between_reminders: int, 
+    reminder_type: Optional[str] = None,
+    last_id: Optional[str] = None,
+    limit: int = 20
+) -> Dict[str, Any]:
     """
-    Fetch all email logs that need to be processed for reminders.
+    Fetch email logs that need to be processed for reminders using keyset pagination.
     Joins with campaigns and companies to ensure we only get active records.
     Excludes deleted companies.
     Only fetches records where:
@@ -1273,10 +1279,17 @@ async def get_email_logs_reminder(campaign_id: UUID, days_between_reminders: int
       - More than days_between_reminders days have passed since the last reminder was sent
     
     Args:
+        campaign_id: UUID of the campaign
+        days_between_reminders: Number of days to wait between reminders
         reminder_type: Optional type of reminder to filter by (e.g., 'r1' for first reminder)
+        last_id: Optional ID of the last record from previous page
+        limit: Number of items per page (default: 20)
     
     Returns:
-        List of dictionaries containing email log data with campaign and company information
+        Dictionary containing:
+        - items: List of email logs for the current page
+        - has_more: Boolean indicating if there are more records
+        - last_id: ID of the last record (for next page)
     """
     try:
         # Calculate the date threshold (days_between_reminders days ago from now)
@@ -1303,12 +1316,20 @@ async def get_email_logs_reminder(campaign_id: UUID, days_between_reminders: int
                 .eq('last_reminder_sent', reminder_type)\
                 .lt('last_reminder_sent_at', days_between_reminders_ago)  # Check last reminder timing
             
-        # Execute query with ordering
-        response = query.order('sent_at', desc=False).execute()
+        # Add keyset pagination condition if last_id is provided
+        if last_id:
+            query = query.gt('id', last_id)
+            
+        # Add ordering and limit
+        response = query.order('id', desc=False).limit(limit + 1).execute()
+        
+        # Get one extra record to determine if there are more pages
+        has_more = len(response.data) > limit
+        records = response.data[:limit]  # Remove the extra record from the results
         
         # Flatten the nested structure to match the expected format
         flattened_data = []
-        for record in response.data:
+        for record in records:
             campaign = record['campaigns']
             company = campaign['companies']
             lead = record['leads']
@@ -1331,10 +1352,21 @@ async def get_email_logs_reminder(campaign_id: UUID, days_between_reminders: int
             }
             flattened_data.append(flattened_record)
             
-        return flattened_data
+        # Get the last record's id if there are records
+        last_record_id = records[-1]['id'] if records else None
+            
+        return {
+            'items': flattened_data,
+            'has_more': has_more,
+            'last_id': last_record_id
+        }
     except Exception as e:
         logger.error(f"Error fetching email logs for reminder: {str(e)}")
-        return []
+        return {
+            'items': [],
+            'has_more': False,
+            'last_id': None
+        }
 
 async def get_first_email_detail(email_logs_id: UUID):
     """
