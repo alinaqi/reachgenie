@@ -68,7 +68,7 @@ async def fetch_emails(company: Dict):
     Args:
         company: Company data dictionary
     """
-    max_emails = 10 # Number of emails to fetch per run
+    max_emails = 50 # Number of emails to fetch per run
     company_id = UUID(company['id'])
 
     try:
