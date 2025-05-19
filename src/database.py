@@ -3308,23 +3308,64 @@ async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
         logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
         return None
 
-async def get_campaigns(campaign_types: Optional[List[str]] = None):
+async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number: int = 1, limit: int = 20) -> Dict[str, Any]:
     """
-    Get all campaigns, optionally filtered by multiple types
+    Get paginated campaigns, optionally filtered by multiple types
     
     Args:
         campaign_types: Optional list of types to filter (['email', 'call'], etc.)
+        page_number: Page number to fetch (default: 1)
+        limit: Number of items per page (default: 20)
         
     Returns:
-        List of campaigns
+        Dictionary containing:
+        - items: List of campaigns for the current page
+        - total: Total number of campaigns
+        - page: Current page number
+        - page_size: Number of items per page
+        - total_pages: Total number of pages
     """
-    query = supabase.table('campaigns').select('*')
-    
-    if campaign_types:
-        query = query.in_('type', campaign_types)    
-    
-    response = query.execute()
-    return response.data
+    try:
+        # Build base query for counting total records
+        count_query = supabase.table('campaigns').select('id', count='exact')
+        
+        # Add type filter to count query if provided
+        if campaign_types:
+            count_query = count_query.in_('type', campaign_types)
+            
+        # Get total count
+        count_response = count_query.execute()
+        total = count_response.count if count_response.count is not None else 0
+        
+        # Calculate offset from page_number
+        offset = (page_number - 1) * limit
+        
+        # Build query for fetching paginated data
+        query = supabase.table('campaigns').select('*')
+        
+        # Add type filter if provided
+        if campaign_types:
+            query = query.in_('type', campaign_types)
+            
+        # Add pagination
+        response = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        return {
+            'items': response.data,
+            'total': total,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': (total + limit - 1) // limit if total > 0 else 1
+        }
+    except Exception as e:
+        logger.error(f"Error fetching campaigns: {str(e)}")
+        return {
+            'items': [],
+            'total': 0,
+            'page': page_number,
+            'page_size': limit,
+            'total_pages': 0
+        }
 
 async def get_call_logs_reminder(campaign_id: UUID, days_between_reminders: int, reminder_type: Optional[str] = None):
     """
