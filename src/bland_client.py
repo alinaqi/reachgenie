@@ -217,7 +217,7 @@ class BlandClient:
             "url": f"{self.webhook_base_url}/api/calls/book-appointment",
             "method": "POST",
             "headers": {
-                "Authorization": "Bearer {{bland_secret_key}}",
+                "Authorization": f"Bearer {self.bland_secret_key}",
                 "Content-Type": "application/json"
             },
             "body": {
