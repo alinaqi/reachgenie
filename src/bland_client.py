@@ -76,7 +76,7 @@ class BlandClient:
         language = "en"
         background_track = "none"
         temperature = 0.7
-        final_script = f"Your name is Alex, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
+        final_script = f"Your name is Josh, and you're a sales agent. You are making an outbound call to a prospect/lead.\n\n{script}"
         
         # Default values for new fields
         transfer_phone_number = None
