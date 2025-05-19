@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from src.services.campaign_stats_emailer import get_pending_campaign_schedules
-from src.database import get_lead_details_for_email_interactions, get_campaign_run, get_campaign_by_id, get_email_sent_count, get_call_sent_count, get_company_by_id, update_campaign_schedule_status
+from src.database import get_lead_details_for_email_interactions, get_campaign_run, get_campaign_by_id, get_email_sent_count, get_call_sent_count, get_company_by_id, update_campaign_schedule_status, get_user_by_id
 from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
@@ -41,6 +41,7 @@ async def main():
             campaign_run = await get_campaign_run(schedule['campaign_run_id'])
             campaign = await get_campaign_by_id(campaign_run['campaign_id'])
             company = await get_company_by_id(campaign['company_id'])
+            user = await get_user_by_id(company['user_id'])
 
             if campaign['type'] == 'email' or campaign['type'] == 'email_and_call':
                 email_sent_count = await get_email_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'])
@@ -53,7 +54,7 @@ async def main():
                     leads = await get_lead_details_for_email_interactions(schedule['campaign_run_id'], schedule['data_fetch_date'])
 
                     await email_service.send_campaign_stats_email(
-                        to_email=company['account_email'],
+                        to_email=user['email'],
                         campaign_name=campaign['name'],
                         company_name=company['name'],
                         date=schedule['data_fetch_date'],
@@ -78,7 +79,7 @@ async def main():
                     call_meeting_booked_count = await get_call_sent_count(campaign_run_id=schedule['campaign_run_id'], date=schedule['data_fetch_date'], has_meeting_booked=True)
 
                     await email_service.send_campaign_stats_call(
-                        to_email=company['account_email'],
+                        to_email=user['email'],
                         campaign_name=campaign['name'],
                         company_name=company['name'],
                         date=schedule['data_fetch_date'],
