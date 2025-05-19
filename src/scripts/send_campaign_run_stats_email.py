@@ -10,6 +10,8 @@ from src.config import get_settings
 import bugsnag
 from bugsnag.handlers import BugsnagHandler
 from src.services.email_service import email_service
+from fastapi import HTTPException
+
 # Configure logger
 logging.basicConfig(
     level=logging.INFO,
@@ -89,7 +91,8 @@ async def main():
                     logger.info(f"Marked schedule {schedule['id']} as sent")
                 else:
                     logger.error(f"Failed to mark schedule {schedule['id']} as sent")
-
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Error in campaign stats email processing: {str(e)}")
         bugsnag.notify(e)
