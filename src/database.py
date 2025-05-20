@@ -3340,6 +3340,27 @@ async def get_campaign_run(campaign_run_id: UUID) -> Optional[Dict]:
         logger.error(f"Error fetching campaign run {campaign_run_id}: {str(e)}")
         return None
 
+async def get_active_campaign_runs_count(campaign_id: UUID) -> int:
+    """
+    Get count of campaign runs with status 'running' or 'idle' for a specific campaign
+    
+    Args:
+        campaign_id: UUID of the campaign
+    Returns:
+        Count of active campaign runs
+    """
+    try:
+        response = supabase.table('campaign_runs')\
+            .select('id', count='exact')\
+            .eq('campaign_id', str(campaign_id))\
+            .in_('status', ['running', 'idle'])\
+            .execute()
+            
+        return response.count or 0
+    except Exception as e:
+        logger.error(f"Error getting active campaign runs count: {str(e)}")
+        return 0
+
 async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number: int = 1, limit: int = 20) -> Dict[str, Any]:
     """
     Get paginated campaigns, optionally filtered by multiple types
