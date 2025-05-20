@@ -2738,7 +2738,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     """Handle call campaign processing"""
     
     # Get total count of leads with phone numbers
-    total_leads = await get_leads_with_phone(company['id'], count=True)
+    total_leads = await get_leads_with_phone(campaign['id'], count=True)
     logger.info(f"Found {total_leads} total leads with phone number")
 
     # Update campaign run with status running and total leads
@@ -2759,7 +2759,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     
     while True:
         # Get leads for current page
-        leads_response = await get_leads_with_phone(company['id'], count=False, page=page, limit=page_size)
+        leads_response = await get_leads_with_phone(campaign['id'], count=False, page=page, limit=page_size)
         leads = leads_response['items']
         
         if not leads:
