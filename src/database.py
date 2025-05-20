@@ -765,46 +765,87 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
         logger.error(f"Error getting leads with email for campaign {campaign_id}: {str(e)}")
         raise
 
-async def get_leads_with_phone(company_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
     """
-    Get leads with phone numbers for a company with pagination support
+    Get leads with phone numbers for a campaign with pagination support.
+    Only returns leads that don't have any record in the call_queue table for this campaign.
+    Uses native PostgreSQL query for better performance.
     """
-    def apply_filters(query):
-        return query\
-            .eq('company_id', str(company_id))\
-            .neq('phone_number', None)\
-            .neq('phone_number', '')\
-            .eq('do_not_contact', False)\
-            .is_('deleted_at', None)  # Exclude soft-deleted leads
-    
-    if count:
-        # Get count using the filter chain
-        response = apply_filters(
-            supabase.from_('leads').select('*', count='exact')
-        ).execute()
-        return response.count
-    else:
-        # Calculate offset for pagination
-        offset = (page - 1) * limit
+    try:
+        # First get the campaign to get company_id
+        campaign = await get_campaign_by_id(campaign_id)
+        if not campaign:
+            return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
+
+        pool = await get_pg_pool()
         
-        # Get total count for pagination metadata
-        count_response = apply_filters(
-            supabase.from_('leads').select('*', count='exact')
-        ).execute()
-        total = count_response.count if count_response.count is not None else 0
+        if count:
+            # Count query
+            count_sql = """
+                SELECT COUNT(*) 
+                FROM leads l
+                WHERE l.company_id = $1
+                AND l.phone_number IS NOT NULL
+                AND l.phone_number != ''
+                AND l.do_not_contact = false
+                AND l.deleted_at IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 
+                    FROM call_queue cq
+                    WHERE cq.lead_id::uuid = l.id
+                    AND cq.campaign_id = $2
+                )
+            """
+            async with pool.acquire() as conn:
+                total = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+                return total
         
-        # Get paginated data
-        response = apply_filters(
-            supabase.from_('leads').select('*')
-        ).range(offset, offset + limit - 1).execute()
+        # Full query with pagination
+        leads_sql = """
+            SELECT l.*
+            FROM leads l
+            WHERE l.company_id = $1
+            AND l.phone_number IS NOT NULL
+            AND l.phone_number != ''
+            AND l.do_not_contact = false
+            AND l.deleted_at IS NULL
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM call_queue cq
+                WHERE cq.lead_id::uuid = l.id
+                AND cq.campaign_id = $2
+            )
+            ORDER BY l.created_at DESC
+            LIMIT $3 OFFSET $4
+        """
         
-        return {
-            'items': response.data,
-            'total': total,
-            'page': page,
-            'page_size': limit,
-            'total_pages': math.ceil(total / limit) if total > 0 else 1
-        }
+        async with pool.acquire() as conn:
+            # Get paginated results
+            leads = await conn.fetch(
+                leads_sql,
+                str(campaign['company_id']),
+                str(campaign_id),
+                limit,
+                (page - 1) * limit
+            )
+            
+            # Get total count for pagination
+            total_count = await get_leads_with_phone(campaign_id, count=True)
+            
+            # Convert asyncpg.Record objects to dicts
+            leads_data = [dict(lead) for lead in leads]
+            
+            return {
+                'items': leads_data,
+                'total': total_count,
+                'page': page,
+                'page_size': limit,
+                'total_pages': math.ceil(total_count / limit) if total_count > 0 else 1
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting leads with phone for campaign {campaign_id}: {str(e)}")
+        raise
 
 async def update_email_log_sentiment(email_log_id: UUID, reply_sentiment: str) -> Dict:
     """
