@@ -4465,7 +4465,7 @@ async def get_campaign_lead_count(campaign: dict) -> int:
         if campaign['type'] in ['email', 'email_and_call']:
             return await get_leads_with_email(campaign['id'], count=True)
         elif campaign['type'] == 'call':
-            return await get_leads_with_phone(campaign['company_id'], count=True)
+            return await get_leads_with_phone(campaign['id'], count=True)
         return 0
     except Exception as e:
         logger.error(f"Error getting lead count for campaign {campaign['id']}: {str(e)}")
