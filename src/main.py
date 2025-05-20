@@ -51,6 +51,7 @@ from src.database import (
     get_leads_with_phone,
     create_campaign_run,
     get_campaign_by_id,
+    get_active_campaign_runs_count,
     get_user_company_profile,
     create_user_company_profile,
     soft_delete_company,
@@ -1824,6 +1825,14 @@ async def run_campaign(
 ):
     try:
         logger.info(f"Running campaign {campaign_id}")
+
+        # Check for active runs
+        active_runs_count = await get_active_campaign_runs_count(campaign_id)
+        if active_runs_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot start a new run. Campaign is already running."
+            )
         
         # Get campaign details
         campaign = await get_campaign_by_id(campaign_id)
