@@ -3314,16 +3314,31 @@ async def track_email(email_log_id: UUID, request: Request):
         is_valid = EmailOpenDetector.is_valid_email_open(user_agent)
         email_log = await get_email_log_by_id(email_log_id)
 
+        if email_log is None:
+            logger.warning(f"Email log not found for ID {email_log_id}")
+            return _return_tracking_pixel()
+
         if is_valid:
-            logger.info(f"User initiated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log['campaign_run_id']}. User-Agent: {user_agent}")
+            logger.info(f"User initiated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log.get('campaign_run_id')}. User-Agent: {user_agent}")
 
             # Update the email_log has_opened status using the database function
             await update_email_log_has_opened(email_log_id)
 
             # Get the campaign and lead            
-            campaign = await get_campaign_by_id(email_log['campaign_id'])
-            lead = await get_lead_by_id(email_log['lead_id'])
-            company = await get_company_by_id(campaign['company_id'])
+            campaign = await get_campaign_by_id(email_log.get('campaign_id'))
+            if campaign is None:
+                logger.warning(f"Campaign not found for email log {email_log_id}")
+                return _return_tracking_pixel()
+
+            lead = await get_lead_by_id(email_log.get('lead_id'))
+            if lead is None:
+                logger.warning(f"Lead not found for email log {email_log_id}")
+                return _return_tracking_pixel()
+
+            company = await get_company_by_id(campaign.get('company_id'))
+            if company is None:
+                logger.warning(f"Company not found for campaign {campaign.get('id')}")
+                return _return_tracking_pixel()
 
             # If the campaign is an "email_and_call" campaign and the trigger_call_on is after_email_open, add the call to the queue
             if (campaign.get('type') == 'email_and_call' and 
@@ -3352,32 +3367,26 @@ async def track_email(email_log_id: UUID, request: Request):
                         call_script=call_script
                     )
         else:
-            logger.warning(f"Automated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log['campaign_run_id']}, ignoring it. User-Agent: {user_agent}")
+            logger.warning(f"Automated request detected for email_log_id {email_log_id} inside campaign_run_id {email_log.get('campaign_run_id')}, ignoring it. User-Agent: {user_agent}")
         
-        # Return a 1x1 transparent pixel with cache control headers
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-        return Response(
-            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
-            media_type='image/gif',
-            headers=headers
-        )
+        return _return_tracking_pixel()
+
     except Exception as e:
         logger.error(f"Error tracking email open for log {email_log_id}: {str(e)}")
-        # Still return the pixel even if tracking fails, with same headers
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-        return Response(
-            content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
-            media_type='image/gif',
-            headers=headers
-        )
+        return _return_tracking_pixel()
+
+def _return_tracking_pixel():
+    """Helper function to return a tracking pixel with appropriate headers"""
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+    return Response(
+        content=b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b',
+        media_type='image/gif',
+        headers=headers
+    )
 
 @app.get("/api/leads/search", response_model=LeadSearchResponse, tags=["Leads"])
 async def search_lead(
