@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -16,6 +18,25 @@ services:
       - supabase_network_outbound_ai_sdr
     #depends_on:
     #  - db
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    command: celery -A src.celery_app.tasks worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
 
 networks:
   supabase_network_outbound_ai_sdr:
@@ -47,3 +68,6 @@ networks:
 
 #volumes:
 #  postgres_data: 
+
+volumes:
+  redis_data: 
