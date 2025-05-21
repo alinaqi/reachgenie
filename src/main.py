@@ -1684,6 +1684,21 @@ async def create_company_campaign(
     if str(product["company_id"]) != str(company_id):
         raise HTTPException(status_code=403, detail="Product does not belong to this company")
     
+    # Check for email credentials if it's a scheduled email campaign
+    if (campaign.type.value == 'email' or campaign.type.value == 'email_and_call') and campaign.scheduled_at:
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {company_id} missing email account credentials")
+            raise HTTPException(
+                status_code=400,
+                detail="Company email credentials not configured. Please set up email account credentials first."
+            )
+            
+        if not company.get("account_type"):
+            raise HTTPException(
+                status_code=400,
+                detail="Email provider type not configured. Please set up email provider type first."
+            )
+    
     return await create_campaign(
         company_id=company_id,
         name=campaign.name,
