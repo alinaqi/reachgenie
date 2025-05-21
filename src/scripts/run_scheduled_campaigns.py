@@ -15,7 +15,8 @@ from src.database import (
     create_campaign_run,
     mark_campaign_as_triggered,
     get_campaign_lead_count,
-    has_pending_upload_tasks
+    has_pending_upload_tasks,
+    get_active_campaign_runs_count
 )
 from src.main import run_company_campaign
 
@@ -52,6 +53,15 @@ async def process_scheduled_campaigns():
                 company_id = UUID(campaign['company_id'])
                 
                 try:
+                    # Check for active runs first
+                    active_runs_count = await get_active_campaign_runs_count(campaign_id)
+                    if active_runs_count > 0:
+                        logger.info(
+                            f"Skipping scheduled campaign {campaign['name']} ({campaign_id}). "
+                            "Campaign is already in running state."
+                        )
+                        continue
+
                     # Check for pending upload tasks
                     if await has_pending_upload_tasks(company_id):
                         logger.info(

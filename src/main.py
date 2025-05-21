@@ -51,6 +51,7 @@ from src.database import (
     get_leads_with_phone,
     create_campaign_run,
     get_campaign_by_id,
+    get_active_campaign_runs_count,
     get_user_company_profile,
     create_user_company_profile,
     soft_delete_company,
@@ -1824,6 +1825,14 @@ async def run_campaign(
 ):
     try:
         logger.info(f"Running campaign {campaign_id}")
+
+        # Check for active runs
+        active_runs_count = await get_active_campaign_runs_count(campaign_id)
+        if active_runs_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot start a new run. Campaign is already running."
+            )
         
         # Get campaign details
         campaign = await get_campaign_by_id(campaign_id)
@@ -2729,7 +2738,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     """Handle call campaign processing"""
     
     # Get total count of leads with phone numbers
-    total_leads = await get_leads_with_phone(company['id'], count=True)
+    total_leads = await get_leads_with_phone(campaign['id'], count=True)
     logger.info(f"Found {total_leads} total leads with phone number")
 
     # Update campaign run with status running and total leads
@@ -2750,7 +2759,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     
     while True:
         # Get leads for current page
-        leads_response = await get_leads_with_phone(company['id'], count=False, page=page, limit=page_size)
+        leads_response = await get_leads_with_phone(campaign['id'], count=False, page=page, limit=page_size)
         leads = leads_response['items']
         
         if not leads:
