@@ -1835,7 +1835,6 @@ async def get_campaign(
 @app.post("/api/campaigns/{campaign_id}/run", tags=["Campaigns & Emails"])
 async def run_campaign(
     campaign_id: UUID,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
     try:
@@ -1907,8 +1906,13 @@ async def run_campaign(
             )
         
         logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
-        # Add campaign execution to background tasks
-        background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
+        
+        # Send a task to the queue asynchronously
+        from celery_app.tasks import celery_run_company_campaign
+        celery_run_company_campaign.delay(
+            str(campaign_id), 
+            str(campaign_run['id'])
+        )
         
         return {"message": "Campaign request initiated successfully"}
     except HTTPException as e:
