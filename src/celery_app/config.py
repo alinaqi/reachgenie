@@ -22,4 +22,14 @@ celery_app.conf.update(
     task_soft_time_limit=3540,  # 59 minutes soft timeout
     worker_prefetch_multiplier=1,  # Process one task at a time
     task_acks_late=True,  # Tasks are acknowledged after completion
+    
+    # Redis key prefix settings
+    redis_backend_use_ssl=False,  # Set to True if using SSL
+    task_default_queue='normal',  # Default queue for tasks
+    broker_transport_options={
+        'queue_name_prefix': 'reachgenie:'  # Prefix for all Redis keys
+    },
+    result_backend_transport_options={
+        'global_keyprefix': 'reachgenie:'  # Prefix for result backend keys
+    }
 ) 
