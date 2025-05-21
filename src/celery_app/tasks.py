@@ -5,6 +5,7 @@ from celery.exceptions import Ignore
 from .config import celery_app
 from src.main import run_company_campaign
 from src.logger import get_logger
+from src.database import get_campaign_run
 
 logger = get_logger(__name__)
 
@@ -21,6 +22,22 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
     """
     try:
         logger.info(f"Starting campaign task for campaign_id: {campaign_id}, run_id: {campaign_run_id}")
+        
+        campaign_run = get_campaign_run(UUID(campaign_run_id))
+
+        # If campaign run doesn't exist, fail early
+        if not campaign_run:
+            logger.error(f"Campaign run {campaign_run_id} not found")
+            raise ValueError(f"Campaign run {campaign_run_id} not found")
+        
+        # Check campaign run status
+        if campaign_run['status'] in ['completed', 'failed']:
+            logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
+            return {
+                'status': campaign_run['status'],
+                'campaign_id': campaign_id,
+                'campaign_run_id': campaign_run_id
+            }
         
         # Use asyncio.run
         result = asyncio.run(
