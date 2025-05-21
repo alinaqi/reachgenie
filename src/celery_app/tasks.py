@@ -23,33 +23,45 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
     try:
         logger.info(f"Starting campaign task for campaign_id: {campaign_id}, run_id: {campaign_run_id}")
         
-        campaign_run = asyncio.run(get_campaign_run(UUID(campaign_run_id)))
-
-        # If campaign run doesn't exist, fail early
-        if not campaign_run:
-            logger.error(f"Campaign run {campaign_run_id} not found")
-            raise ValueError(f"Campaign run {campaign_run_id} not found")
+        # Create a new event loop for all async operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        # Check campaign run status
-        if campaign_run['status'] in ['completed', 'failed']:
-            logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
-            return {
-                'status': campaign_run['status'],
-                'campaign_id': campaign_id,
-                'campaign_run_id': campaign_run_id
-            }
-        
-        # Use asyncio.run
-        result = asyncio.run(
-            run_company_campaign(
-                UUID(campaign_id), 
-                UUID(campaign_run_id)
+        try:
+            # Run all async operations in the same loop
+            campaign_run = loop.run_until_complete(
+                get_campaign_run(UUID(campaign_run_id))
             )
-        )
-        
-        logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
-        return result
-        
+            
+            # If campaign run doesn't exist, fail early
+            if not campaign_run:
+                logger.error(f"Campaign run {campaign_run_id} not found")
+                raise ValueError(f"Campaign run {campaign_run_id} not found")
+            
+            # Check campaign run status
+            if campaign_run['status'] in ['completed', 'failed']:
+                logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
+                return {
+                    'status': campaign_run['status'],
+                    'campaign_id': campaign_id,
+                    'campaign_run_id': campaign_run_id
+                }
+            
+            # Run the main campaign task
+            result = loop.run_until_complete(
+                run_company_campaign(
+                    UUID(campaign_id), 
+                    UUID(campaign_run_id)
+                )
+            )
+            
+            logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
+            return result
+            
+        finally:
+            # Clean up the loop
+            loop.close()
+            
     except Exception as exc:
         logger.error(f"Error in campaign task: {str(exc)}")
         
