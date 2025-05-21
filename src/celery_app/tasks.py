@@ -23,7 +23,7 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
     try:
         logger.info(f"Starting campaign task for campaign_id: {campaign_id}, run_id: {campaign_run_id}")
         
-        campaign_run = get_campaign_run(UUID(campaign_run_id))
+        campaign_run = asyncio.run(get_campaign_run(UUID(campaign_run_id)))
 
         # If campaign run doesn't exist, fail early
         if not campaign_run:
