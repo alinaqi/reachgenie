@@ -38,6 +38,30 @@ services:
       - redis
     restart: unless-stopped
 
+  flower:
+    image: mher/flower
+    ports:
+      - "5555:5555"
+    environment:
+      # Celery Broker and Backend URLs
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Flower specific configurations
+      - FLOWER_BROKER_API=redis://redis:6379/0
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=admin:password
+      - FLOWER_PERSISTENT=True
+      - FLOWER_DB=/data/flower.db
+      - FLOWER_STATE_SAVE_INTERVAL=30000
+      # Additional Celery configurations
+      - CELERY_TIMEZONE=UTC
+      - CELERY_ACCEPT_CONTENT=json
+      - CELERY_TASK_SERIALIZER=json
+      - CELERY_RESULT_SERIALIZER=json
+    volumes:
+      - flower_data:/data
+    restart: unless-stopped
+
 networks:
   supabase_network_outbound_ai_sdr:
     external: true
@@ -71,3 +95,4 @@ networks:
 
 volumes:
   redis_data: 
+  flower_data:
