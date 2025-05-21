@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     
     frontend_url: str = "http://localhost:5173"  # Default frontend URL
 
+    redis_url: str = "redis://localhost:6379/0"
+
     class Config:
         env_file = ".env"
 
