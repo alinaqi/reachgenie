@@ -4,10 +4,10 @@ from celery import states
 from celery.exceptions import Ignore
 from .config import celery_app
 from src.main import run_company_campaign
-from src.logger import get_logger
+import logging
 from src.database import get_campaign_run
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 @celery_app.task(
     name='tasks.run_campaign',

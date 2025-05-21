@@ -26,16 +26,22 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - supabase_network_outbound_ai_sdr
 
   celery_worker:
     build: .
     command: celery -A src.celery_app.tasks worker --loglevel=info
-    volumes:
-      - .:/app
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - .env
     depends_on:
       - redis
+    networks:
+      - supabase_network_outbound_ai_sdr
     restart: unless-stopped
 
   flower:
@@ -60,6 +66,8 @@ services:
       - CELERY_RESULT_SERIALIZER=json
     volumes:
       - flower_data:/data
+    networks:
+      - supabase_network_outbound_ai_sdr
     restart: unless-stopped
 
 networks:
