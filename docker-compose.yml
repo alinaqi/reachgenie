@@ -31,7 +31,7 @@ services:
 
   celery_worker:
     build: .
-    command: celery -A src.celery_app.tasks worker --loglevel=info
+    command: celery -A src.celery_app.tasks worker --loglevel=info -n reachgenie_default_worker@%h
     environment:
       - PYTHONPATH=/app
     volumes:
