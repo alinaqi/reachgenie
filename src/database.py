@@ -690,12 +690,10 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
     Uses native PostgreSQL query for better performance.
     """
     try:
-        logger.info(f"START - Getting campaign by id: {campaign_id}")
         # First get the campaign to get company_id
         campaign = await get_campaign_by_id(campaign_id)
         if not campaign:
             return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
-        logger.info(f"END - Getting campaign by id: {campaign_id}")
 
         pool = await get_pg_pool()
         logger.info(f"Step 1 - Getting pg pool")
