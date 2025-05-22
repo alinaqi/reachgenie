@@ -10,7 +10,7 @@ from src.database import get_campaign_run
 logger = logging.getLogger(__name__)
 
 @celery_app.task(
-    name='tasks.run_campaign',
+    name='reachgenie.tasks.run_campaign',
     bind=True,
     max_retries=3,
     default_retry_delay=60
