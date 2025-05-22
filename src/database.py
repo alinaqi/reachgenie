@@ -696,27 +696,28 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
 
         pool = await get_pg_pool()
-        
+
+        # Count query
+        count_sql = """
+            SELECT COUNT(*) 
+            FROM leads l
+            WHERE l.company_id = $1
+            AND l.email IS NOT NULL
+            AND l.email != ''
+            AND l.do_not_contact = false
+            AND l.deleted_at IS NULL
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM email_queue eq
+                WHERE eq.lead_id::uuid = l.id
+                AND eq.campaign_id = $2
+            )
+        """
+        async with pool.acquire() as conn:
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+
         if count:
-            # Count query
-            count_sql = """
-                SELECT COUNT(*) 
-                FROM leads l
-                WHERE l.company_id = $1
-                AND l.email IS NOT NULL
-                AND l.email != ''
-                AND l.do_not_contact = false
-                AND l.deleted_at IS NULL
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM email_queue eq
-                    WHERE eq.lead_id::uuid = l.id
-                    AND eq.campaign_id = $2
-                )
-            """
-            async with pool.acquire() as conn:
-                total = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
-                return total
+            return total_count
         
         # Full query with pagination
         leads_sql = """
@@ -748,7 +749,7 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             )
             
             # Get total count for pagination
-            total_count = await get_leads_with_email(campaign_id, count=True)
+            #total_count = await get_leads_with_email(campaign_id, count=True)
             
             # Convert asyncpg.Record objects to dicts
             leads_data = [dict(lead) for lead in leads]
@@ -779,26 +780,27 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
 
         pool = await get_pg_pool()
         
+        # Count query
+        count_sql = """
+            SELECT COUNT(*) 
+            FROM leads l
+            WHERE l.company_id = $1
+            AND l.phone_number IS NOT NULL
+            AND l.phone_number != ''
+            AND l.do_not_contact = false
+            AND l.deleted_at IS NULL
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM call_queue cq
+                WHERE cq.lead_id::uuid = l.id
+                AND cq.campaign_id = $2
+            )
+        """
+        async with pool.acquire() as conn:
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+
         if count:
-            # Count query
-            count_sql = """
-                SELECT COUNT(*) 
-                FROM leads l
-                WHERE l.company_id = $1
-                AND l.phone_number IS NOT NULL
-                AND l.phone_number != ''
-                AND l.do_not_contact = false
-                AND l.deleted_at IS NULL
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM call_queue cq
-                    WHERE cq.lead_id::uuid = l.id
-                    AND cq.campaign_id = $2
-                )
-            """
-            async with pool.acquire() as conn:
-                total = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
-                return total
+            return total_count
         
         # Full query with pagination
         leads_sql = """
@@ -830,7 +832,7 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
             )
             
             # Get total count for pagination
-            total_count = await get_leads_with_phone(campaign_id, count=True)
+            #total_count = await get_leads_with_phone(campaign_id, count=True)
             
             # Convert asyncpg.Record objects to dicts
             leads_data = [dict(lead) for lead in leads]
