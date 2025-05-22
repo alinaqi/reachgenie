@@ -27,7 +27,7 @@ celery_app.conf.update(
     redis_backend_use_ssl=False,  # Set to True if using SSL
     task_default_queue='normal',  # Default queue for tasks
     broker_transport_options={
-        'queue_name_prefix': 'reachgenie:'  # Prefix for all Redis keys
+        'queue_name_prefix': 'reachgenie:'  # Prefix for all Redis queue keys
     },
     result_backend_transport_options={
         'global_keyprefix': 'reachgenie:'  # Prefix for result backend keys
