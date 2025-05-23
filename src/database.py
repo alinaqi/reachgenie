@@ -31,12 +31,21 @@ logging.basicConfig(
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
-
 # PostgreSQL connection pool
 pg_pool: Optional[Pool] = None
 
-async def init_pg_pool():
+async def init_pg_pool(force_reinit: bool = False):
     global pg_pool
+    # Force close the old pool if reinitializing
+    if force_reinit and pg_pool is not None:
+        try:
+            await pg_pool.close()
+            logger.info("Closed old PostgreSQL connection pool before reinitialization")
+        except Exception as e:
+            logger.warning(f"Error closing old pool during reinit: {e}")
+
+        pg_pool = None
+    
     if pg_pool is None:
         try:
             pg_pool = await asyncpg.create_pool(
@@ -46,7 +55,7 @@ async def init_pg_pool():
                 host=os.getenv('POSTGRES_HOST'),
                 port=int(os.getenv('POSTGRES_PORT', '5432')),
                 min_size=1,
-                max_size=10
+                max_size=10 # 10 connections
             )
             logger.info("PostgreSQL connection pool initialized successfully")
         except Exception as e:
@@ -56,6 +65,8 @@ async def init_pg_pool():
 async def get_pg_pool() -> Pool:
     if pg_pool is None:
         await init_pg_pool()
+    else:
+        logger.info("Using existing PostgreSQL connection pool")
     return pg_pool
 
 # Constants
@@ -696,7 +707,6 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
 
         pool = await get_pg_pool()
-        logger.info(f"Step 1 - Getting pg pool")
 
         # Count query
         count_sql = """
@@ -737,7 +747,6 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
         async with pool.acquire() as conn1:
             # Get total count first
             total_count = await conn1.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
-            logger.info(f"Step 2 - Getting total count: {total_count}")
             
         if count:
             return total_count
