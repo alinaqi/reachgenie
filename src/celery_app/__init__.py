@@ -1,4 +1,6 @@
 from .config import celery_app
-from .tasks import celery_run_company_campaign
 
-__all__ = ['celery_app', 'celery_run_company_campaign'] 
+# Configure Celery to autodiscover tasks
+celery_app.autodiscover_tasks(['src.celery_app.tasks'])
+
+__all__ = ['celery_app'] 
