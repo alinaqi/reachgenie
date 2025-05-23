@@ -1908,7 +1908,7 @@ async def run_campaign(
         logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
         
         # Replace background_tasks with Celery task
-        from src.celery_app.tasks import celery_run_company_campaign
+        from src.celery_app.tasks.run_campaign import celery_run_company_campaign
         celery_run_company_campaign.delay(
             str(campaign_id), 
             str(campaign_run['id'])
