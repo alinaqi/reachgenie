@@ -6,8 +6,39 @@ from .config import celery_app
 from src.main import run_company_campaign
 import logging
 from src.database import get_campaign_run
+from src.database import init_pg_pool
+import src.database
 
 logger = logging.getLogger(__name__)
+
+async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
+    global pg_pool
+    # Force a clean start to avoid inherited pool across fork
+    await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new postgres pool for every task run
+    
+    logger.info(f"asyncpg pool after init: {src.database.pg_pool}") # Ensure the pool is created fresh inside this subprocess
+    
+    try:
+        campaign_run = await get_campaign_run(UUID(campaign_run_id))
+        if not campaign_run:
+            logger.error(f"Campaign run {campaign_run_id} not found")
+            raise ValueError("Campaign run not found")
+
+        # Check campaign run status
+        if campaign_run['status'] in ['completed', 'failed']:
+            logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
+            return {
+                'status': campaign_run['status'],
+                'campaign_id': campaign_id,
+                'campaign_run_id': campaign_run_id
+            }
+
+        return await run_company_campaign(UUID(campaign_id), UUID(campaign_run_id))
+    finally:
+        logger.info(f"Asyncpg pool that is going to be closed: {src.database.pg_pool}")
+        if src.database.pg_pool:
+            await src.database.pg_pool.close()  # close the pool at the end of the task to release connections
+            src.database.pg_pool = None
 
 @celery_app.task(
     name='reachgenie.tasks.run_campaign',
@@ -28,32 +59,8 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
         asyncio.set_event_loop(loop)
         
         try:
-            # Run all async operations in the same loop
-            campaign_run = loop.run_until_complete(
-                get_campaign_run(UUID(campaign_run_id))
-            )
-            
-            # If campaign run doesn't exist, fail early
-            if not campaign_run:
-                logger.error(f"Campaign run {campaign_run_id} not found")
-                raise ValueError(f"Campaign run {campaign_run_id} not found")
-            
-            # Check campaign run status
-            if campaign_run['status'] in ['completed', 'failed']:
-                logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
-                return {
-                    'status': campaign_run['status'],
-                    'campaign_id': campaign_id,
-                    'campaign_run_id': campaign_run_id
-                }
-            
-            # Run the main campaign task
-            result = loop.run_until_complete(
-                run_company_campaign(
-                    UUID(campaign_id), 
-                    UUID(campaign_run_id)
-                )
-            )
+            # Your Celery task creates a new event loop each time it runs _async_run_campaign and creates a new pool in that event loop
+            result = loop.run_until_complete(_async_run_campaign(campaign_id, campaign_run_id))
             
             logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
             return result
