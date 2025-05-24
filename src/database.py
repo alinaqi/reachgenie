@@ -744,15 +744,15 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             LIMIT $3 OFFSET $4
         """
         
-        async with pool.acquire() as conn1:
+        async with pool.acquire() as conn:
             # Get total count first
-            total_count = await conn1.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
             
-        if count:
-            return total_count
-        
-        async with pool.acquire() as conn2:
-            leads = await conn2.fetch(
+            if count:
+                return total_count
+            
+            # Get paginated results
+            leads = await conn.fetch(
                 leads_sql,
                 str(campaign['company_id']),
                 str(campaign_id),
