@@ -4948,3 +4948,28 @@ async def get_upload_task_company_id(upload_task_id: UUID) -> Optional[UUID]:
     except Exception as e:
         logger.error(f"Error in get_upload_task_company_id: {str(e)}")
         raise e
+
+async def update_campaign_run_celery_task_id(campaign_run_id: UUID, celery_task_id: str) -> Optional[Dict]:
+    """
+    Update the celery_task_id of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        celery_task_id: Celery task ID to set
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        response = supabase.table('campaign_runs').update({
+            'celery_task_id': celery_task_id
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update celery_task_id for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run celery_task_id: {str(e)}")
+        return None
