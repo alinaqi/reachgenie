@@ -264,6 +264,7 @@ CREATE TABLE IF NOT EXISTS campaign_runs (
     leads_total INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'failed', 'running', 'completed')),
     failure_reason TEXT,
+    celery_task_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -271,6 +272,7 @@ CREATE TABLE IF NOT EXISTS campaign_runs (
 COMMENT ON COLUMN campaign_runs.leads_total IS 'Number of call/email leads that were available when this run was executed';
 COMMENT ON COLUMN campaign_runs.status IS 'Status of the campaign run: idle (default), running, completed, or failed';
 COMMENT ON COLUMN campaign_runs.failure_reason IS 'Reason for failure if the campaign run status is failed';
+COMMENT ON COLUMN campaign_runs.celery_task_id IS 'ID of the Celery task that is processing this campaign run';
 
 -- Email Queue table
 CREATE TABLE IF NOT EXISTS email_queue (
