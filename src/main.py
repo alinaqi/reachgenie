@@ -108,7 +108,8 @@ from src.database import (
     check_user_access_status,
     check_user_campaign_access,
     has_pending_upload_tasks,
-    create_skipped_row_record
+    create_skipped_row_record,
+    update_campaign_run_celery_task_id
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1909,10 +1910,15 @@ async def run_campaign(
         
         # Replace background_tasks with Celery task
         from src.celery_app.tasks.run_campaign import celery_run_company_campaign
-        celery_run_company_campaign.delay(
+        
+        # Queue the task and get the AsyncResult
+        result = celery_run_company_campaign.delay(
             str(campaign_id), 
             str(campaign_run['id'])
         )
+        
+        # Store the Celery task ID immediately
+        await update_campaign_run_celery_task_id(UUID(campaign_run['id']), result.id)
         
         return {"message": "Campaign request initiated successfully"}
     except HTTPException as e:
