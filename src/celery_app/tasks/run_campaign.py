@@ -87,7 +87,7 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
                     update_campaign_run_status(
                         campaign_run_id=UUID(campaign_run_id),
                         status="failed",
-                        failure_reason="Campaign execution exceeded the maximum time limit"
+                        failure_reason="Campaign execution exceeded the maximum time limit, Try running the same campaign again to process the remaining leads"
                     )
                 )
             except Exception as update_error:
