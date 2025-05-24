@@ -805,12 +805,7 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
                 AND cq.campaign_id = $2
             )
         """
-        async with pool.acquire() as conn:
-            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
 
-        if count:
-            return total_count
-        
         # Full query with pagination
         leads_sql = """
             SELECT l.*
@@ -831,7 +826,13 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
         """
         
         async with pool.acquire() as conn:
-            # Get paginated results
+            # Get total count first
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+            
+            if count:
+                return total_count
+            
+            # Get paginated results using the same connection
             leads = await conn.fetch(
                 leads_sql,
                 str(campaign['company_id']),
@@ -839,9 +840,6 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
                 limit,
                 (page - 1) * limit
             )
-            
-            # Get total count for pagination
-            #total_count = await get_leads_with_phone(campaign_id, count=True)
             
             # Convert asyncpg.Record objects to dicts
             leads_data = [dict(lead) for lead in leads]
