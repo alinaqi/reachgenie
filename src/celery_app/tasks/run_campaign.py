@@ -59,7 +59,7 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
         asyncio.set_event_loop(loop)
         
         try:
-            # Your Celery task creates a new event loop each time it runs _async_run_campaign and creates a new pool in that event loop
+            # Your Celery task creates a new event loop each time it runs _async_run_campaign and creates a new asyncpg pool in that event loop
             result = loop.run_until_complete(_async_run_campaign(campaign_id, campaign_run_id))
             
             logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
