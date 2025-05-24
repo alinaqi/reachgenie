@@ -77,6 +77,24 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
         
         # If we've exceeded retries, mark as failed
         if self.request.retries >= self.max_retries:
+            # Create a new event loop for the final database update
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # Update campaign run status to failed with timeout message
+                from src.database import update_campaign_run_status
+                loop.run_until_complete(
+                    update_campaign_run_status(
+                        campaign_run_id=UUID(campaign_run_id),
+                        status="failed",
+                        failure_reason="Campaign execution exceeded the maximum time limit"
+                    )
+                )
+            except Exception as update_error:
+                logger.error(f"Failed to update campaign run status: {str(update_error)}")
+            finally:
+                loop.close()
+                
             self.update_state(
                 state=states.FAILURE,
                 meta={
