@@ -18,7 +18,7 @@ from src.database import (
     has_pending_upload_tasks,
     get_active_campaign_runs_count
 )
-from src.main import run_company_campaign
+from src.celery_app.tasks.run_campaign import celery_run_company_campaign
 
 # Configure logging
 logging.basicConfig(
@@ -95,8 +95,12 @@ async def process_scheduled_campaigns():
                     campaign_run_id = UUID(campaign_run['id'])
                     logger.info(f"Created campaign run {campaign_run_id} with {lead_count} leads")
                     
-                    # Run the campaign using existing logic
-                    await run_company_campaign(campaign_id, campaign_run_id)
+                    # Queue the campaign using Celery task
+                    celery_run_company_campaign.delay(
+                        str(campaign_id),
+                        str(campaign_run_id)
+                    )
+                    logger.info(f"Queued campaign {campaign_id} for processing with run ID {campaign_run_id}")
                     
                     # Mark campaign as auto-triggered
                     if await mark_campaign_as_triggered(campaign_id):
