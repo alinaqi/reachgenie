@@ -45,7 +45,7 @@ async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
     name='reachgenie.tasks.run_campaign',
     bind=True,
     max_retries=3,
-    default_retry_delay=60
+    default_retry_delay=60 # 60 seconds
 )
 def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
     """
