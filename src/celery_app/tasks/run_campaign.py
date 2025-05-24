@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
     global pg_pool
     # Force a clean start to avoid inherited pool across fork
-    await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new postgres pool for every task run
+    await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new asyncpg pool for every task run
     
     logger.info(f"asyncpg pool after init: {src.database.pg_pool}") # Ensure the pool is created fresh inside this subprocess
     
