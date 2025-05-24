@@ -12,7 +12,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 logger = logging.getLogger(__name__)
 
-async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
+async def _async_run_campaign(campaign_id: str, campaign_run_id: str, celery_task_id: str):
     global pg_pool
     # Force a clean start to avoid inherited pool across fork
     await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new asyncpg pool for every task run
@@ -24,6 +24,10 @@ async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
         if not campaign_run:
             logger.error(f"Campaign run {campaign_run_id} not found")
             raise ValueError("Campaign run not found")
+
+        # Update campaign run with celery task ID
+        from src.database import update_campaign_run_celery_task_id
+        await update_campaign_run_celery_task_id(UUID(campaign_run_id), celery_task_id)
 
         # Check campaign run status
         if campaign_run['status'] in ['completed']:
@@ -61,7 +65,7 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
         
         try:
             # Your Celery task creates a new event loop each time it runs _async_run_campaign and creates a new asyncpg pool in that event loop
-            result = loop.run_until_complete(_async_run_campaign(campaign_id, campaign_run_id))
+            result = loop.run_until_complete(_async_run_campaign(campaign_id, campaign_run_id, self.request.id))
             
             logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
             return result
