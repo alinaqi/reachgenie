@@ -8,6 +8,7 @@ from src.main import run_company_campaign
 from src.database import get_campaign_run
 from src.database import init_pg_pool
 import src.database
+from celery.exceptions import SoftTimeLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ async def _async_run_campaign(campaign_id: str, campaign_run_id: str):
             raise ValueError("Campaign run not found")
 
         # Check campaign run status
-        if campaign_run['status'] in ['completed', 'failed']:
+        if campaign_run['status'] in ['completed']:
             logger.info(f"Campaign run {campaign_run_id} already processed with status: {campaign_run['status']}")
             return {
                 'status': campaign_run['status'],
@@ -64,7 +65,9 @@ def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
             
             logger.info(f"Campaign task completed successfully for campaign_id: {campaign_id}")
             return result
-            
+        except SoftTimeLimitExceeded:
+            logger.error(f"Campaign run {campaign_run_id} reached soft timeout limit")
+            raise  # Re-raise so that it can be retried upto max retries
         finally:
             # Clean up the loop
             loop.close()
