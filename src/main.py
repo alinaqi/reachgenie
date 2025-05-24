@@ -2614,11 +2614,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         campaign_run_id=campaign_run_id,
         status="running"
     )
-    
-    await update_campaign_run_progress(
-        campaign_run_id=campaign_run_id,
-        leads_total=total_leads
-    )
 
     # Process leads in pages
     page = 1
@@ -2764,11 +2759,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     await update_campaign_run_status(
         campaign_run_id=campaign_run_id,
         status="running"
-    )
-
-    await update_campaign_run_progress(
-        campaign_run_id=campaign_run_id,
-        leads_total=total_leads
     )
 
     # Process leads in pages
