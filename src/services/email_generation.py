@@ -23,7 +23,7 @@ async def get_or_generate_insights_for_lead(lead: dict, force_creation: bool = F
     # Check if lead already has enriched data and we're not forcing regeneration
     insights = None
     if not force_creation and lead.get('enriched_data'):
-        logger.info(f"Lead {lead['email']} already has enriched data, using existing insights")
+        logger.info(f"Lead {lead['id']} already has enriched data, using existing insights")
         # We have enriched data, use it directly
         if isinstance(lead['enriched_data'], str):
             try:
@@ -36,7 +36,7 @@ async def get_or_generate_insights_for_lead(lead: dict, force_creation: bool = F
     
     # Generate company insights if we don't have any or if force_creation is True
     if force_creation or not insights:
-        logger.info(f"{'Regenerating' if force_creation else 'Generating new'} insights for lead: {lead['email']}")
+        logger.info(f"{'Regenerating' if force_creation else 'Generating new'} insights for lead: {lead['id']}")
         insights = await generate_company_insights(lead, perplexity_service)
         
         # Save the insights to the lead's enriched_data if we generated new ones
@@ -66,12 +66,12 @@ async def get_or_generate_insights_for_lead(lead: dict, force_creation: bool = F
                 # Update the lead with enriched data
                 from src.database import update_lead_enrichment
                 await update_lead_enrichment(lead['id'], enriched_data)
-                logger.info(f"Updated lead {lead['email']} with new enriched data")
+                logger.info(f"Updated lead {lead['id']} with new enriched data")
             except Exception as e:
-                logger.error(f"Error storing insights for lead {lead['email']}: {str(e)}")
+                logger.error(f"Error storing insights for lead {lead['id']}: {str(e)}")
     
     if not insights:
-        logger.error(f"Failed to generate insights for lead {lead['email']}")
+        logger.error(f"Failed to generate insights for lead {lead['id']}")
         return None
     
     return insights
