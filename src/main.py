@@ -2789,7 +2789,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         # Process leads using keyset pagination
         leads_queued = 0
         last_id = None
-        page_size = 50
+        page_size = 2
         
         while True:
             # Get leads for current page
@@ -2817,19 +2817,19 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
                 try:
                     if not lead.get('phone_number'):
                         continue  # Skip if no phone number
-                    
-                    logger.info(f"Queueing call for lead: {lead['phone_number']}")
+
+                    logger.info(f"Processing lead {leads_queued + 1}/{total_leads}: {lead['phone_number']}")
                     
                     insights = await get_or_generate_insights_for_lead(lead)
 
                     if insights:
-                        logger.info(f"Using insights for lead: {lead['phone_number']}")
+                        #logger.info(f"Using insights for lead: {lead['phone_number']}")
 
                         # Generate personalized call script
                         call_script = await generate_call_script(lead, campaign, company, insights)
                         
                         logger.info(f"Generated call script for lead: {lead['phone_number']}")
-                        logger.info(f"Call Script: {call_script}")
+                        #logger.info(f"Call Script: {call_script}")
 
                         if call_script:
                             # Add to queue
