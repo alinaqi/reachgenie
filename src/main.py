@@ -2588,144 +2588,161 @@ async def reset_password_endpoint(request: ResetPasswordRequest):
 
 async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle email campaign processing by queuing emails instead of sending immediately"""
-    # Validate company settings
-    if not company.get("account_email") or not company.get("account_password"):
-        logger.error(f"Company {campaign['company_id']} missing credentials")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email account credentials")
-        return
-            
-    if not company.get("account_type"):
-        logger.error(f"Company {campaign['company_id']} missing email provider type")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email provider type")
-        return
-            
-    if not company.get("name"):
-        logger.error(f"Company {campaign['company_id']} missing company name")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing company name")
-        return    
-    
-    # Get campaign template
-    template = campaign.get('template')
-    if not template:
-        logger.error(f"Campaign {campaign['id']} missing email template")
-        await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing campaign email template")
-        return
-    
-    # Get total count of leads with emails
-    total_leads = await get_leads_with_email(campaign['id'], count=True)
-    logger.info(f"Found {total_leads} total leads with emails for campaign {campaign['id']}")
-
-    # Update campaign run with status running and total leads
-    await update_campaign_run_status(
-        campaign_run_id=campaign_run_id,
-        status="running"
-    )
-
-    # Process leads in pages
-    page = 1
-    page_size = 50
-    leads_queued = 0
-    
-    while True:
-        # Get leads for current page
-        leads_response = await get_leads_with_email(campaign['id'], count=False, page=page, limit=page_size)
-        leads = leads_response['items']
+    try:
+        # Validate company settings
+        if not company.get("account_email") or not company.get("account_password"):
+            logger.error(f"Company {campaign['company_id']} missing credentials")
+            await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email account credentials")
+            return
+                
+        if not company.get("account_type"):
+            logger.error(f"Company {campaign['company_id']} missing email provider type")
+            await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing email provider type")
+            return
+                
+        if not company.get("name"):
+            logger.error(f"Company {campaign['company_id']} missing company name")
+            await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing company name")
+            return    
         
-        if not leads:
-            break  # No more leads to process
-            
-        # Queue emails for each lead in this page
-        for lead in leads:
-            try:
-                if lead.get('email'):  # Only queue if lead has email
-                    logger.info(f"Queueing email for lead: {lead['email']}")
-
-                    try:
-                        subject = ""
-                        body = ""
-
-                        insights = await get_or_generate_insights_for_lead(lead)
-                            
-                        # Generate personalized email content
-                        if insights:
-                            subject, body = await generate_email_content(lead, campaign, company, insights)
-                        else:
-                            #logger.error(f"Failed to generate insights for lead {lead['email']}")
-                            response = await add_email_to_queue(
-                                company_id=campaign['company_id'],
-                                campaign_id=campaign['id'],
-                                campaign_run_id=campaign_run_id,
-                                lead_id=lead['id'],
-                                subject=subject,
-                                body=body
-                            )
-
-                            await update_queue_item_status(
-                                queue_id=UUID(response['id']),
-                                status='failed',
-                                processed_at=datetime.now(timezone.utc),
-                                error_message="Failed to generate insights for lead"
-                            )
-
-                            leads_queued += 1
-                            continue
-                        
-                        if not subject or not body:
-                            logger.error(f"Failed to generate email content for lead {lead['email']}")
-
-                            response = await add_email_to_queue(
-                                company_id=campaign['company_id'],
-                                campaign_id=campaign['id'],
-                                campaign_run_id=campaign_run_id,
-                                lead_id=lead['id'],
-                                subject=subject,
-                                body=body
-                            )
-
-                            await update_queue_item_status(
-                                queue_id=UUID(response['id']),
-                                status='failed',
-                                processed_at=datetime.now(timezone.utc),
-                                error_message="Failed to generate email content for lead"
-                            )
-                            
-                            leads_queued += 1
-                            continue
-                            
-                        logger.info(f"Generated email content for lead: {lead['email']}")
-                        logger.info(f"Email Subject: {subject}")
-                        
-                        # Replace {email_body} placeholder in template with generated body
-                        final_body = template.replace("{email_body}", body)
-
-                    except Exception as e:
-                        logger.error(f"Error processing email for {lead['email']}: {str(e)}")
-                        continue
-
-                    # Add to queue
-                    await add_email_to_queue(
-                        company_id=campaign['company_id'],
-                        campaign_id=campaign['id'],
-                        campaign_run_id=campaign_run_id,
-                        lead_id=lead['id'],
-                        subject=subject,
-                        body=final_body
-                    )
-                    leads_queued += 1
-                    logger.info(f"Email for lead {lead['email']} added to queue")
-                else:
-                    logger.warning(f"Skipping lead with no email: {lead.get('id')}")
-            except Exception as e:
-                logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
-                continue
+        # Get campaign template
+        template = campaign.get('template')
+        if not template:
+            logger.error(f"Campaign {campaign['id']} missing email template")
+            await update_campaign_run_status(campaign_run_id=campaign_run_id, status="failed", failure_reason="Missing campaign email template")
+            return
         
-        # Move to next page
-        page += 1
-    
-    logger.info(f"Queued {leads_queued} emails for campaign {campaign['id']}")
-    
-    # Note: We don't mark the campaign as completed here
-    # It will be done by the queue processor when all emails have been processed
+        # Get total count of leads with emails
+        total_leads = await get_leads_with_email(campaign['id'], count=True)
+        logger.info(f"Found {total_leads} total leads with emails for campaign {campaign['id']}")
+
+        # Update campaign run with status running
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
+        )
+
+        # Process leads using keyset pagination
+        leads_queued = 0
+        last_id = None
+        page_size = 50
+        
+        while True:
+            # Get leads for current page
+            leads_response = await get_leads_with_email(
+                campaign_id=campaign['id'],
+                last_id=last_id,
+                limit=page_size
+            )
+            
+            leads = leads_response['items']
+            if not leads:
+                break  # No more leads to process
+                
+            # Update last_id for next iteration
+            last_id = UUID(leads[-1]['id'])
+            
+            # Queue emails for each lead in this page
+            for lead in leads:
+                try:
+                    if lead.get('email'):  # Only queue if lead has email
+                        logger.info(f"Processing lead {leads_queued + 1}/{total_leads}: {lead['email']}")
+                        logger.info(f"Queueing email for lead: {lead['email']}")
+
+                        try:
+                            subject = ""
+                            body = ""
+
+                            insights = await get_or_generate_insights_for_lead(lead)
+                                
+                            # Generate personalized email content
+                            if insights:
+                                subject, body = await generate_email_content(lead, campaign, company, insights)
+                            else:
+                                #logger.error(f"Failed to generate insights for lead {lead['email']}")
+                                response = await add_email_to_queue(
+                                    company_id=campaign['company_id'],
+                                    campaign_id=campaign['id'],
+                                    campaign_run_id=campaign_run_id,
+                                    lead_id=lead['id'],
+                                    subject=subject,
+                                    body=body
+                                )
+
+                                await update_queue_item_status(
+                                    queue_id=UUID(response['id']),
+                                    status='failed',
+                                    processed_at=datetime.now(timezone.utc),
+                                    error_message="Failed to generate insights for lead"
+                                )
+
+                                leads_queued += 1
+                                continue
+
+                            if not subject or not body:
+                                logger.error(f"Failed to generate email content for lead {lead['email']}")
+
+                                response = await add_email_to_queue(
+                                    company_id=campaign['company_id'],
+                                    campaign_id=campaign['id'],
+                                    campaign_run_id=campaign_run_id,
+                                    lead_id=lead['id'],
+                                    subject=subject,
+                                    body=body
+                                )
+
+                                await update_queue_item_status(
+                                    queue_id=UUID(response['id']),
+                                    status='failed',
+                                    processed_at=datetime.now(timezone.utc),
+                                    error_message="Failed to generate email content for lead"
+                                )
+                                
+                                leads_queued += 1
+                                continue
+
+                            logger.info(f"Generated email content for lead: {lead['email']}")
+                            logger.info(f"Email Subject: {subject}")
+                            # Replace {email_body} placeholder in template with generated body
+                            final_body = template.replace("{email_body}", body)
+
+                        except Exception as e:
+                            logger.error(f"Error processing email for lead {lead['email']}: {str(e)}")
+                            continue
+
+                        # Add to queue
+                        await add_email_to_queue(
+                            company_id=campaign['company_id'],
+                            campaign_id=campaign['id'],
+                            campaign_run_id=campaign_run_id,
+                            lead_id=lead['id'],
+                            subject=subject,
+                            body=final_body
+                        )
+                        leads_queued += 1
+                        logger.info(f"Email for lead {lead['email']} added to queue")
+                    else:
+                        logger.warning(f"Skipping lead with no email: {lead.get('id')}")
+                except Exception as e:
+                    logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
+                    continue
+                            
+            logger.info(f"Processed {leads_queued}/{total_leads} leads")
+            
+            if not leads_response['has_more']:
+                break
+                
+        logger.info(f"Completed processing. Queued {leads_queued} emails for campaign {campaign['id']}")
+        # Note: We don't mark the campaign as completed here
+        # It will be done by the queue processor when all emails have been processed
+    except Exception as e:
+        logger.error(f"Error in run_email_campaign: {str(e)}")
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="failed",
+            failure_reason=f"Campaign execution failed: {str(e)}"
+        )
+        raise
 
 async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
     """Background task to run campaign of the company"""
