@@ -2789,7 +2789,7 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         # Process leads using keyset pagination
         leads_queued = 0
         last_id = None
-        page_size = 2
+        page_size = 50
         
         while True:
             # Get leads for current page
