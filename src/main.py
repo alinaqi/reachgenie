@@ -2775,127 +2775,133 @@ async def run_company_campaign(campaign_id: UUID, campaign_run_id: UUID):
 
 async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID):
     """Handle call campaign processing"""
-    
-    # Get total count of leads with phone numbers
-    total_leads = await get_leads_with_phone(campaign['id'], count=True)
-    logger.info(f"Found {total_leads} total leads with phone number")
+    try:
+        # Get total count of leads with phone numbers
+        total_leads = await get_leads_with_phone(campaign['id'], count=True)
+        logger.info(f"Found {total_leads} total leads with phone number")
 
-    # Update campaign run with status running and total leads
-    await update_campaign_run_status(
-        campaign_run_id=campaign_run_id,
-        status="running"
-    )
-
-    # Process leads using keyset pagination
-    leads_queued = 0
-    last_id = None
-    page_size = 50
-    
-    while True:
-        # Get leads for current page
-        leads_response = await get_leads_with_phone(
-            campaign_id=campaign['id'],
-            last_id=last_id,
-            limit=page_size
+        # Update campaign run with status running and total leads
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="running"
         )
+
+        # Process leads using keyset pagination
+        leads_queued = 0
+        last_id = None
+        page_size = 50
         
-        leads = leads_response['items']
-        if not leads:
-            break  # No more leads to process
+        while True:
+            # Get leads for current page
+            leads_response = await get_leads_with_phone(
+                campaign_id=campaign['id'],
+                last_id=last_id,
+                limit=page_size
+            )
             
-        # Update last_id for next iteration - convert string to UUID if needed
-        last_lead_id = leads[-1]['id']
-        if isinstance(last_lead_id, str):
-            last_id = UUID(last_lead_id)
-        else:
-            last_id = UUID(str(last_lead_id))  # Convert asyncpg UUID to Python UUID
-            
-        # Queue records for each lead in this page
-        for lead in leads:
-            call_script = ""
-            
-            try:
-                if not lead.get('phone_number'):
-                    continue  # Skip if no phone number
+            leads = leads_response['items']
+            if not leads:
+                break  # No more leads to process
                 
-                logger.info(f"Queueing call for lead: {lead['phone_number']}")
+            # Update last_id for next iteration - convert string to UUID if needed
+            last_lead_id = leads[-1]['id']
+            if isinstance(last_lead_id, str):
+                last_id = UUID(last_lead_id)
+            else:
+                last_id = UUID(str(last_lead_id))  # Convert asyncpg UUID to Python UUID
                 
-                insights = await get_or_generate_insights_for_lead(lead)
-
-                if insights:
-                    logger.info(f"Using insights for lead: {lead['phone_number']}")
-
-                    # Generate personalized call script
-                    call_script = await generate_call_script(lead, campaign, company, insights)
+            # Queue records for each lead in this page
+            for lead in leads:
+                call_script = ""
+                
+                try:
+                    if not lead.get('phone_number'):
+                        continue  # Skip if no phone number
                     
-                    logger.info(f"Generated call script for lead: {lead['phone_number']}")
-                    logger.info(f"Call Script: {call_script}")
+                    logger.info(f"Queueing call for lead: {lead['phone_number']}")
+                    
+                    insights = await get_or_generate_insights_for_lead(lead)
 
-                    if call_script:
+                    if insights:
+                        logger.info(f"Using insights for lead: {lead['phone_number']}")
 
-                        # Add to queue
-                        await add_call_to_queue(
-                            company_id=campaign['company_id'],
-                            campaign_id=campaign['id'],
-                            campaign_run_id=campaign_run_id,
-                            lead_id=lead['id'],
-                            call_script=call_script
-                        )
-                        leads_queued += 1
-                        logger.info(f"Call for lead {lead['phone_number']} added to queue")
+                        # Generate personalized call script
+                        call_script = await generate_call_script(lead, campaign, company, insights)
+                        
+                        logger.info(f"Generated call script for lead: {lead['phone_number']}")
+                        logger.info(f"Call Script: {call_script}")
 
-                    else:
-                        logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
-
-                        response = await add_call_to_queue(
+                        if call_script:
+                            # Add to queue
+                            await add_call_to_queue(
                                 company_id=campaign['company_id'],
                                 campaign_id=campaign['id'],
                                 campaign_run_id=campaign_run_id,
                                 lead_id=lead['id'],
                                 call_script=call_script
                             )
+                            leads_queued += 1
+                            logger.info(f"Call for lead {lead['phone_number']} added to queue")
+
+                        else:
+                            logger.error(f"Failed to generate call script for lead: {lead['phone_number']}")
+
+                            response = await add_call_to_queue(
+                                    company_id=campaign['company_id'],
+                                    campaign_id=campaign['id'],
+                                    campaign_run_id=campaign_run_id,
+                                    lead_id=lead['id'],
+                                    call_script=call_script
+                                )
+
+                            await update_call_queue_item_status(
+                                queue_id=UUID(response['id']),
+                                status='failed',
+                                processed_at=datetime.now(timezone.utc),
+                                error_message="Failed to generate call script for lead"
+                            )
+                            
+                            leads_queued += 1
+                            continue
+
+                    else:
+                        #logger.error(f"Failed to generate insights for lead {lead['phone_number']}")
+                        response = await add_call_to_queue(
+                            company_id=campaign['company_id'],
+                            campaign_id=campaign['id'],
+                            campaign_run_id=campaign_run_id,
+                            lead_id=lead['id'],
+                            call_script=call_script
+                        )
 
                         await update_call_queue_item_status(
                             queue_id=UUID(response['id']),
                             status='failed',
                             processed_at=datetime.now(timezone.utc),
-                            error_message="Failed to generate call script for lead"
+                            error_message="Failed to generate insights for lead"
                         )
-                        
+
                         leads_queued += 1
                         continue
 
-                else:
-                    #logger.error(f"Failed to generate insights for lead {lead['phone_number']}")
-                    response = await add_call_to_queue(
-                        company_id=campaign['company_id'],
-                        campaign_id=campaign['id'],
-                        campaign_run_id=campaign_run_id,
-                        lead_id=lead['id'],
-                        call_script=call_script
-                    )
-
-                    await update_call_queue_item_status(
-                        queue_id=UUID(response['id']),
-                        status='failed',
-                        processed_at=datetime.now(timezone.utc),
-                        error_message="Failed to generate insights for lead"
-                    )
-
-                    leads_queued += 1
+                except Exception as e:
+                    logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
                     continue
 
-            except Exception as e:
-                logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
-                continue
+            if not leads_response['has_more']:
+                break
 
-        if not leads_response['has_more']:
-            break
-
-    logger.info(f"Queued {leads_queued} calls for campaign {campaign['id']}")
-
-    # Note: We don't mark the campaign as completed here
-    # It will be done by the queue processor when all calls have been processed
+        logger.info(f"Queued {leads_queued} calls for campaign {campaign['id']}")
+        # Note: We don't mark the campaign as completed here
+        # It will be done by the queue processor when all calls have been processed
+    except Exception as e:
+        logger.error(f"Error in run_call_campaign: {str(e)}")
+        await update_campaign_run_status(
+            campaign_run_id=campaign_run_id,
+            status="failed",
+            failure_reason=f"Campaign execution failed: {str(e)}"
+        )
+        raise
 
 async def verify_bland_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     """Verify the Bland tool secret token"""
