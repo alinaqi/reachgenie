@@ -480,7 +480,7 @@ class StripeService:
             subscription_items = []
             items = stripe.SubscriptionItem.list(subscription=subscription.id)
             for item in items.data:
-                logger.info(f"Subscription item: {item}")
+                #logger.info(f"Subscription item: {item}")
 
                 price = item.price
                 product = stripe.Product.retrieve(price.product)

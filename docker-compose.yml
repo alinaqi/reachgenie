@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -16,6 +18,59 @@ services:
       - supabase_network_outbound_ai_sdr
     #depends_on:
     #  - db
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - supabase_network_outbound_ai_sdr
+
+  celery_worker:
+    build: .
+    #command: celery -A src.celery_app.tasks worker --loglevel=info -n reachgenie_default_worker@%h
+    #This command watches for changes in .py files under the src/ directory and restarts the Celery worker when a change is detected.
+    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- celery -A src.celery_app.tasks worker --loglevel=info -c 1 -n reachgenie_default_worker@%h
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    networks:
+      - supabase_network_outbound_ai_sdr
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower
+    ports:
+      - "5555:5555"
+    environment:
+      # Celery Broker and Backend URLs
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Flower specific configurations
+      - FLOWER_BROKER_API=redis://redis:6379/0
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=admin:password
+      - FLOWER_PERSISTENT=True
+      - FLOWER_DB=/data/flower.db
+      - FLOWER_STATE_SAVE_INTERVAL=30000
+      # Additional Celery configurations
+      - CELERY_TIMEZONE=UTC
+      - CELERY_ACCEPT_CONTENT=json
+      - CELERY_TASK_SERIALIZER=json
+      - CELERY_RESULT_SERIALIZER=json
+    volumes:
+      - flower_data:/data
+    networks:
+      - supabase_network_outbound_ai_sdr
+    restart: unless-stopped
 
 networks:
   supabase_network_outbound_ai_sdr:
@@ -47,3 +102,7 @@ networks:
 
 #volumes:
 #  postgres_data: 
+
+volumes:
+  redis_data: 
+  flower_data:

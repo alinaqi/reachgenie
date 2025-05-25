@@ -108,7 +108,8 @@ from src.database import (
     check_user_access_status,
     check_user_campaign_access,
     has_pending_upload_tasks,
-    create_skipped_row_record
+    create_skipped_row_record,
+    update_campaign_run_celery_task_id
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -1835,7 +1836,6 @@ async def get_campaign(
 @app.post("/api/campaigns/{campaign_id}/run", tags=["Campaigns & Emails"])
 async def run_campaign(
     campaign_id: UUID,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
     try:
@@ -1907,8 +1907,18 @@ async def run_campaign(
             )
         
         logger.info(f"Created campaign run {campaign_run['id']} with {lead_count} leads")
-        # Add campaign execution to background tasks
-        background_tasks.add_task(run_company_campaign, campaign_id, campaign_run['id'])
+        
+        # Replace background_tasks with Celery task
+        from src.celery_app.tasks.run_campaign import celery_run_company_campaign
+        
+        # Queue the task and get the AsyncResult
+        result = celery_run_company_campaign.delay(
+            str(campaign_id), 
+            str(campaign_run['id'])
+        )
+        
+        # Store the Celery task ID immediately
+        await update_campaign_run_celery_task_id(UUID(campaign_run['id']), result.id)
         
         return {"message": "Campaign request initiated successfully"}
     except HTTPException as e:
@@ -2610,11 +2620,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         campaign_run_id=campaign_run_id,
         status="running"
     )
-    
-    await update_campaign_run_progress(
-        campaign_run_id=campaign_run_id,
-        leads_total=total_leads
-    )
 
     # Process leads in pages
     page = 1
@@ -2760,11 +2765,6 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
     await update_campaign_run_status(
         campaign_run_id=campaign_run_id,
         status="running"
-    )
-
-    await update_campaign_run_progress(
-        campaign_run_id=campaign_run_id,
-        leads_total=total_leads
     )
 
     # Process leads in pages

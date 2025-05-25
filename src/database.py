@@ -31,12 +31,21 @@ logging.basicConfig(
 settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
-
 # PostgreSQL connection pool
 pg_pool: Optional[Pool] = None
 
-async def init_pg_pool():
+async def init_pg_pool(force_reinit: bool = False):
     global pg_pool
+    # Force close the old pool if reinitializing
+    if force_reinit and pg_pool is not None:
+        try:
+            await pg_pool.close()
+            logger.info("Closed old PostgreSQL connection pool before reinitialization")
+        except Exception as e:
+            logger.warning(f"Error closing old pool during reinit: {e}")
+
+        pg_pool = None
+    
     if pg_pool is None:
         try:
             pg_pool = await asyncpg.create_pool(
@@ -46,7 +55,7 @@ async def init_pg_pool():
                 host=os.getenv('POSTGRES_HOST'),
                 port=int(os.getenv('POSTGRES_PORT', '5432')),
                 min_size=1,
-                max_size=10
+                max_size=10 # 10 connections
             )
             logger.info("PostgreSQL connection pool initialized successfully")
         except Exception as e:
@@ -56,6 +65,8 @@ async def init_pg_pool():
 async def get_pg_pool() -> Pool:
     if pg_pool is None:
         await init_pg_pool()
+    else:
+        logger.info("Using existing PostgreSQL connection pool")
     return pg_pool
 
 # Constants
@@ -696,28 +707,24 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
 
         pool = await get_pg_pool()
-        
-        if count:
-            # Count query
-            count_sql = """
-                SELECT COUNT(*) 
-                FROM leads l
-                WHERE l.company_id = $1
-                AND l.email IS NOT NULL
-                AND l.email != ''
-                AND l.do_not_contact = false
-                AND l.deleted_at IS NULL
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM email_queue eq
-                    WHERE eq.lead_id::uuid = l.id
-                    AND eq.campaign_id = $2
-                )
-            """
-            async with pool.acquire() as conn:
-                total = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
-                return total
-        
+
+        # Count query
+        count_sql = """
+            SELECT COUNT(*) 
+            FROM leads l
+            WHERE l.company_id = $1
+            AND l.email IS NOT NULL
+            AND l.email != ''
+            AND l.do_not_contact = false
+            AND l.deleted_at IS NULL
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM email_queue eq
+                WHERE eq.lead_id::uuid = l.id
+                AND eq.campaign_id = $2
+            )
+        """
+
         # Full query with pagination
         leads_sql = """
             SELECT l.*
@@ -738,6 +745,12 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
         """
         
         async with pool.acquire() as conn:
+            # Get total count first
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+            
+            if count:
+                return total_count
+            
             # Get paginated results
             leads = await conn.fetch(
                 leads_sql,
@@ -746,9 +759,6 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
                 limit,
                 (page - 1) * limit
             )
-            
-            # Get total count for pagination
-            total_count = await get_leads_with_email(campaign_id, count=True)
             
             # Convert asyncpg.Record objects to dicts
             leads_data = [dict(lead) for lead in leads]
@@ -779,27 +789,23 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
 
         pool = await get_pg_pool()
         
-        if count:
-            # Count query
-            count_sql = """
-                SELECT COUNT(*) 
-                FROM leads l
-                WHERE l.company_id = $1
-                AND l.phone_number IS NOT NULL
-                AND l.phone_number != ''
-                AND l.do_not_contact = false
-                AND l.deleted_at IS NULL
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM call_queue cq
-                    WHERE cq.lead_id::uuid = l.id
-                    AND cq.campaign_id = $2
-                )
-            """
-            async with pool.acquire() as conn:
-                total = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
-                return total
-        
+        # Count query
+        count_sql = """
+            SELECT COUNT(*) 
+            FROM leads l
+            WHERE l.company_id = $1
+            AND l.phone_number IS NOT NULL
+            AND l.phone_number != ''
+            AND l.do_not_contact = false
+            AND l.deleted_at IS NULL
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM call_queue cq
+                WHERE cq.lead_id::uuid = l.id
+                AND cq.campaign_id = $2
+            )
+        """
+
         # Full query with pagination
         leads_sql = """
             SELECT l.*
@@ -820,7 +826,13 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
         """
         
         async with pool.acquire() as conn:
-            # Get paginated results
+            # Get total count first
+            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+            
+            if count:
+                return total_count
+            
+            # Get paginated results using the same connection
             leads = await conn.fetch(
                 leads_sql,
                 str(campaign['company_id']),
@@ -828,9 +840,6 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
                 limit,
                 (page - 1) * limit
             )
-            
-            # Get total count for pagination
-            total_count = await get_leads_with_phone(campaign_id, count=True)
             
             # Convert asyncpg.Record objects to dicts
             leads_data = [dict(lead) for lead in leads]
@@ -4939,3 +4948,28 @@ async def get_upload_task_company_id(upload_task_id: UUID) -> Optional[UUID]:
     except Exception as e:
         logger.error(f"Error in get_upload_task_company_id: {str(e)}")
         raise e
+
+async def update_campaign_run_celery_task_id(campaign_run_id: UUID, celery_task_id: str) -> Optional[Dict]:
+    """
+    Update the celery_task_id of a campaign run
+    
+    Args:
+        campaign_run_id: UUID of the campaign run
+        celery_task_id: Celery task ID to set
+        
+    Returns:
+        Dict containing the updated campaign run record or None if update failed
+    """
+    try:
+        response = supabase.table('campaign_runs').update({
+            'celery_task_id': celery_task_id
+        }).eq('id', str(campaign_run_id)).execute()
+        
+        if not response.data:
+            logger.error(f"Failed to update celery_task_id for campaign run {campaign_run_id}")
+            return None
+            
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating campaign run celery_task_id: {str(e)}")
+        return None
