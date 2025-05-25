@@ -2625,7 +2625,7 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         # Process leads using keyset pagination
         leads_queued = 0
         last_id = None
-        page_size = 50
+        page_size = 2
         
         while True:
             # Get leads for current page
@@ -2639,8 +2639,12 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
             if not leads:
                 break  # No more leads to process
                 
-            # Update last_id for next iteration
-            last_id = UUID(leads[-1]['id'])
+            # Update last_id for next iteration - convert string to UUID if needed
+            last_lead_id = leads[-1]['id']
+            if isinstance(last_lead_id, str):
+                last_id = UUID(last_lead_id)
+            else:
+                last_id = UUID(str(last_lead_id))  # Convert asyncpg UUID to Python UUID
             
             # Queue emails for each lead in this page
             for lead in leads:
