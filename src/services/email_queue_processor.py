@@ -398,7 +398,7 @@ async def process_queued_email(queue_item: dict, company: dict):
             )
             
         except Exception as e:
-            logger.error(f"Error processing email for {lead.get('email')}: {str(e)}")
+            logger.error(f"Error processing email for {lead.get('email')}", exc_info=True)
             
             # Increment retry count
             retry_count = queue_item.get('retry_count', 0) + 1
@@ -440,7 +440,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     .execute()
                     
     except Exception as e:
-        logger.error(f"Error processing queued email {queue_item.get('id')}: {str(e)}")
+        logger.error(f"Error processing queued email {queue_item.get('id')}", exc_info=True)
         
         # Try to mark as failed
         try:
