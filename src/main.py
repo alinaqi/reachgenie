@@ -2701,8 +2701,8 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                                 leads_queued += 1
                                 continue
 
-                            logger.info(f"Generated email content for lead: {lead['email']}")
-                            logger.info(f"Email Subject: {subject}")
+                            #logger.info(f"Generated email content for lead: {lead['email']}")
+                            #logger.info(f"Email Subject: {subject}")
                             # Replace {email_body} placeholder in template with generated body
                             final_body = template.replace("{email_body}", body)
 
