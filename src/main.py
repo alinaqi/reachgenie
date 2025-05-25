@@ -2786,18 +2786,29 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
         status="running"
     )
 
-    # Process leads in pages
-    page = 1
-    page_size = 50
+    # Process leads using keyset pagination
     leads_queued = 0
+    last_id = None
+    page_size = 50
     
     while True:
         # Get leads for current page
-        leads_response = await get_leads_with_phone(campaign['id'], count=False, page=page, limit=page_size)
-        leads = leads_response['items']
+        leads_response = await get_leads_with_phone(
+            campaign_id=campaign['id'],
+            last_id=last_id,
+            limit=page_size
+        )
         
+        leads = leads_response['items']
         if not leads:
             break  # No more leads to process
+            
+        # Update last_id for next iteration - convert string to UUID if needed
+        last_lead_id = leads[-1]['id']
+        if isinstance(last_lead_id, str):
+            last_id = UUID(last_lead_id)
+        else:
+            last_id = UUID(str(last_lead_id))  # Convert asyncpg UUID to Python UUID
             
         # Queue records for each lead in this page
         for lead in leads:
@@ -2877,9 +2888,9 @@ async def run_call_campaign(campaign: dict, company: dict, campaign_run_id: UUID
             except Exception as e:
                 logger.error(f"Failed to process call for {lead.get('phone_number')}: {str(e)}")
                 continue
-        
-        # Move to next page
-        page += 1
+
+        if not leads_response['has_more']:
+            break
 
     logger.info(f"Queued {leads_queued} calls for campaign {campaign['id']}")
 
