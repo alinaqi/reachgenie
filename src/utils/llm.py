@@ -254,7 +254,7 @@ async def fetch_timezone(phone_number: str) -> str:
         )
         
         timezone = response.choices[0].message.content.strip()
-        logger.info(f"Identified timezone {timezone} for phone number {phone_number}")
+        #logger.info(f"Identified timezone {timezone} for phone number {phone_number}")
         return timezone
         
     except Exception as e:
@@ -294,7 +294,7 @@ def convert_to_utc(timezone_str: str, time_str: str) -> Optional[time]:
         utc_dt = local_dt.astimezone(pytz.UTC)
         
         # Return just the time component
-        logger.info(f"Converted time {time_str} from {timezone_str} to UTC: {utc_dt.time()}")
+        #logger.info(f"Converted time {time_str} from {timezone_str} to UTC: {utc_dt.time()}")
         return utc_dt.time()
     except Exception as e:
         logging.error(f"Error converting time {time_str} from {timezone_str} to UTC: {str(e)}")
