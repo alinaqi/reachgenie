@@ -2625,7 +2625,7 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
         # Process leads using keyset pagination
         leads_queued = 0
         last_id = None
-        page_size = 2
+        page_size = 50
         
         while True:
             # Get leads for current page
@@ -2730,8 +2730,6 @@ async def run_email_campaign(campaign: dict, company: dict, campaign_run_id: UUI
                 except Exception as e:
                     logger.error(f"Failed to queue email for {lead.get('email')}: {str(e)}")
                     continue
-                            
-            logger.info(f"Processed {leads_queued}/{total_leads} leads")
             
             if not leads_response['has_more']:
                 break
