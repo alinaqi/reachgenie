@@ -406,7 +406,11 @@ async def process_queued_email(queue_item: dict, company: dict):
             
             if retry_count >= max_retries:
                 # Mark as failed after max retries
-                error_message = e.detail if isinstance(e, HTTPException) else str(e)
+                if isinstance(e, HTTPException) and hasattr(e, 'detail'):
+                    error_message = str(e.detail)
+                else:
+                    error_message = str(e)
+                    
                 await update_queue_item_status(
                     queue_id=UUID(queue_item['id']),
                     status='failed',
@@ -426,7 +430,11 @@ async def process_queued_email(queue_item: dict, company: dict):
                 next_attempt = datetime.now(timezone.utc) + timedelta(minutes=retry_delay)
                 current_time = datetime.now(timezone.utc)
                 
-                error_message = e.detail if isinstance(e, HTTPException) else str(e)
+                if isinstance(e, HTTPException) and hasattr(e, 'detail'):
+                    error_message = str(e.detail)
+                else:
+                    error_message = str(e)
+                    
                 # Update retry count and reschedule
                 supabase.table('email_queue')\
                     .update({
@@ -444,7 +452,11 @@ async def process_queued_email(queue_item: dict, company: dict):
         
         # Try to mark as failed
         try:
-            error_message = e.detail if isinstance(e, HTTPException) else str(e)
+            if isinstance(e, HTTPException) and hasattr(e, 'detail'):
+                error_message = str(e.detail)
+            else:
+                error_message = str(e)
+                
             await update_queue_item_status(
                 queue_id=UUID(queue_item['id']),
                 status='failed',

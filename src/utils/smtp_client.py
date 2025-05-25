@@ -129,28 +129,21 @@ class SMTPClient:
                 await self.smtp.login(self.email, self.password)
             except aiosmtplib.errors.SMTPAuthenticationError as auth_error:
                 if "BadCredentials" in str(auth_error) and self.smtp_server == "smtp.gmail.com":
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=(
-                            f"Original error: {str(auth_error)}\n\n"
-                            "Gmail login failed. If you're using 2-factor authentication, you need to:"
-                            "\n1. Go to your Google Account settings"
-                            "\n2. Enable 2-Step Verification if not already enabled"
-                            "\n3. Generate an App Password (Security → App Passwords)"
-                            "\n4. Use that App Password instead of your regular password"
-                            "\nFor more details: https://support.google.com/accounts/answer/185833"
-                        )
+                    error_msg = (
+                        f"Gmail login failed: {str(auth_error)}\n\n"
+                        "If you're using 2-factor authentication, you need to:\n"
+                        "1. Go to your Google Account settings\n"
+                        "2. Enable 2-Step Verification if not already enabled\n"
+                        "3. Generate an App Password (Security → App Passwords)\n"
+                        "4. Use that App Password instead of your regular password\n"
+                        "For more details: https://support.google.com/accounts/answer/185833"
                     )
+                    raise Exception(error_msg)
                 else:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=f"Authentication failed: {str(auth_error)}"
-                    )
+                    raise Exception(f"Authentication failed: {str(auth_error)}")
             
             logger.info(f"Successfully connected to SMTP server: {self.smtp_server}")
             
-        except HTTPException:
-            raise
         except Exception as e:
             logger.error(f"Failed to connect to SMTP server: {str(e)}")
             if self.smtp:
@@ -159,10 +152,7 @@ class SMTPClient:
                 except:
                     pass
                 self.smtp = None
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to connect to email server: {str(e)}"
-            )
+            raise Exception(str(e))
 
     async def disconnect(self) -> None:
         """
