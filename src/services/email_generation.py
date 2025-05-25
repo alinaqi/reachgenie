@@ -235,7 +235,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         }}
         """
 
-        logger.info(f"Generated Prompt: {prompt}")
+        #logger.info(f"Generated Prompt: {prompt}")
         
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -256,7 +256,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
         content = response.choices[0].message.content.strip()
         email_content = json.loads(content)
         
-        logger.info(f"Generated email content for lead: {lead.get('email')}")
+        #logger.info(f"Generated email content for lead: {lead.get('email')}")
         return email_content["subject"].capitalize(), email_content["body"]
         
     except Exception as e:
