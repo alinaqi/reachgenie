@@ -694,17 +694,32 @@ async def create_email_log(campaign_id: UUID, lead_id: UUID, sent_at: datetime, 
     response = supabase.table('email_logs').insert(log_data).execute()
     return response.data[0]
 
-async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+async def get_leads_with_email(
+    campaign_id: UUID, 
+    count: bool = False, 
+    last_id: Optional[UUID] = None,
+    limit: int = 50
+):
     """
-    Get leads with email addresses for a campaign with pagination support.
+    Get leads with email addresses for a campaign with keyset pagination support.
     Only returns leads that don't have any record in the email_queue table for this campaign.
     Uses native PostgreSQL query for better performance.
+    
+    Args:
+        campaign_id: UUID of the campaign
+        count: If True, return only the count of matching leads
+        last_id: UUID of the last lead from previous page (for pagination)
+        limit: Number of leads to return per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict with leads data and pagination info
     """
     try:
         # First get the campaign to get company_id
         campaign = await get_campaign_by_id(campaign_id)
         if not campaign:
-            return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
+            return 0 if count else {'items': [], 'has_more': False}
 
         pool = await get_pg_pool()
 
@@ -725,7 +740,7 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
             )
         """
 
-        # Full query with pagination
+        # Full query with keyset pagination
         leads_sql = """
             SELECT l.*
             FROM leads l
@@ -740,52 +755,67 @@ async def get_leads_with_email(campaign_id: UUID, count: bool = False, page: int
                 WHERE eq.lead_id::uuid = l.id
                 AND eq.campaign_id = $2
             )
-            ORDER BY l.created_at DESC
-            LIMIT $3 OFFSET $4
         """
         
-        async with pool.acquire() as conn:
-            # Get total count first
-            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+        # Add keyset pagination condition if last_id is provided
+        params = [str(campaign['company_id']), str(campaign_id)]
+        if last_id is not None:
+            leads_sql += " AND l.id > $3"
+            params.append(str(last_id))
             
+        # Add ordering and limit
+        leads_sql += """
+            ORDER BY l.id ASC
+            LIMIT $%d
+        """ % (len(params) + 1)
+        params.append(limit + 1)  # Fetch one extra to determine if there are more results
+        
+        async with pool.acquire() as conn:
             if count:
+                total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
                 return total_count
             
             # Get paginated results
-            leads = await conn.fetch(
-                leads_sql,
-                str(campaign['company_id']),
-                str(campaign_id),
-                limit,
-                (page - 1) * limit
-            )
+            leads = await conn.fetch(leads_sql, *params)
             
-            # Convert asyncpg.Record objects to dicts
+            # Convert to list of dicts
             leads_data = [dict(lead) for lead in leads]
+            
+            # Determine if there are more results
+            has_more = len(leads_data) > limit
+            if has_more:
+                leads_data = leads_data[:limit]  # Remove the extra item we fetched
             
             return {
                 'items': leads_data,
-                'total': total_count,
-                'page': page,
-                'page_size': limit,
-                'total_pages': math.ceil(total_count / limit) if total_count > 0 else 1
+                'has_more': has_more
             }
             
     except Exception as e:
         logger.error(f"Error getting leads with email for campaign {campaign_id}: {str(e)}")
         raise
 
-async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int = 1, limit: int = 50):
+async def get_leads_with_phone(campaign_id: UUID, count: bool = False, last_id: Optional[UUID] = None, limit: int = 50):
     """
-    Get leads with phone numbers for a campaign with pagination support.
+    Get leads with phone numbers for a campaign with keyset pagination support.
     Only returns leads that don't have any record in the call_queue table for this campaign.
     Uses native PostgreSQL query for better performance.
+    
+    Args:
+        campaign_id: UUID of the campaign
+        count: If True, return only the count of matching leads
+        last_id: UUID of the last lead from previous page (for pagination)
+        limit: Number of leads to return per page
+        
+    Returns:
+        If count=True: Total number of leads
+        If count=False: Dict with leads data and pagination info
     """
     try:
         # First get the campaign to get company_id
         campaign = await get_campaign_by_id(campaign_id)
         if not campaign:
-            return 0 if count else {'items': [], 'total': 0, 'page': page, 'page_size': limit, 'total_pages': 0}
+            return 0 if count else {'items': [], 'has_more': False}
 
         pool = await get_pg_pool()
         
@@ -806,7 +836,7 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
             )
         """
 
-        # Full query with pagination
+        # Full query with keyset pagination
         leads_sql = """
             SELECT l.*
             FROM leads l
@@ -821,35 +851,40 @@ async def get_leads_with_phone(campaign_id: UUID, count: bool = False, page: int
                 WHERE cq.lead_id::uuid = l.id
                 AND cq.campaign_id = $2
             )
-            ORDER BY l.created_at DESC
-            LIMIT $3 OFFSET $4
         """
         
-        async with pool.acquire() as conn:
-            # Get total count first
-            total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
+        # Add keyset pagination condition if last_id is provided
+        params = [str(campaign['company_id']), str(campaign_id)]
+        if last_id is not None:
+            leads_sql += " AND l.id > $3"
+            params.append(str(last_id))
             
+        # Add ordering and limit
+        leads_sql += """
+            ORDER BY l.id ASC
+            LIMIT $%d
+        """ % (len(params) + 1)
+        params.append(limit + 1)  # Fetch one extra to determine if there are more results
+        
+        async with pool.acquire() as conn:
             if count:
+                total_count = await conn.fetchval(count_sql, str(campaign['company_id']), str(campaign_id))
                 return total_count
             
-            # Get paginated results using the same connection
-            leads = await conn.fetch(
-                leads_sql,
-                str(campaign['company_id']),
-                str(campaign_id),
-                limit,
-                (page - 1) * limit
-            )
+            # Get paginated results
+            leads = await conn.fetch(leads_sql, *params)
             
-            # Convert asyncpg.Record objects to dicts
+            # Convert to list of dicts
             leads_data = [dict(lead) for lead in leads]
+            
+            # Determine if there are more results
+            has_more = len(leads_data) > limit
+            if has_more:
+                leads_data = leads_data[:limit]  # Remove the extra item we fetched
             
             return {
                 'items': leads_data,
-                'total': total_count,
-                'page': page,
-                'page_size': limit,
-                'total_pages': math.ceil(total_count / limit) if total_count > 0 else 1
+                'has_more': has_more
             }
             
     except Exception as e:
