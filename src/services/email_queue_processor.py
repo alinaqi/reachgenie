@@ -398,7 +398,7 @@ async def process_queued_email(queue_item: dict, company: dict):
             )
             
         except Exception as e:
-            logger.error(f"Error processing email for {lead.get('email')}", exc_info=True)
+            logger.error(f"Error processing email for {lead.get('email')}")
             
             # Increment retry count
             retry_count = queue_item.get('retry_count', 0) + 1
@@ -408,8 +408,10 @@ async def process_queued_email(queue_item: dict, company: dict):
                 # Mark as failed after max retries
                 if isinstance(e, HTTPException) and hasattr(e, 'detail'):
                     error_message = str(e.detail)
+                    logger.error(f"Error message HTTPException that is going to be stored in the database: {error_message}")
                 else:
                     error_message = str(e)
+                    logger.error(f"Error message Exception that is going to be stored in the database: {error_message}") 
                     
                 await update_queue_item_status(
                     queue_id=UUID(queue_item['id']),
@@ -432,8 +434,10 @@ async def process_queued_email(queue_item: dict, company: dict):
                 
                 if isinstance(e, HTTPException) and hasattr(e, 'detail'):
                     error_message = str(e.detail)
+                    logger.error(f"Error message HTTPException that is going to be stored in the database: {error_message}")
                 else:
                     error_message = str(e)
+                    logger.error(f"Error message Exception that is going to be stored in the database: {error_message}")
                     
                 # Update retry count and reschedule
                 supabase.table('email_queue')\
@@ -448,7 +452,7 @@ async def process_queued_email(queue_item: dict, company: dict):
                     .execute()
                     
     except Exception as e:
-        logger.error(f"Error processing queued email {queue_item.get('id')}", exc_info=True)
+        logger.error(f"Error processing queued email {queue_item.get('id')}")
         
         # Try to mark as failed
         try:
