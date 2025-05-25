@@ -177,7 +177,7 @@ class PerplexityService:
                     if result and "choices" in result and result["choices"]:
                         try:
                             content = result["choices"][0]["message"]["content"]
-                            logger.info(f"Raw content from Perplexity: {content}")
+                            #logger.info(f"Raw content from Perplexity: {content}")
                             
                             # Enhanced content cleaning
                             content = content.strip()
@@ -196,7 +196,7 @@ class PerplexityService:
                             # Remove any newlines or extra spaces at the start of lines
                             json_str = '\n'.join(line.strip() for line in json_str.splitlines())
                             
-                            logger.info(f"Cleaned JSON string: {json_str}")
+                            #logger.info(f"Cleaned JSON string: {json_str}")
                             
                             # Parse the JSON
                             insights_dict = json.loads(json_str)
