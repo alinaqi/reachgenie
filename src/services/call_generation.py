@@ -133,7 +133,7 @@ async def generate_call_script(lead: dict, campaign: dict, company: dict, insigh
         Do not include any JSON formatting or other markup.
         """
 
-        logger.info(f"Generated Prompt: {prompt}")
+        #logger.info(f"Generated Prompt: {prompt}")
         
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
