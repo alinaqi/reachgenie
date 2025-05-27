@@ -18,18 +18,21 @@ celery_app.conf.update(
     timezone='UTC',
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=10800,  # 3 hour timeout
-    task_soft_time_limit=10740,  # 2 hours and 59 minutes soft timeout
+    task_time_limit=57600,  # 16 hour timeout
+    task_soft_time_limit=57540,  # 15 hours and 59 minutes soft timeout
     worker_prefetch_multiplier=1,  # Process one task at a time
     task_acks_late=True,  # Tasks are acknowledged after completion
     
     # Redis key prefix settings
     redis_backend_use_ssl=False,  # Set to True if using SSL
     task_default_queue='reachgenie:normal',  # Default queue for tasks. We have added prefix "reachgenie:" because the queue_name_prefix setting is not working
+    visibility_timeout=57600,  # Match task_time_limit (16 hours)
     broker_transport_options={
-        'queue_name_prefix': 'reachgenie:'  # Prefix for all Redis queue keys
+        'queue_name_prefix': 'reachgenie:',  # Prefix for all Redis queue keys
+        'visibility_timeout': 57600  # Match task_time_limit (16 hours)
     },
     result_backend_transport_options={
-        'global_keyprefix': 'reachgenie:'  # Prefix for result backend keys
+        'global_keyprefix': 'reachgenie:',  # Prefix for result backend keys
+        'visibility_timeout': 57600  # Match task_time_limit (16 hours)
     }
 ) 
