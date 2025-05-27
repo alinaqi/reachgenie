@@ -408,10 +408,10 @@ async def process_queued_email(queue_item: dict, company: dict):
                 # Mark as failed after max retries
                 if isinstance(e, HTTPException) and hasattr(e, 'detail'):
                     error_message = str(e.detail)
-                    logger.error(f"Error message HTTPException that is going to be stored in the database: {error_message}")
+                    logger.error(f"Error HTTPException: {error_message}")
                 else:
                     error_message = str(e)
-                    logger.error(f"Error message Exception that is going to be stored in the database: {error_message}") 
+                    logger.error(f"Error Exception: {error_message}") 
                     
                 await update_queue_item_status(
                     queue_id=UUID(queue_item['id']),
@@ -434,10 +434,10 @@ async def process_queued_email(queue_item: dict, company: dict):
                 
                 if isinstance(e, HTTPException) and hasattr(e, 'detail'):
                     error_message = str(e.detail)
-                    logger.error(f"Error message HTTPException that is going to be stored in the database: {error_message}")
+                    logger.error(f"Error HTTPException: {error_message}")
                 else:
                     error_message = str(e)
-                    logger.error(f"Error message Exception that is going to be stored in the database: {error_message}")
+                    logger.error(f"Error Exception: {error_message}")
                     
                 # Update retry count and reschedule
                 supabase.table('email_queue')\
