@@ -2124,6 +2124,7 @@ async def process_leads_upload(
         
         # Download file from Supabase
         try:
+            logger.info(f"Downloading file from Supabase: {file_url}")
             storage = supabase.storage.from_("leads-uploads")
             response = storage.download(file_url)
             if not response:
@@ -2190,14 +2191,14 @@ async def process_leads_upload(
             # Create a mapping from numbered columns to actual header names
             column_to_header = {str(i): headers_row[str(i)] for i in range(1, len(headers_row) + 1)}
             actual_headers = list(column_to_header.values())
-            print("\nDetected numbered columns. Column to header mapping:")
-            print(column_to_header)
+            #print("\nDetected numbered columns. Column to header mapping:")
+            #print(column_to_header)
         else:
             # For regular headers, use them directly
             actual_headers = headers
             column_to_header = {header: header for header in headers}
-            print("\nDetected regular headers:")
-            print(actual_headers)
+            #print("\nDetected regular headers:")
+            #print(actual_headers)
         
         # Create a prompt to map headers
         prompt = f"""Map the following CSV headers to our database fields. Return a JSON object where keys are the CSV headers and values are the corresponding database field names.
@@ -2276,8 +2277,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         
         try:
             header_mapping = json.loads(response.choices[0].message.content.strip())
-            print("\nHeader mapping results:")
-            print(header_mapping)
+            #print("\nHeader mapping results:")
+            #print(header_mapping)
             
             if is_numbered_columns:
                 # For numbered columns, map from number to db field via header
@@ -2287,8 +2288,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 # For regular headers, map directly
                 column_to_db_field = header_mapping
                 
-            print("\nColumn to database field mapping:")
-            print(column_to_db_field)
+            logger.info("\nColumn to database field mapping:")
+            logger.info(column_to_db_field)
             
         except json.JSONDecodeError:
             await update_task_status(task_id, "failed", "Failed to parse header mapping")
@@ -2299,8 +2300,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             lead_data = {}
             
             # Debug print raw row data
-            print("\nProcessing row:")
-            print(row)
+            #print("\nProcessing row:")
+            #print(row)
             
             # Map CSV data to database fields using the column mapping
             for col, db_field in column_to_db_field.items():
@@ -2327,10 +2328,10 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                             lead_data[db_field] = value
             
             # Add raw data for debugging
-            print("\nRaw row data:")
-            print(row)
-            print("\nMapped lead_data before name handling:")
-            print(lead_data)
+            #print("\nRaw row data:")
+            #print(row)
+            #print("\nMapped lead_data before name handling:")
+            #print(lead_data)
             
             # Handle name fields - directly set name if it exists in row
             if 'name' in row and row['name'].strip():
@@ -2365,8 +2366,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
 
             # Skip if required fields are missing
             if not lead_data.get('name'):
-                print("\nSkipping record - missing required field: name")
-                logger.info(f"Skipping record due to missing name: {row}")
+                #logger.info(f"Skipping record due to missing name: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_name",
@@ -2382,8 +2382,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 email_info = validate_email(email, check_deliverability=False)
                 lead_data['email'] = email_info.normalized
             except EmailNotValidError as e:
-                logger.info(f"Skipping record - invalid email format: {email}")
-                logger.info(f"Email validation error: {str(e)}")
+                #logger.info(f"Skipping record - invalid email format: {email}")
+                #logger.info(f"Email validation error: {str(e)}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_email",
@@ -2406,8 +2406,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             
             # If no valid phone number found in any field
             if not phone_number:
-                logger.info(f"Skipping record - no valid phone number found in any field")
-                logger.info(f"Invalid phone numbers in record: {row}")
+                #logger.info(f"Skipping record - no valid phone number found in any field")
+                #logger.info(f"Invalid phone numbers in record: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_phone",
@@ -2421,8 +2421,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
 
             # Skip if either company or website is missing
             if not lead_data.get('company') or not lead_data.get('website'):
-                logger.info(f"Skipping record - missing required field: company or website")
-                logger.info(f"Skipping record due to missing company or website: {row}")
+                #logger.info(f"Skipping record - missing required field: company or website")
+                #logger.info(f"Skipping record due to missing company or website: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_company_name_or_website",
@@ -2475,11 +2475,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             
             # Create the lead
             try:
-                print("\nFinal lead_data before database insert:")
-                print(lead_data)
+                #print("\nFinal lead_data before database insert:")
+                #print(lead_data)
                 created_lead = await create_lead(company_id, lead_data, task_id)
-                print("\nCreated lead response:")
-                print(created_lead)
+                #print("\nCreated lead response:")
+                #print(created_lead)
                 lead_count += 1
                 
                 # Get complete lead data
