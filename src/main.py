@@ -1056,10 +1056,10 @@ async def upload_leads(
             str(task_id)
         )
 
-        # Update the task with celery task ID
+        # Update only the celery task ID
         await update_task_status(
             task_id=task_id,
-            status="pending",
+            status=None,  # Don't update status
             result=None,
             celery_task_id=result.id
         )
