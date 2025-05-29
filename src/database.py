@@ -5013,3 +5013,24 @@ async def update_campaign_run_celery_task_id(campaign_run_id: UUID, celery_task_
     except Exception as e:
         logger.error(f"Error updating campaign run celery_task_id: {str(e)}")
         return None
+
+async def delete_skipped_rows_by_task(upload_task_id: UUID) -> bool:
+    """
+    Delete all skipped rows for a specific upload task.
+    
+    Args:
+        upload_task_id (UUID): ID of the upload task
+        
+    Returns:
+        bool: True if deletion was successful, False otherwise
+    """
+    try:
+        response = supabase.table('skipped_rows')\
+            .delete()\
+            .eq('upload_task_id', str(upload_task_id))\
+            .execute()
+            
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting skipped rows for task {upload_task_id}: {str(e)}")
+        return False
