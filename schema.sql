@@ -393,6 +393,7 @@ CREATE TABLE IF NOT EXISTS upload_tasks (
     type TEXT NOT NULL DEFAULT 'leads' CHECK (type IN ('leads', 'do_not_email')),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     result TEXT,
+    celery_task_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE
 );
@@ -408,6 +409,7 @@ COMMENT ON TABLE upload_tasks IS 'Tracks lead upload tasks and their progress';
 COMMENT ON COLUMN upload_tasks.file_url IS 'Storage URL where the uploaded file is stored';
 COMMENT ON COLUMN upload_tasks.file_name IS 'Original name of the uploaded file';
 COMMENT ON COLUMN upload_tasks.type IS 'Type of upload task: leads (for lead CSV uploads) or do_not_email (for do not contact list uploads)';
+COMMENT ON COLUMN upload_tasks.celery_task_id IS 'ID of the Celery task that is processing this upload task';
 
 -- Skipped Rows table
 CREATE TABLE IF NOT EXISTS skipped_rows (
