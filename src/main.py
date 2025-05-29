@@ -2488,7 +2488,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 logger.error(f"Lead data that failed: {lead_data}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
-                    category="lead_creation_error",
+                    category=f"lead_creation_error: {str(e)}",
                     row_data=row
                 )
                 skipped_count += 1
