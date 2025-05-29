@@ -17,7 +17,7 @@ from src.database import (
     remove_from_do_not_email_list,
     is_email_in_do_not_email_list,
     create_upload_task,
-    process_do_not_email_csv_upload
+    update_task_status
 )
 from src.auth import get_current_user
 from src.config import get_settings
@@ -134,14 +134,13 @@ async def check_do_not_email_status(
 
 @companies_router.post("/{company_id}/do-not-email/upload", response_model=TaskResponse)
 async def upload_do_not_email_list(
-    background_tasks: BackgroundTasks,
     company_id: UUID,
     current_user: dict = Depends(get_current_user),
     file: UploadFile = File(...)
 ):
     """
     Upload email addresses from CSV file to add to the Do Not Email list.
-    The processing will be done in the background.
+    The processing will be done using a Celery task.
     """
     # Validate company access
     user_company_profile = await get_user_company_profile(current_user['id'], company_id)
@@ -187,13 +186,20 @@ async def upload_do_not_email_list(
             type='do_not_email'
         )
         
-        # Add background task
-        background_tasks.add_task(
-            process_do_not_email_csv_upload,
-            company_id,
-            file_name,
-            current_user["id"],
-            task_id
+        # Queue the Celery task
+        from src.celery_app.tasks.process_do_not_contact import celery_process_do_not_contact
+        result = celery_process_do_not_contact.delay(
+            company_id=str(company_id),
+            file_url=file_name,
+            user_id=str(current_user["id"]),
+            task_id=str(task_id)
+        )
+        # Update only the celery task ID
+        await update_task_status(
+            task_id=task_id,
+            status=None,  # Don't update status
+            result=None,
+            celery_task_id=result.id
         )
         
         return TaskResponse(
