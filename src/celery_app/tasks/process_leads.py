@@ -9,7 +9,7 @@ from src.database import get_task_status
 
 logger = logging.getLogger(__name__)
 
-async def _async_process_leads(company_id: str, file_url: str, user_id: str, task_id: str, celery_task_id: str):
+async def _async_process_leads(company_id: str, file_url: str, user_id: str, task_id: str):
     try:
         # Check if task is already completed
         task = await get_task_status(UUID(task_id))
@@ -46,7 +46,7 @@ def celery_process_leads(self, company_id: str, file_url: str, user_id: str, tas
         
         try:
             # Your Celery task creates a new event loop each time it runs _async_process_leads
-            result = loop.run_until_complete(_async_process_leads(company_id, file_url, user_id, task_id, self.request.id))
+            result = loop.run_until_complete(_async_process_leads(company_id, file_url, user_id, task_id))
             
             logger.info(f"Leads processing task: {task_id} completed successfully")
             return result
