@@ -3685,7 +3685,7 @@ async def get_company_campaign_runs(
     # Get paginated campaign runs
     return await get_campaign_runs(company_id, campaign_id, page_number, limit)
 
-@app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"])
+@app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"], deprecated=True)
 async def run_test_campaign(
     campaign_id: UUID,
     campaign: TestRunCampaignRequest,
