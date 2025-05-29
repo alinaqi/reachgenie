@@ -5,11 +5,26 @@ from celery.exceptions import Ignore, SoftTimeLimitExceeded
 import logging
 from ..config import celery_app
 from src.main import process_leads_upload
+from src.database import get_task_status
 
 logger = logging.getLogger(__name__)
 
 async def _async_process_leads(company_id: str, file_url: str, user_id: str, task_id: str, celery_task_id: str):
-    return await process_leads_upload(UUID(company_id), file_url, UUID(user_id), UUID(task_id))
+    try:
+        # Check if task is already completed
+        task = await get_task_status(UUID(task_id))
+        if task and task['status'] in ['completed', 'failed']:
+            logger.info(f"Task {task_id} already processed with status: {task['status']}")
+            return {
+                'status': task['status'],
+                'task_id': task_id,
+                'result': task.get('result')
+            }
+
+        return await process_leads_upload(UUID(company_id), file_url, UUID(user_id), UUID(task_id))
+    except Exception as e:
+        logger.error(f"Error in _async_process_leads: {str(e)}")
+        raise
 
 @celery_app.task(
     name='reachgenie.tasks.process_leads',
