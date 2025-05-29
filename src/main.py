@@ -109,7 +109,8 @@ from src.database import (
     check_user_campaign_access,
     has_pending_upload_tasks,
     create_skipped_row_record,
-    update_campaign_run_celery_task_id
+    update_campaign_run_celery_task_id,
+    delete_skipped_rows_by_task
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -2108,11 +2109,14 @@ async def process_leads_upload(
     task_id: UUID
 ):
     try:
+        # Delete existing skipped rows for this task to make it idempotent
+        await delete_skipped_rows_by_task(task_id)
+        
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
             settings.supabase_url,
-            settings.SUPABASE_SERVICE_KEY  # Use service role key
+            settings.SUPABASE_SERVICE_KEY
         )
         
         # Update task status to processing
