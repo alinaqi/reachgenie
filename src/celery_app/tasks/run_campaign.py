@@ -13,6 +13,8 @@ from celery.exceptions import SoftTimeLimitExceeded
 logger = logging.getLogger(__name__)
 
 async def _async_run_campaign(campaign_id: str, campaign_run_id: str, celery_task_id: str):
+    
+    # pg_pool variable and init_pg_pool calls are only needed if you are using direct calls to postgres using asyncpg from your task
     global pg_pool
     # Force a clean start to avoid inherited pool across fork
     await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new asyncpg pool for every task run
@@ -51,10 +53,14 @@ async def _async_run_campaign(campaign_id: str, campaign_run_id: str, celery_tas
     max_retries=3,
     default_retry_delay=60 # 60 seconds
 )
-def celery_run_company_campaign(self, campaign_id: str, campaign_run_id: str):
+def celery_run_company_campaign(self, *, campaign_id: str, campaign_run_id: str):
     """
     Celery task that wraps the async run_company_campaign function.
     Handles the conversion between string and UUID, and manages the event loop.
+    
+    Args:
+        campaign_id: UUID string of the campaign to run
+        campaign_run_id: UUID string of the campaign run
     """
     try:
         logger.info(f"Starting campaign task for campaign_id: {campaign_id}, run_id: {campaign_run_id}")

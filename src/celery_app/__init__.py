@@ -1,4 +1,4 @@
 from .config import celery_app
-from .tasks import celery_run_company_campaign
+from .tasks import celery_run_company_campaign, celery_process_leads
 
-__all__ = ['celery_app', 'celery_run_company_campaign'] 
+__all__ = ['celery_app', 'celery_run_company_campaign', 'celery_process_leads'] 

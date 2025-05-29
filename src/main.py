@@ -109,7 +109,8 @@ from src.database import (
     check_user_campaign_access,
     has_pending_upload_tasks,
     create_skipped_row_record,
-    update_campaign_run_celery_task_id
+    update_campaign_run_celery_task_id,
+    delete_skipped_rows_by_task
 )
 from src.ai_services.anthropic_service import AnthropicService
 from src.services.email_service import email_service
@@ -978,42 +979,37 @@ async def delete_company(
 # Lead Management endpoints
 @app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse, tags=["Leads"])
 async def upload_leads(
-    background_tasks: BackgroundTasks,
     company_id: UUID,
     current_user: dict = Depends(get_current_user),
     file: UploadFile = File(...)
 ):
     """
     Upload leads from CSV file. The processing will be done in the background.
-    
+    The file will be processed asynchronously using a Celery task.
+
     Args:
-        background_tasks: FastAPI background tasks
         company_id: UUID of the company
         current_user: Current authenticated user
         file: CSV file containing lead data
-        
     Returns:
         Task ID for tracking the upload progress
     """
-
-    # Get company details
-    company = await get_company_by_id(company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    # Check if the company owner user is on an active subscription, or has a trial that is still valid
-    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
-    
-    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
-    if not has_access:
-        raise HTTPException(status_code=403, detail=error_message)
-
-    # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    
     try:
+        # Get company details
+        company = await get_company_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if the company owner user is on an active subscription, or has a trial that is still valid
+        has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
+        # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+        if not has_access:
+            raise HTTPException(status_code=403, detail=error_message)
+        # Validate company access
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+            raise HTTPException(status_code=403, detail="Not authorized to access this company")
+
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
@@ -1051,23 +1047,30 @@ async def upload_leads(
             file_name=file.filename,
             type='leads'
         )
-        
-        # Add background task
-        background_tasks.add_task(
-            process_leads_upload,
-            company_id,
-            file_name,
-            current_user["id"],
-            task_id
+
+        # Queue the Celery task
+        from src.celery_app.tasks.process_leads import celery_process_leads
+        result = celery_process_leads.delay(
+            company_id=str(company_id),
+            file_url=file_name,
+            user_id=str(current_user["id"]),
+            task_id=str(task_id)
         )
-        
+
+        # Update only the celery task ID
+        await update_task_status(
+            task_id=task_id,
+            status=None,  # Don't update status
+            result=None,
+            celery_task_id=result.id
+        )
+
         return TaskResponse(
             task_id=task_id,
             message="File upload started. Use the task ID to check the status."
         )
-        
     except Exception as e:
-        logger.error(f"Error starting leads upload: {str(e)}")
+        logger.error(f"Error in upload_leads: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/companies/{company_id}/leads", response_model=PaginatedLeadResponse, tags=["Leads"])
@@ -1913,8 +1916,8 @@ async def run_campaign(
         
         # Queue the task and get the AsyncResult
         result = celery_run_company_campaign.delay(
-            str(campaign_id), 
-            str(campaign_run['id'])
+            campaign_id=str(campaign_id), 
+            campaign_run_id=str(campaign_run['id'])
         )
         
         # Store the Celery task ID immediately
@@ -2106,11 +2109,14 @@ async def process_leads_upload(
     task_id: UUID
 ):
     try:
+        # Delete existing skipped rows for this task to make it idempotent
+        await delete_skipped_rows_by_task(task_id)
+        
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
             settings.supabase_url,
-            settings.SUPABASE_SERVICE_KEY  # Use service role key
+            settings.SUPABASE_SERVICE_KEY
         )
         
         # Update task status to processing
@@ -2118,6 +2124,7 @@ async def process_leads_upload(
         
         # Download file from Supabase
         try:
+            logger.info(f"Downloading file from Supabase: {file_url}")
             storage = supabase.storage.from_("leads-uploads")
             response = storage.download(file_url)
             if not response:
@@ -2184,14 +2191,14 @@ async def process_leads_upload(
             # Create a mapping from numbered columns to actual header names
             column_to_header = {str(i): headers_row[str(i)] for i in range(1, len(headers_row) + 1)}
             actual_headers = list(column_to_header.values())
-            print("\nDetected numbered columns. Column to header mapping:")
-            print(column_to_header)
+            #print("\nDetected numbered columns. Column to header mapping:")
+            #print(column_to_header)
         else:
             # For regular headers, use them directly
             actual_headers = headers
             column_to_header = {header: header for header in headers}
-            print("\nDetected regular headers:")
-            print(actual_headers)
+            #print("\nDetected regular headers:")
+            #print(actual_headers)
         
         # Create a prompt to map headers
         prompt = f"""Map the following CSV headers to our database fields. Return a JSON object where keys are the CSV headers and values are the corresponding database field names.
@@ -2270,8 +2277,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
         
         try:
             header_mapping = json.loads(response.choices[0].message.content.strip())
-            print("\nHeader mapping results:")
-            print(header_mapping)
+            #print("\nHeader mapping results:")
+            #print(header_mapping)
             
             if is_numbered_columns:
                 # For numbered columns, map from number to db field via header
@@ -2281,20 +2288,23 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 # For regular headers, map directly
                 column_to_db_field = header_mapping
                 
-            print("\nColumn to database field mapping:")
-            print(column_to_db_field)
+            #logger.info("\nColumn to database field mapping:")
+            #logger.info(column_to_db_field)
             
         except json.JSONDecodeError:
             await update_task_status(task_id, "failed", "Failed to parse header mapping")
             return
         
         # Process each row
+        row_counter = 0
         for row in csv_data:
+            row_counter += 1
+            logger.info(f"Processing lead {row_counter}")
             lead_data = {}
             
             # Debug print raw row data
-            print("\nProcessing row:")
-            print(row)
+            #print("\nProcessing row:")
+            #print(row)
             
             # Map CSV data to database fields using the column mapping
             for col, db_field in column_to_db_field.items():
@@ -2321,10 +2331,10 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                             lead_data[db_field] = value
             
             # Add raw data for debugging
-            print("\nRaw row data:")
-            print(row)
-            print("\nMapped lead_data before name handling:")
-            print(lead_data)
+            #print("\nRaw row data:")
+            #print(row)
+            #print("\nMapped lead_data before name handling:")
+            #print(lead_data)
             
             # Handle name fields - directly set name if it exists in row
             if 'name' in row and row['name'].strip():
@@ -2359,8 +2369,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
 
             # Skip if required fields are missing
             if not lead_data.get('name'):
-                print("\nSkipping record - missing required field: name")
-                logger.info(f"Skipping record due to missing name: {row}")
+                #logger.info(f"Skipping record due to missing name: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_name",
@@ -2376,8 +2385,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 email_info = validate_email(email, check_deliverability=False)
                 lead_data['email'] = email_info.normalized
             except EmailNotValidError as e:
-                logger.info(f"Skipping record - invalid email format: {email}")
-                logger.info(f"Email validation error: {str(e)}")
+                #logger.info(f"Skipping record - invalid email format: {email}")
+                #logger.info(f"Email validation error: {str(e)}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_email",
@@ -2400,8 +2409,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             
             # If no valid phone number found in any field
             if not phone_number:
-                logger.info(f"Skipping record - no valid phone number found in any field")
-                logger.info(f"Invalid phone numbers in record: {row}")
+                #logger.info(f"Skipping record - no valid phone number found in any field")
+                #logger.info(f"Invalid phone numbers in record: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="invalid_phone",
@@ -2415,8 +2424,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
 
             # Skip if either company or website is missing
             if not lead_data.get('company') or not lead_data.get('website'):
-                logger.info(f"Skipping record - missing required field: company or website")
-                logger.info(f"Skipping record due to missing company or website: {row}")
+                #logger.info(f"Skipping record - missing required field: company or website")
+                #logger.info(f"Skipping record due to missing company or website: {row}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
                     category="missing_company_name_or_website",
@@ -2469,11 +2478,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             
             # Create the lead
             try:
-                print("\nFinal lead_data before database insert:")
-                print(lead_data)
+                #print("\nFinal lead_data before database insert:")
+                #print(lead_data)
                 created_lead = await create_lead(company_id, lead_data, task_id)
-                print("\nCreated lead response:")
-                print(created_lead)
+                #print("\nCreated lead response:")
+                #print(created_lead)
                 lead_count += 1
                 
                 # Get complete lead data
@@ -2488,7 +2497,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 logger.error(f"Lead data that failed: {lead_data}")
                 await create_skipped_row_record(
                     upload_task_id=task_id,
-                    category="lead_creation_error",
+                    category=f"lead_creation_error: {str(e)}",
                     row_data=row
                 )
                 skipped_count += 1
@@ -3676,7 +3685,7 @@ async def get_company_campaign_runs(
     # Get paginated campaign runs
     return await get_campaign_runs(company_id, campaign_id, page_number, limit)
 
-@app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"])
+@app.post("/api/campaigns/{campaign_id}/test-run", tags=["Campaigns & Emails"], deprecated=True)
 async def run_test_campaign(
     campaign_id: UUID,
     campaign: TestRunCampaignRequest,
