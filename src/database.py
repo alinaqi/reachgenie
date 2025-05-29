@@ -3304,6 +3304,9 @@ async def process_do_not_email_csv_upload(
         task_id: UUID of the upload task
     """
     try:
+        # Delete existing skipped rows for this task to make it idempotent
+        await delete_skipped_rows_by_task(task_id)
+        
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
