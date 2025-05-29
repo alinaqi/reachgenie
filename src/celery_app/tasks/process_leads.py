@@ -32,10 +32,16 @@ async def _async_process_leads(company_id: str, file_url: str, user_id: str, tas
     max_retries=3,
     default_retry_delay=60  # 60 seconds
 )
-def celery_process_leads(self, company_id: str, file_url: str, user_id: str, task_id: str):
+def celery_process_leads(self, *, company_id: str, file_url: str, user_id: str, task_id: str):
     """
     Celery task that wraps the async process_leads_upload function.
     Handles the conversion between string and UUID, and manages the event loop.
+    
+    Args:
+        company_id: UUID string of the company
+        file_url: URL of the uploaded file in storage
+        user_id: UUID string of the user who initiated the upload
+        task_id: UUID string of the upload task
     """
     try:
         logger.info(f"Starting leads processing task for company_id: {company_id}, task_id: {task_id}")

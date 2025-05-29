@@ -1050,10 +1050,10 @@ async def upload_leads(
         # Queue the Celery task
         from src.celery_app.tasks.process_leads import celery_process_leads
         result = celery_process_leads.delay(
-            str(company_id),
-            file_name,
-            str(current_user["id"]),
-            str(task_id)
+            company_id=str(company_id),
+            file_url=file_name,
+            user_id=str(current_user["id"]),
+            task_id=str(task_id)
         )
 
         # Update only the celery task ID
