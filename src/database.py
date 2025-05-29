@@ -1134,13 +1134,17 @@ async def create_upload_task(task_id: UUID, company_id: UUID, user_id: UUID, fil
     response = supabase.table('upload_tasks').insert(data).execute()
     return response.data[0] if response.data else None
 
-async def update_task_status(task_id: UUID, status: str, result: str = None):
-    """Update task status and result"""
+async def update_task_status(task_id: UUID, status: str, result: str = None, celery_task_id: str = None):
+    """Update task status, result and celery_task_id"""
     data = {
         'status': status,
-        'result': result,
         'updated_at': datetime.now().isoformat()
     }
+    if result is not None:
+        data['result'] = result
+    if celery_task_id is not None:
+        data['celery_task_id'] = celery_task_id
+
     response = supabase.table('upload_tasks').update(data).eq('id', str(task_id)).execute()
     return response.data[0] if response.data else None
 
