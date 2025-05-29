@@ -2288,8 +2288,8 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 # For regular headers, map directly
                 column_to_db_field = header_mapping
                 
-            logger.info("\nColumn to database field mapping:")
-            logger.info(column_to_db_field)
+            #logger.info("\nColumn to database field mapping:")
+            #logger.info(column_to_db_field)
             
         except json.JSONDecodeError:
             await update_task_status(task_id, "failed", "Failed to parse header mapping")
