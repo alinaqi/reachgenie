@@ -2296,7 +2296,10 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
             return
         
         # Process each row
+        row_counter = 0
         for row in csv_data:
+            row_counter += 1
+            logger.info(f"Processing lead {row_counter}")
             lead_data = {}
             
             # Debug print raw row data
