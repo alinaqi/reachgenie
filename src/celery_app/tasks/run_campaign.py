@@ -13,6 +13,8 @@ from celery.exceptions import SoftTimeLimitExceeded
 logger = logging.getLogger(__name__)
 
 async def _async_run_campaign(campaign_id: str, campaign_run_id: str, celery_task_id: str):
+    
+    # pg_pool variable and init_pg_pool calls are only needed if you are using direct calls to postgres using asyncpg from your task
     global pg_pool
     # Force a clean start to avoid inherited pool across fork
     await init_pg_pool(force_reinit=True) # Add this for every task because we need to create a new asyncpg pool for every task run
