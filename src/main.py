@@ -978,42 +978,37 @@ async def delete_company(
 # Lead Management endpoints
 @app.post("/api/companies/{company_id}/leads/upload", response_model=TaskResponse, tags=["Leads"])
 async def upload_leads(
-    background_tasks: BackgroundTasks,
     company_id: UUID,
     current_user: dict = Depends(get_current_user),
     file: UploadFile = File(...)
 ):
     """
     Upload leads from CSV file. The processing will be done in the background.
-    
+    The file will be processed asynchronously using a Celery task.
+
     Args:
-        background_tasks: FastAPI background tasks
         company_id: UUID of the company
         current_user: Current authenticated user
         file: CSV file containing lead data
-        
     Returns:
         Task ID for tracking the upload progress
     """
-
-    # Get company details
-    company = await get_company_by_id(company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    # Check if the company owner user is on an active subscription, or has a trial that is still valid
-    has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
-    
-    # if user is neither on an active subscription, nor has a trial that is still valid, return an error
-    if not has_access:
-        raise HTTPException(status_code=403, detail=error_message)
-
-    # Validate company access
-    companies = await get_companies_by_user_id(current_user["id"])
-    if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
-        raise HTTPException(status_code=404, detail="Company not found")
-    
     try:
+        # Get company details
+        company = await get_company_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if the company owner user is on an active subscription, or has a trial that is still valid
+        has_access, error_message = await check_user_access_status(UUID(company["user_id"]))
+        # if user is neither on an active subscription, nor has a trial that is still valid, return an error
+        if not has_access:
+            raise HTTPException(status_code=403, detail=error_message)
+        # Validate company access
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+            raise HTTPException(status_code=403, detail="Not authorized to access this company")
+
         # Initialize Supabase client with service role
         settings = get_settings()
         supabase: Client = create_client(
@@ -1051,23 +1046,22 @@ async def upload_leads(
             file_name=file.filename,
             type='leads'
         )
-        
-        # Add background task
-        background_tasks.add_task(
-            process_leads_upload,
-            company_id,
+
+        # Queue the Celery task
+        from src.celery_app.tasks.process_leads import celery_process_leads
+        celery_process_leads.delay(
+            str(company_id),
             file_name,
-            current_user["id"],
-            task_id
+            str(current_user["id"]),
+            str(task_id)
         )
-        
+
         return TaskResponse(
             task_id=task_id,
             message="File upload started. Use the task ID to check the status."
         )
-        
     except Exception as e:
-        logger.error(f"Error starting leads upload: {str(e)}")
+        logger.error(f"Error in upload_leads: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/companies/{company_id}/leads", response_model=PaginatedLeadResponse, tags=["Leads"])
