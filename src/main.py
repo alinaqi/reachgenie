@@ -1916,8 +1916,8 @@ async def run_campaign(
         
         # Queue the task and get the AsyncResult
         result = celery_run_company_campaign.delay(
-            str(campaign_id), 
-            str(campaign_run['id'])
+            campaign_id=str(campaign_id), 
+            campaign_run_id=str(campaign_run['id'])
         )
         
         # Store the Celery task ID immediately

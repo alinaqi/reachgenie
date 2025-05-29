@@ -98,8 +98,8 @@ async def process_scheduled_campaigns():
                     
                     # Queue the campaign using Celery task and get the AsyncResult
                     result = celery_run_company_campaign.delay(
-                        str(campaign_id),
-                        str(campaign_run_id)
+                        campaign_id=str(campaign_id),
+                        campaign_run_id=str(campaign_run_id)
                     )
                     
                     # Store the Celery task ID immediately
