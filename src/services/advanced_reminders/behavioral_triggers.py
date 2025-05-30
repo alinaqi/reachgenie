@@ -26,7 +26,18 @@ class BehavioralAnalyzer:
         if sent_at:
             try:
                 if isinstance(sent_at, str):
-                    sent_at = datetime.fromisoformat(sent_at.replace('Z', '+00:00'))
+                    # First standardize the format by truncating microseconds to 6 digits
+                    # Split on the timezone part
+                    timestamp_parts = sent_at.split('+')
+                    if len(timestamp_parts) == 2:
+                        main_time = timestamp_parts[0]
+                        # Ensure microseconds are exactly 6 digits
+                        if '.' in main_time:
+                            time_parts = main_time.split('.')
+                            microseconds = time_parts[1][:6].ljust(6, '0')
+                            main_time = f"{time_parts[0]}.{microseconds}"
+                        sent_at = f"{main_time}+{timestamp_parts[1]}"
+                    sent_at = datetime.fromisoformat(sent_at)
                 # Ensure sent_at is timezone-aware
                 if sent_at.tzinfo is None:
                     sent_at = sent_at.replace(tzinfo=timezone.utc)
