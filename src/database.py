@@ -4790,7 +4790,7 @@ async def has_pending_upload_tasks(company_id: UUID) -> bool:
         logger.error(f"Error checking pending upload tasks: {str(e)}")
         return False
 
-async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[Dict]:
+async def find_existing_leads(email: str, phone: Optional[str], company_id: UUID) -> List[Dict]:
     """
     Find existing leads in a company that match either the email or phone number.
     
@@ -4804,12 +4804,17 @@ async def find_existing_leads(email: str, phone: str, company_id: UUID) -> List[
     """
     try:
         # Build query to find leads with matching email or phone
-        response = supabase.table('leads')\
+        query = supabase.table('leads')\
             .select('id, email, phone_number, name')\
             .eq('company_id', str(company_id))\
-            .is_('deleted_at', None)\
-            .or_(f'email.eq.{email},phone_number.eq.{phone}')\
-            .execute()
+            .is_('deleted_at', None)
+        
+        # If phone is provided, check for email OR phone match
+        if phone:
+            response = query.or_(f'email.eq.{email},phone_number.eq.{phone}').execute()
+        else:
+            # If phone is not provided, only check for email match
+            response = query.eq('email', email).execute()
             
         return response.data if response.data else []
         

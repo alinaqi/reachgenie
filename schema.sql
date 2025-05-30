@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS leads (
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     company TEXT,
-    phone_number TEXT NOT NULL,
+    phone_number TEXT,
     company_size TEXT,
     job_title TEXT,
     company_facebook TEXT,
@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS leads (
 -- Add unique composite index on leads table for company_id and email
 CREATE UNIQUE INDEX IF NOT EXISTS leads_company_id_email_unique_idx ON leads (company_id, email) WHERE deleted_at IS NULL;
 
--- Add unique composite index on leads table for company_id and phone_number
-CREATE UNIQUE INDEX IF NOT EXISTS leads_company_id_phone_unique_idx ON leads (company_id, phone_number) WHERE deleted_at IS NULL;
+-- Add unique composite index on leads table for company_id and phone_number (only for non-null phone numbers)
+CREATE UNIQUE INDEX IF NOT EXISTS leads_company_id_phone_unique_idx ON leads (company_id, phone_number) WHERE deleted_at IS NULL AND phone_number IS NOT NULL;
 
 -- Calls table
 CREATE TABLE IF NOT EXISTS calls (
