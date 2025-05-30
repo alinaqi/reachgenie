@@ -102,12 +102,10 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     lead_id=email_log['lead_id'],
                     subject=subject,
                     body=reminder_content,
-                    email_log_id=email_log_id,
-                    message_id=original_email.get('message_id'),  # For threading
-                    reference_ids=email_log.get('reference_ids')  # For threading
-                )
+                    email_log_id=email_log_id
+                )                
                 
-                # Update the reminder status in database
+                # Update the reminder status in database with current timestamp, the definition of reminder sent here means that the email was added to the queue
                 current_time = datetime.now(timezone.utc)
                 success = await update_reminder_sent_status(
                     email_log_id=email_log_id,
