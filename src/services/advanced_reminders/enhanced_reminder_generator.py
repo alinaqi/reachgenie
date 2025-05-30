@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
 from src.config import get_settings
-from src.database import get_lead_by_id, get_company_by_id, get_product_by_id
+from src.database import get_lead_by_id, get_company_by_id, get_product_by_id, get_campaign_by_id
 
 from .reminder_strategies import get_strategy, get_strategy_progression
 from .dynamic_content import (
@@ -34,12 +34,14 @@ client = AsyncOpenAI(api_key=settings.openai_api_key)
 class EnhancedReminderGenerator:
     """Generates highly personalized, progressive reminders with behavioral awareness"""
     
-    def __init__(self, email_log: Dict, lead_data: Dict, campaign: Dict, company_info: Dict):
+    def __init__(self, email_log: Dict, lead_data: Dict, campaign: Dict, company_info: Dict, target_reminder_type: Optional[str] = None):
         self.email_log = email_log
         self.lead_data = lead_data
         self.campaign = campaign
         self.company_info = company_info
-        self.reminder_type = self._determine_current_reminder_type()
+        # If target_reminder_type is explicitly provided, use it
+        # Otherwise determine from email_log
+        self.reminder_type = target_reminder_type if target_reminder_type is not None else self._determine_current_reminder_type()
         self.base_strategy = get_strategy(self.reminder_type)
         self.behavioral_analyzer = BehavioralAnalyzer(email_log, lead_data)
         
@@ -103,7 +105,8 @@ class EnhancedReminderGenerator:
             return final_content['subject'], final_content['body']
             
         except Exception as e:
-            logger.error(f"Error generating enhanced reminder: {str(e)}")
+            logger.error(f"Error generating enhanced reminder: {str(e)}", exc_info=True)
+            logger.error(f"Reminder type: {self.reminder_type}, Strategy: {self.base_strategy.get('name', 'Unknown')}")
             # Fallback to simple reminder
             return self._generate_fallback_reminder(original_email_body)
     
@@ -399,7 +402,8 @@ async def generate_enhanced_reminder(
     campaign_id: str,
     company_id: str,
     original_email_body: str,
-    reminder_type: Optional[str] = None
+    reminder_type: Optional[str] = None,
+    campaign: Optional[Dict] = None  # Add optional campaign parameter
 ) -> Tuple[str, str]:
     """
     Main entry point for generating enhanced reminders
@@ -411,6 +415,7 @@ async def generate_enhanced_reminder(
         company_id: Company UUID
         original_email_body: Original email content
         reminder_type: Current reminder type (None, r1, r2, etc.)
+        campaign: Optional campaign dict (if not provided, will fetch from DB)
         
     Returns:
         Tuple of (subject, body) for the reminder
@@ -418,33 +423,35 @@ async def generate_enhanced_reminder(
     try:
         # Fetch required data
         lead_data = await get_lead_by_id(lead_id)
-        campaign = await get_campaign_by_id(campaign_id)
+        
+        # Use passed campaign or fetch from DB
+        if not campaign:
+            campaign = await get_campaign_by_id(campaign_id)
+            
         company_info = await get_company_by_id(company_id)
         
         if not all([lead_data, campaign, company_info]):
             logger.error("Missing required data for reminder generation")
             raise ValueError("Missing required data")
         
-        # Override reminder type if provided
-        if reminder_type:
-            email_log['last_reminder_sent'] = reminder_type
-        
-        # Create generator instance
+        # Create generator instance with the current state
         generator = EnhancedReminderGenerator(
             email_log=email_log,
             lead_data=lead_data,
             campaign=campaign,
-            company_info=company_info
+            company_info=company_info,
+            target_reminder_type=reminder_type  # Pass the explicit reminder type
         )
         
         # Generate reminder
         subject, body = await generator.generate_reminder(original_email_body)
         
-        logger.info(f"Generated enhanced reminder for lead {lead_id}, reminder type: {reminder_type}")
+        logger.info(f"Generated enhanced reminder for lead {lead_id}")
+        logger.info(f"Reminder type: {reminder_type}, Strategy: {generator.base_strategy.get('name', 'Unknown')}")
         
         return subject, body
         
     except Exception as e:
-        logger.error(f"Error in generate_enhanced_reminder: {str(e)}")
+        logger.error(f"Error in generate_enhanced_reminder: {str(e)}", exc_info=True)
         # Return simple fallback
         return "Following up", "Hi, I wanted to follow up on my previous email. Do you have any questions?"

@@ -4,7 +4,7 @@ Analyzes email engagement and adjusts messaging accordingly
 """
 
 from typing import Dict, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,16 @@ class BehavioralAnalyzer:
         """Calculate days since original email was sent"""
         sent_at = self.email_log.get('sent_at')
         if sent_at:
-            if isinstance(sent_at, str):
-                sent_at = datetime.fromisoformat(sent_at.replace('Z', '+00:00'))
-            return (datetime.now() - sent_at).days
+            try:
+                if isinstance(sent_at, str):
+                    sent_at = datetime.fromisoformat(sent_at.replace('Z', '+00:00'))
+                # Ensure sent_at is timezone-aware
+                if sent_at.tzinfo is None:
+                    sent_at = sent_at.replace(tzinfo=timezone.utc)
+                return (datetime.now(timezone.utc) - sent_at).days
+            except Exception as e:
+                logger.error(f"Error parsing sent_at date: {sent_at}, error: {str(e)}")
+                return 0
         return 0
     
     def get_engagement_level(self) -> str:

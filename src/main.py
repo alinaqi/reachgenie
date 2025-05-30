@@ -4066,7 +4066,7 @@ async def simulate_email_campaign(
     """
     try:
         # Import here to avoid circular imports
-        from src.scripts.send_reminders import get_reminder_content
+        from src.services.advanced_reminders import generate_enhanced_reminder
         
         # Get lead data
         lead = await get_lead_by_id(lead_id)
@@ -4117,37 +4117,54 @@ async def simulate_email_campaign(
         
         original_subject, original_body = original_email
         
+        logger.info(f"Using enhanced reminder system for simulation")
+        
         # Generate all reminders
         reminders = []
         
-        # Create a mock email log for reminder generation
+        # Create a mock email log for reminder generation with all necessary fields
         mock_log = {
+            'id': str(uuid4()),
             'email_log_id': str(uuid4()),
             'lead_id': str(lead_id),
+            'campaign_id': str(campaign['id']),
             'has_opened': False,
-            'has_replied': False
+            'has_replied': False,
+            'sent_at': datetime.now(timezone.utc).isoformat(),
+            'last_reminder_sent': None,
+            'last_reminder_sent_at': None
         }
         
         # Generate reminders based on number requested
+        # Note: The enhanced system uses None for first reminder, then r1, r2, etc.
         reminder_types = [None] + [f'r{i}' for i in range(1, number_of_reminders)]
         
         for i, reminder_type in enumerate(reminder_types):
-            # Skip the first one as it's the original email
-            if i == 0:
-                continue
-                
             # Simulate increasing engagement for demonstration
-            if i > 2:
+            # This helps showcase how the enhanced system adapts to engagement
+            if i == 2:  # After second reminder  
                 mock_log['has_opened'] = True
+                logger.info(f"Simulating email opened for reminder {i+1}")
+            elif i == 4:  # After fourth reminder
+                mock_log['has_replied'] = True
+                logger.info(f"Simulating email replied for reminder {i+1}")
+            
+            # Update last reminder sent for tracking
+            mock_log['last_reminder_sent'] = reminder_type
+            mock_log['last_reminder_sent_at'] = datetime.now(timezone.utc).isoformat()
             
             try:
-                # Generate reminder content
-                reminder_subject, reminder_body = await get_reminder_content(
-                    original_body,
-                    reminder_type,
-                    company,
-                    mock_log,
-                    campaign
+                logger.info(f"Generating reminder {i+1} of {number_of_reminders}, type: {reminder_type}")
+                
+                # Generate enhanced reminder content
+                reminder_subject, reminder_body = await generate_enhanced_reminder(
+                    email_log=mock_log,
+                    lead_id=str(lead_id),
+                    campaign_id=str(campaign['id']),
+                    company_id=str(company_id),
+                    original_email_body=original_body,
+                    reminder_type=reminder_type,
+                    campaign=campaign  # Pass the mock campaign directly
                 )
                 
                 if reminder_subject and reminder_body:
@@ -4155,19 +4172,28 @@ async def simulate_email_campaign(
                         "subject": reminder_subject,
                         "body": reminder_body
                     })
+                    logger.info(f"Successfully generated enhanced reminder {reminder_type}")
             except Exception as e:
-                logger.error(f"Error generating reminder {reminder_type}: {str(e)}")
+                logger.error(f"Error generating enhanced reminder {reminder_type}: {str(e)}")
                 # Continue with other reminders even if one fails
                 continue
         
         return {
             "status": "success",
+            "message": "Campaign simulation generated using enhanced reminder system",
             "data": {
                 "original": {
                     "subject": original_subject,
                     "body": original_body
                 },
-                "reminders": reminders
+                "reminders": reminders,
+                "reminder_system": "enhanced",
+                "features": {
+                    "behavioral_triggers": True,
+                    "dynamic_content": True,
+                    "progressive_strategies": True,
+                    "engagement_adaptation": True
+                }
             }
         }
     except HTTPException:
