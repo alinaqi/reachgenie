@@ -4041,6 +4041,141 @@ async def get_lead_email_script(
         }
     }
 
+@app.post("/api/companies/{company_id}/leads/{lead_id}/simulate-campaign", response_model=dict, tags=["Leads"])
+async def simulate_email_campaign(
+    company_id: UUID,
+    lead_id: UUID,
+    request: dict = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Simulate an email campaign for a specific lead, generating the original email and all reminders.
+    
+    Args:
+        company_id: UUID of the company
+        lead_id: UUID of the lead
+        request: Request body containing product_id and number_of_reminders
+        current_user: Current authenticated user
+        
+    Returns:
+        Generated original email and all reminder emails
+        
+    Raises:
+        404: Lead not found
+        403: User doesn't have access to this lead
+    """
+    try:
+        # Import here to avoid circular imports
+        from src.scripts.send_reminders import get_reminder_content
+        
+        # Get lead data
+        lead = await get_lead_by_id(lead_id)
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Check if lead belongs to the specified company
+        if str(lead["company_id"]) != str(company_id):
+            raise HTTPException(status_code=404, detail="Lead not found in this company")
+        
+        # Check if user has access to the company
+        companies = await get_companies_by_user_id(current_user["id"])
+        if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
+            raise HTTPException(status_code=403, detail="Not authorized to access this company")
+        
+        # Get company details
+        company = await get_company_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        
+        # Extract request data
+        product_id = request.get("product_id")
+        if not product_id:
+            raise HTTPException(status_code=400, detail="product_id is required")
+            
+        number_of_reminders = min(7, max(1, request.get("number_of_reminders", 7)))
+        
+        # Create a mock campaign object for the script generation
+        campaign = {
+            "id": str(uuid4()),
+            "company_id": str(company_id),
+            "product_id": str(product_id),
+            "number_of_reminders": number_of_reminders
+        }
+        
+        # Process lead data to ensure proper format
+        process_lead_data_for_response(lead)
+        
+        # Get or generate insights for the lead
+        insights = await get_or_generate_insights_for_lead(lead)
+        if not insights:
+            raise HTTPException(status_code=500, detail="Failed to generate insights for lead")
+        
+        # Generate the original email
+        original_email = await generate_email_content(lead, campaign, company, insights)
+        if not original_email:
+            raise HTTPException(status_code=500, detail="Failed to generate original email")
+        
+        original_subject, original_body = original_email
+        
+        # Generate all reminders
+        reminders = []
+        
+        # Create a mock email log for reminder generation
+        mock_log = {
+            'email_log_id': str(uuid4()),
+            'lead_id': str(lead_id),
+            'has_opened': False,
+            'has_replied': False
+        }
+        
+        # Generate reminders based on number requested
+        reminder_types = [None] + [f'r{i}' for i in range(1, number_of_reminders)]
+        
+        for i, reminder_type in enumerate(reminder_types):
+            # Skip the first one as it's the original email
+            if i == 0:
+                continue
+                
+            # Simulate increasing engagement for demonstration
+            if i > 2:
+                mock_log['has_opened'] = True
+            
+            try:
+                # Generate reminder content
+                reminder_subject, reminder_body = await get_reminder_content(
+                    original_body,
+                    reminder_type,
+                    company,
+                    mock_log,
+                    campaign
+                )
+                
+                if reminder_subject and reminder_body:
+                    reminders.append({
+                        "subject": reminder_subject,
+                        "body": reminder_body
+                    })
+            except Exception as e:
+                logger.error(f"Error generating reminder {reminder_type}: {str(e)}")
+                # Continue with other reminders even if one fails
+                continue
+        
+        return {
+            "status": "success",
+            "data": {
+                "original": {
+                    "subject": original_subject,
+                    "body": original_body
+                },
+                "reminders": reminders
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in simulate_email_campaign: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 @app.get("/api/companies/{company_id}/email-throttle", response_model=EmailThrottleSettings, tags=["Campaigns & Emails"])
 async def get_company_email_throttle(
     company_id: UUID,

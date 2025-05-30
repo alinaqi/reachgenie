@@ -1454,7 +1454,7 @@ async def get_email_logs_reminder(
         # Build the base query
         query = supabase.table('email_logs')\
             .select(
-                'id, sent_at, has_replied, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
+                'id, sent_at, has_replied, has_opened, last_reminder_sent, last_reminder_sent_at, lead_id, ' +
                 'campaigns!inner(id, name, company_id, companies!inner(id, name, account_email, account_password, account_type)), ' +
                 'leads!inner(email)'
             )\
@@ -1494,6 +1494,7 @@ async def get_email_logs_reminder(
                 'email_log_id': record['id'],
                 'sent_at': record['sent_at'],
                 'has_replied': record['has_replied'],
+                'has_opened': record['has_opened'],
                 'last_reminder_sent': record['last_reminder_sent'],
                 'last_reminder_sent_at': record['last_reminder_sent_at'],
                 'lead_id': record['lead_id'],
