@@ -305,7 +305,7 @@ class LeadBase(BaseModel):
     name: str
     email: Optional[str]
     company: Optional[str] = None
-    phone_number: str
+    phone_number: Optional[str] = None
     company_size: Optional[str] = None
     job_title: Optional[str] = None
     company_facebook: Optional[str] = None
@@ -482,7 +482,7 @@ class CreateLeadRequest(BaseModel):
     last_name: Optional[str] = None
     email: str
     company: str
-    phone_number: str
+    phone_number: Optional[str] = None
     website: str
     company_size: Optional[str] = None
     job_title: Optional[str] = None

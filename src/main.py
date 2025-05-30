@@ -1297,7 +1297,7 @@ async def create_lead_endpoint(
                 detail=f"Invalid email format: {str(e)}"
             )
 
-        # Handle phone number priority and validation
+        # Handle phone number priority and validation (optional)
         phone_number = None
         phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
         
@@ -1309,14 +1309,11 @@ async def create_lead_endpoint(
                     phone_number = formatted_number
                     break
         
-        # If no valid phone number found in any field
-        if not phone_number:
-            raise HTTPException(
-                status_code=400,
-                detail="No valid phone number provided. Phone number must be in E.164 format (e.g., +1234567890)"
-            )
+        # If a phone number was provided but invalid, warn but don't fail
+        if any(lead_dict.get(field) for field in phone_fields) and not phone_number:
+            logger.warning(f"Invalid phone number provided for lead {lead_dict.get('name', 'Unknown')}")
         
-        # Update the lead data with the validated phone number
+        # Update the lead data with the validated phone number (or None)
         lead_dict['phone_number'] = phone_number
     
         # Create/Update the lead in the database
@@ -1380,6 +1377,10 @@ async def start_call(
     lead = await get_lead_by_id(lead_id)
     if not lead or str(lead["company_id"]) != str(company_id):
         raise HTTPException(status_code=404, detail="Lead not found or does not belong to this company")
+    
+    # Check if lead has a phone number
+    if not lead.get('phone_number'):
+        raise HTTPException(status_code=400, detail="Cannot start call: Lead does not have a phone number")
         
     product = await get_product_by_id(product_id)
     if not product or str(product["company_id"]) != str(company_id):
@@ -2212,7 +2213,7 @@ Database fields and their types:
 - last_name (text, required) - should map from "Last Name", "LastName", "LAST NAME" etc
 - email (text, required)
 - company (text) - Map from Company Name
-- phone_number (text, required) - Should map from phone_number, mobile, direct_phone, or office_phone
+- phone_number (text) - Should map from phone_number, mobile, direct_phone, or office_phone
 - company_size (text)
 - job_title (text)
 - lead_source (text)
@@ -2395,7 +2396,7 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                 skipped_count += 1
                 continue
 
-            # Handle phone number priority and validation
+            # Handle phone number priority and validation (optional)
             phone_number = None
             phone_fields = ['phone_number', 'mobile', 'direct_phone', 'office_phone']
             
@@ -2407,19 +2408,11 @@ Example format: {{"First Name": "first_name", "Last Name": "last_name", "phone_n
                         phone_number = formatted_number
                         break
             
-            # If no valid phone number found in any field
-            if not phone_number:
-                #logger.info(f"Skipping record - no valid phone number found in any field")
-                #logger.info(f"Invalid phone numbers in record: {row}")
-                await create_skipped_row_record(
-                    upload_task_id=task_id,
-                    category="invalid_phone",
-                    row_data=row
-                )
-                skipped_count += 1
-                continue
+            # If a phone number was provided but invalid, log it but don't skip the record
+            if any(lead_data.get(field) for field in phone_fields) and not phone_number:
+                logger.warning(f"Invalid phone number provided for lead {lead_data.get('name', 'Unknown')}, continuing without phone")
             
-            # Update the lead data with the validated phone number
+            # Update the lead data with the validated phone number (or None)
             lead_data['phone_number'] = phone_number
 
             # Skip if either company or website is missing
