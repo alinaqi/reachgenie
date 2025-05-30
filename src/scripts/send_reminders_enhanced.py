@@ -81,8 +81,8 @@ async def send_reminder_emails(company: Dict, reminder_type: str) -> None:
                     )
                     
                     logger.info(f"Successfully generated enhanced reminder")
-                    logger.debug(f"Subject: {subject}")
-                    logger.debug(f"Preview: {reminder_content[:100]}...")
+                    #logger.debug(f"Subject: {subject}")
+                    #logger.debug(f"Preview: {reminder_content[:100]}...")
                     
                 except Exception as e:
                     logger.error(f"Failed to generate enhanced reminder, falling back to subject line: {str(e)}")
