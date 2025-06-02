@@ -156,7 +156,13 @@ async def create_user(email: str, password_hash: str):
     user_data = {
         'email': email, 
         'password_hash': password_hash,
-        'plan_type': 'trial'  # Set default plan type
+        'plan_type': 'trial',  # Set default plan type
+        'channels_active': {
+            'email': True,
+            'phone': True,
+            'linkedin': False,
+            'whatsapp': False
+        }
     }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0]
@@ -1604,7 +1610,13 @@ async def create_unverified_user(email: str, name: Optional[str] = None):
         'name': name,
         'password_hash': 'PENDING_INVITE',  # Temporary value that can't be used to log in
         'verified': False,
-        'plan_type': 'trial'  # Set default plan type
+        'plan_type': 'trial',  # Set default plan type
+        'channels_active': {
+            'email': True,
+            'phone': True,
+            'linkedin': False,
+            'whatsapp': False
+        }
     }
     response = supabase.table('users').insert(user_data).execute()
     return response.data[0] if response.data else None
