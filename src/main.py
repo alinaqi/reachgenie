@@ -33,7 +33,6 @@ from src.auth import (
 from src.database import (
     create_user,
     get_user_by_email,
-    update_campaign_run_progress,
     get_campaign_runs,
     get_email_conversation_history,
     update_company_voice_agent_settings,
@@ -154,6 +153,7 @@ from src.utils.string_utils import validate_phone_number
 from src.routes.upload_tasks import router as upload_tasks_router
 from src.routes.skipped_rows import router as skipped_rows_router
 from src.routes.file_downloads import router as file_downloads_router
+from src.database import TRIAL_PLAN_LEAD_LIMIT
 
 # Configure logger
 logging.basicConfig(
@@ -413,6 +413,9 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
             detail="User not found"
         )
     
+    if user["plan_type"] == "trial":
+        user['lead_tier'] = TRIAL_PLAN_LEAD_LIMIT
+
     # Get user's company roles
     company_roles = await get_user_company_roles(UUID(user["id"]))
     user["company_roles"] = company_roles
