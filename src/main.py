@@ -555,9 +555,8 @@ async def get_products(
 async def create_product(
     company_id: UUID,
     product_name: str = Form(...),
-    description: Optional[str] = Form(None),
     product_url: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None),
+    file: UploadFile = File(...),  # Made file mandatory by removing Optional and None default
     current_user: dict = Depends(get_current_user)
 ):
     # Validate company access
@@ -571,67 +570,65 @@ async def create_product(
     
     file_name = None
     original_filename = None
-    parsed_content = None
+    description = None  # Will be set from file content
     enriched_information = None
     
-    # Process file if provided
-    if file:
-        # Validate file extension
-        allowed_extensions = {'.docx', '.pdf', '.txt'}
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        
-        if file_ext not in allowed_extensions:
-            bugsnag.notify(
-                Exception("Invalid file type uploaded"),
-                context="create_product_validation",
-                metadata={
-                    "file_name": file.filename,
-                    "file_extension": file_ext,
-                    "allowed_extensions": list(allowed_extensions),
-                    "company_id": str(company_id),
-                    "user_id": current_user["id"]
-                }
-            )
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
-            )
-        
-        try:
-            # Generate unique filename
-            file_name = f"{uuid.uuid4()}{file_ext}"
-            original_filename = file.filename
-            
-            # Read and parse file content
-            file_content = await file.read()
-            try:
-                parsed_content = FileParser.parse_file(file_content, file_ext)
-            except ValueError as e:
-                logger.error(f"Error parsing file: {str(e)}")
-                raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
-            
-            # Initialize Supabase client with service role
-            settings = get_settings()
-            supabase: Client = create_client(
-                settings.supabase_url,
-                settings.SUPABASE_SERVICE_KEY
-            )
-            
-            # Upload file to Supabase storage
-            storage = supabase.storage.from_("product-files")
-            storage.upload(
-                path=file_name,
-                file=file_content,
-                file_options={"content-type": file.content_type}
-            )
-            
-        except Exception as e:
-            logger.error(f"Error processing file: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to process file")
+    # Process file (now mandatory)
+    # Validate file extension
+    allowed_extensions = {'.docx', '.pdf', '.txt'}
+    file_ext = os.path.splitext(file.filename)[1].lower()
     
-    # If description is not provided but we have parsed content, use that
-    if not description and parsed_content:
-        description = parsed_content
+    if file_ext not in allowed_extensions:
+        bugsnag.notify(
+            Exception("Invalid file type uploaded"),
+            context="create_product_validation",
+            metadata={
+                "file_name": file.filename,
+                "file_extension": file_ext,
+                "allowed_extensions": list(allowed_extensions),
+                "company_id": str(company_id),
+                "user_id": current_user["id"]
+            }
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed types are: {', '.join(allowed_extensions)}"
+        )
+    
+    try:
+        # Generate unique filename
+        file_name = f"{uuid.uuid4()}{file_ext}"
+        original_filename = file.filename
+        
+        # Read and parse file content
+        file_content = await file.read()
+        try:
+            # Parse file content and use it as description
+            description = FileParser.parse_file(file_content, file_ext)
+            if not description:
+                raise HTTPException(status_code=400, detail="Could not extract content from file")
+        except ValueError as e:
+            logger.error(f"Error parsing file: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+        
+        # Initialize Supabase client with service role
+        settings = get_settings()
+        supabase: Client = create_client(
+            settings.supabase_url,
+            settings.SUPABASE_SERVICE_KEY
+        )
+        
+        # Upload file to Supabase storage
+        storage = supabase.storage.from_("product-files")
+        storage.upload(
+            path=file_name,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process file")
     
     # Enrich product data using Perplexity if URL is provided
     if product_url:
