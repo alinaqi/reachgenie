@@ -175,7 +175,7 @@ async def generate_email_content(lead: dict, campaign: dict, company: dict, insi
 
         Company Information (for signature):
         - Company URL: {company.get('website', '')}
-        - Company Contact Person: {company.get('account_email').split('@')[0]}
+        - Company Contact Person: {company.get('account_email', '').split('@')[0] if company.get('account_email') else 'Contact'}
         - Company Calendar Link: {company.get('custom_calendar_link', '')}
 
         Create two pieces of content:
