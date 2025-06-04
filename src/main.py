@@ -154,6 +154,7 @@ from src.routes.upload_tasks import router as upload_tasks_router
 from src.routes.skipped_rows import router as skipped_rows_router
 from src.routes.file_downloads import router as file_downloads_router
 from src.database import TRIAL_PLAN_LEAD_LIMIT
+from src.routes.companies import companies_router
 
 # Configure logger
 logging.basicConfig(
@@ -4329,6 +4330,7 @@ app.include_router(stripe_webhooks_router)  # Add the new stripe webhooks router
 app.include_router(upload_tasks_router)
 app.include_router(skipped_rows_router)  # Add this line
 app.include_router(file_downloads_router)  # Add this line
+app.include_router(companies_router)
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(
