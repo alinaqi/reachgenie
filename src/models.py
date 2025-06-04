@@ -776,6 +776,7 @@ class CompanyUserResponse(BaseModel):
     email: str
     role: str
     user_company_profile_id: UUID
+    is_owner: bool
 
     class Config:
         json_schema_extra = {
@@ -783,7 +784,8 @@ class CompanyUserResponse(BaseModel):
                 "name": "John Doe",
                 "email": "john@example.com",
                 "role": "admin",
-                "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000"
+                "user_company_profile_id": "123e4567-e89b-12d3-a456-426614174000",
+                "is_owner": True
             }
         }
 
