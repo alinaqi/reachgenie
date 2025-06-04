@@ -5055,3 +5055,24 @@ async def delete_skipped_rows_by_task(upload_task_id: UUID) -> bool:
     except Exception as e:
         logger.error(f"Error deleting skipped rows for task {upload_task_id}: {str(e)}")
         return False
+
+async def update_company_details(company_id: UUID, update_data: dict) -> Optional[dict]:
+    """
+    Update company details
+    
+    Args:
+        company_id: UUID of the company
+        update_data: Dictionary containing fields to update
+        
+    Returns:
+        Updated company record or None if update failed
+    """
+    try:
+        response = supabase.table('companies')\
+            .update(update_data)\
+            .eq('id', str(company_id))\
+            .execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error updating company details: {str(e)}")
+        return None
