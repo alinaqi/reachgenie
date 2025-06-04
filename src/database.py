@@ -1842,9 +1842,11 @@ async def get_company_users(company_id: UUID) -> List[dict]:
     Returns:
         List of dicts containing user details (name, email, role, user_company_profile_id)
     """
+    company = await get_company_by_id(company_id)
+
     response = supabase.table('user_company_profiles')\
         .select(
-            'id,role,users!inner(name,email)'  # Added id field from user_company_profiles
+            'id,role,user_id,users!inner(name,email)'  # Added id field from user_company_profiles
         )\
         .eq('company_id', str(company_id))\
         .execute()
@@ -1853,11 +1855,17 @@ async def get_company_users(company_id: UUID) -> List[dict]:
     users = []
     for record in response.data:
         user = record['users']
+
+        is_owner = False
+        if company['user_id'] == record['user_id']:
+            is_owner = True
+
         users.append({
             'name': user['name'],
             'email': user['email'],
             'role': record['role'],
-            'user_company_profile_id': record['id']  # Added user_company_profile_id
+            'user_company_profile_id': record['id'],  # Added user_company_profile_id
+            'is_owner': is_owner
         })
     
     return users 
