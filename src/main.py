@@ -403,7 +403,10 @@ async def update_user_details(
     return updated_user
 
 @app.get("/api/users/me", response_model=UserInDB, tags=["Users"])
-async def get_current_user_details(current_user: dict = Depends(get_current_user)):
+async def get_current_user_details(
+    show_subscription_details: bool = Query(False, description="Whether to include subscription details in the response"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Get details of the currently authenticated user
     """
@@ -429,8 +432,8 @@ async def get_current_user_details(current_user: dict = Depends(get_current_user
         if not has_access:
             user["upgrade_message"] = error_message
     
-    # Get subscription details if user has a Stripe customer ID
-    if user.get("stripe_customer_id"):
+    # Get subscription details if user has a Stripe customer ID and show_subscription_details is True
+    if show_subscription_details and user.get("stripe_customer_id"):
         try:
             stripe_service = StripeService()
             subscription_details = await stripe_service.get_subscription_details(user["id"])
