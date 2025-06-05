@@ -3560,7 +3560,7 @@ async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number:
     """
     try:
         # Build base query for counting total records
-        count_query = supabase.table('campaigns').select('id', count='exact')
+        count_query = supabase.table('campaigns').select('id', count='exact').gt('number_of_reminders', 0)
         
         # Add type filter to count query if provided
         if campaign_types:
@@ -3574,7 +3574,7 @@ async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number:
         offset = (page_number - 1) * limit
         
         # Build query for fetching paginated data
-        query = supabase.table('campaigns').select('*')
+        query = supabase.table('campaigns').select('*').gt('number_of_reminders', 0)
         
         # Add type filter if provided
         if campaign_types:

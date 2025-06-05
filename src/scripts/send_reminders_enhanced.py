@@ -151,10 +151,6 @@ async def main():
                 # Ensure we don't exceed 7 reminders
                 num_reminders = min(campaign.get('number_of_reminders', 0), 7)
                 
-                if num_reminders == 0:
-                    logger.info(f"Campaign has no reminders configured, skipping")
-                    continue
-                
                 # Generate reminder types dynamically based on campaign's number_of_reminders
                 # None represents the state before first reminder is sent
                 reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
