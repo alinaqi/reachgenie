@@ -2854,7 +2854,7 @@ async def update_last_processed_bounce_uid(company_id: UUID, uid: str) -> bool:
     try:
         # Use update method directly without awaiting it
         response = supabase.table('companies')\
-            .update({"last_processed_bounce_uid": uid, "updated_at": datetime.now(timezone.utc)})\
+            .update({"last_processed_bounce_uid": uid})\
             .eq('id', str(company_id))\
             .execute()
         

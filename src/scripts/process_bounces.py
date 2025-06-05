@@ -409,8 +409,8 @@ async def fetch_bounces(company: Dict):
         imap.logout()
         
         # Update the last processed UID
-        if processed_bounces:
-            max_uid = max(int(bounce.get("uid") or 0) for bounce in processed_bounces)
+        if email_ids_to_process:
+            max_uid = max(int(email['uid']) for email in email_ids_to_process)
             if max_uid > 0:
                 logger.info(f"Updating last_processed_bounce_uid for company '{company['name']}' ({company_id}) to {max_uid}")
                 await update_last_processed_bounce_uid(company_id, str(max_uid))
