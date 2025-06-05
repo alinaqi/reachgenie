@@ -273,6 +273,7 @@ async def fetch_bounces(company: Dict):
         # Process only up to max_emails
         email_ids_to_process = email_ids[:max_emails]
         processed_bounces = []
+        email_data = []
 
         for email_id in email_ids_to_process:
             # Fetch the email
@@ -296,6 +297,10 @@ async def fetch_bounces(company: Dict):
                         if uid_match:
                             uid = uid_match.group(1)
                     
+                    email_data.append({
+                        "uid": uid  # Add UID to email data
+                    })
+
                     # Parse the raw email content
                     msg_obj = email.message_from_bytes(response_part[1])
 
@@ -409,8 +414,8 @@ async def fetch_bounces(company: Dict):
         imap.logout()
         
         # Update the last processed UID
-        if email_ids_to_process:
-            max_uid = max(int(email['uid']) for email in email_ids_to_process)
+        if email_data:
+            max_uid = max(int(email['uid']) for email in email_data)
             if max_uid > 0:
                 logger.info(f"Updating last_processed_bounce_uid for company '{company['name']}' ({company_id}) to {max_uid}")
                 await update_last_processed_bounce_uid(company_id, str(max_uid))
