@@ -1189,14 +1189,28 @@ async def update_company_account_credentials(company_id: UUID, account_email: st
     
     return response.data[0] if response.data else None
 
-async def get_companies_with_email_credentials():
-    """Get all companies that have email credentials configured and are not deleted"""
-    response = supabase.table('companies')\
+async def get_companies_with_email_credentials(last_id: Optional[UUID] = None, limit: int = 10):
+    """Get all companies that have email credentials configured and are not deleted
+    
+    Args:
+        last_id: Optional UUID of the last company ID from previous page for keyset pagination
+        limit: Number of companies to return per page (default: 10)
+        
+    Returns:
+        List of companies with email credentials
+    """
+    query = supabase.table('companies')\
         .select('*')\
         .not_.is_('account_email', 'null')\
         .not_.is_('account_password', 'null')\
         .eq('deleted', False)\
-        .execute()
+        .order('id')\
+        .limit(limit)
+    
+    if last_id:
+        query = query.gt('id', str(last_id))
+    
+    response = query.execute()
     return response.data
 
 async def update_last_processed_uid(company_id: UUID, uid: str):

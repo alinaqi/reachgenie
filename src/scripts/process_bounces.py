@@ -424,20 +424,29 @@ async def fetch_bounces(company: Dict):
 async def main():
     """Main function to process bounce notifications for all companies"""
     try:
-        # Get all companies with email credentials
-        companies = await get_companies_with_email_credentials()
-        logger.info(f"Found {len(companies)} companies with email credentials")
-        
-        # Process bounces for each company
-        for company in companies:
-            try:
-                await fetch_bounces(company)
-            except Exception as e:
-                logger.error(f"Error processing bounces for company '{company['name']}' {company['id']}: {str(e)}")
-                continue
+        last_id = None
+        while True:
+            # Get paginated companies with email credentials
+            companies = await get_companies_with_email_credentials(last_id=last_id)
+            if not companies:
+                logger.info("No more companies to process")
+                break
+                
+            logger.info(f"Found {len(companies)} companies with email credentials")
             
-            # Add small delay between companies to avoid rate limits
-            await asyncio.sleep(1)
+            # Process bounces for each company in this page
+            for company in companies:
+                try:
+                    await fetch_bounces(company)
+                except Exception as e:
+                    logger.error(f"Error processing bounces for company '{company['name']}' {company['id']}: {str(e)}")
+                    continue
+                
+                # Add small delay between companies to avoid rate limits
+                await asyncio.sleep(1)
+            
+            # Update last_id for next page
+            last_id = UUID(companies[-1]['id'])
             
     except Exception as e:
         logger.error(f"Error in main bounce processing: {str(e)}")
