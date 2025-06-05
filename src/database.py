@@ -3541,14 +3541,20 @@ async def get_active_campaign_runs_count(campaign_id: UUID) -> int:
         logger.error(f"Error getting active campaign runs count: {str(e)}")
         return 0
 
-async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number: int = 1, limit: int = 20) -> Dict[str, Any]:
+async def get_campaigns(
+    campaign_types: Optional[List[str]] = None, 
+    page_number: int = 1, 
+    limit: int = 20,
+    reminder_type: Optional[str] = None
+) -> Dict[str, Any]:
     """
-    Get paginated campaigns, optionally filtered by multiple types
+    Get paginated campaigns, optionally filtered by multiple types and reminder type
     
     Args:
         campaign_types: Optional list of types to filter (['email', 'call'], etc.)
         page_number: Page number to fetch (default: 1)
         limit: Number of items per page (default: 20)
+        reminder_type: Type of reminder to filter ('email' or 'phone')
         
     Returns:
         Dictionary containing:
@@ -3560,7 +3566,13 @@ async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number:
     """
     try:
         # Build base query for counting total records
-        count_query = supabase.table('campaigns').select('id', count='exact').gt('number_of_reminders', 0)
+        count_query = supabase.table('campaigns').select('id', count='exact')
+        
+        # Add reminder type filter if provided
+        if reminder_type == 'email':
+            count_query = count_query.gt('number_of_reminders', 0)
+        elif reminder_type == 'phone':
+            count_query = count_query.gt('phone_number_of_reminders', 0)
         
         # Add type filter to count query if provided
         if campaign_types:
@@ -3574,7 +3586,13 @@ async def get_campaigns(campaign_types: Optional[List[str]] = None, page_number:
         offset = (page_number - 1) * limit
         
         # Build query for fetching paginated data
-        query = supabase.table('campaigns').select('*').gt('number_of_reminders', 0)
+        query = supabase.table('campaigns').select('*')
+        
+        # Add reminder type filter if provided
+        if reminder_type == 'email':
+            query = query.gt('number_of_reminders', 0)
+        elif reminder_type == 'phone':
+            query = query.gt('phone_number_of_reminders', 0)
         
         # Add type filter if provided
         if campaign_types:

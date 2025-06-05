@@ -134,7 +134,8 @@ async def main():
             campaigns_response = await get_campaigns(
                 campaign_types=["email", "email_and_call"], 
                 page_number=page_number, 
-                limit=20
+                limit=20,
+                reminder_type='email'
             )
             campaigns = campaigns_response['items']
             

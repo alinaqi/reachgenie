@@ -168,7 +168,12 @@ async def main():
         page_number = 1
         while True:
             # Get campaigns with pagination
-            campaigns_response = await get_campaigns(campaign_types=["call", "email_and_call"], page_number=page_number, limit=20)
+            campaigns_response = await get_campaigns(
+                campaign_types=["call", "email_and_call"], 
+                page_number=page_number, 
+                limit=20,
+                reminder_type='phone'
+            )
             campaigns = campaigns_response['items']
             
             if not campaigns:
@@ -185,9 +190,8 @@ async def main():
                 # Generate reminder types dynamically based on campaign's phone_number_of_reminders
                 num_reminders = campaign.get('phone_number_of_reminders')
                 
-                reminder_types = []
-                if num_reminders > 0:
-                    reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
+                # None represents the state before first reminder is sent
+                reminder_types = [None] + [f'r{i}' for i in range(1, num_reminders)]
 
                 logger.info(f"Reminder types: {reminder_types} \n")
 
