@@ -129,27 +129,21 @@ class SMTPClient:
                 await self.smtp.login(self.email, self.password)
             except aiosmtplib.errors.SMTPAuthenticationError as auth_error:
                 if "BadCredentials" in str(auth_error) and self.smtp_server == "smtp.gmail.com":
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=(
-                            "Gmail login failed. If you're using 2-factor authentication, you need to:"
-                            "\n1. Go to your Google Account settings"
-                            "\n2. Enable 2-Step Verification if not already enabled"
-                            "\n3. Generate an App Password (Security → App Passwords)"
-                            "\n4. Use that App Password instead of your regular password"
-                            "\nFor more details: https://support.google.com/accounts/answer/185833"
-                        )
+                    error_msg = (
+                        f"Gmail login failed: {str(auth_error)}\n\n"
+                        "If you're using 2-factor authentication, you need to:\n"
+                        "1. Go to your Google Account settings\n"
+                        "2. Enable 2-Step Verification if not already enabled\n"
+                        "3. Generate an App Password (Security → App Passwords)\n"
+                        "4. Use that App Password instead of your regular password\n"
+                        "For more details: https://support.google.com/accounts/answer/185833"
                     )
+                    raise Exception(error_msg)
                 else:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=f"Authentication failed: {str(auth_error)}"
-                    )
+                    raise Exception(f"Authentication failed: {str(auth_error)}")
             
             logger.info(f"Successfully connected to SMTP server: {self.smtp_server}")
             
-        except HTTPException:
-            raise
         except Exception as e:
             logger.error(f"Failed to connect to SMTP server: {str(e)}")
             if self.smtp:
@@ -158,10 +152,7 @@ class SMTPClient:
                 except:
                     pass
                 self.smtp = None
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to connect to email server: {str(e)}"
-            )
+            raise Exception(str(e))
 
     async def disconnect(self) -> None:
         """
@@ -175,13 +166,37 @@ class SMTPClient:
             finally:
                 self.smtp = None
 
+    @staticmethod
+    def _extract_name_from_email(email: str) -> str:
+        """
+        Extract name from email address and format it as a proper name
+        (e.g., 'Jack Doe' from 'jack.doe@gmail.com')
+        """
+        # Get the part before @
+        local_part = email.split('@')[0]
+        
+        # Replace common separators with spaces
+        name = local_part.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+        
+        # Split into parts and capitalize each part
+        name_parts = [part.capitalize() for part in name.split() if part]
+        
+        # If we have at least one part, return the formatted name
+        if name_parts:
+            return ' '.join(name_parts)
+        
+        # Fallback to just capitalize the local part if splitting produces no valid parts
+        return local_part.capitalize()
+
     async def send_email(
         self,
         to_email: str,
         subject: str,
         html_content: str,
         from_name: Optional[str] = None,
-        email_log_id: Optional[UUID] = None
+        email_log_id: Optional[UUID] = None,
+        in_reply_to: Optional[str] = None,
+        references: Optional[str] = None
     ) -> None:
         """
         Send an email using the configured SMTP connection
@@ -192,6 +207,8 @@ class SMTPClient:
             html_content: HTML content of the email
             from_name: Optional sender name to display
             email_log_id: Optional UUID to be used in reply-to address
+            in_reply_to: Optional Message-ID to reference in In-Reply-To header
+            references: Optional References header value for threading
         """
         if not self.smtp or not self.smtp.is_connected:
             await self.connect()
@@ -200,7 +217,9 @@ class SMTPClient:
             # Create message
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
-            message["From"] = f"{from_name} <{self.email}>" if from_name else self.email
+            # Use provided from_name or extract from email
+            display_name = from_name if from_name else self._extract_name_from_email(self.email)
+            message["From"] = f"{display_name} <{self.email}>"
             message["To"] = to_email
             
             # Add Reply-To header if email_log_id is provided
@@ -211,6 +230,14 @@ class SMTPClient:
                 email_log_id_str = str(email_log_id) if isinstance(email_log_id, UUID) else email_log_id
                 reply_to = f"{local_part}+{email_log_id_str}@{domain}"
                 message["Reply-To"] = reply_to
+            
+            # Add In-Reply-To header if provided
+            if in_reply_to:
+                message["In-Reply-To"] = in_reply_to
+                
+            # Add References header if provided
+            if references:
+                message["References"] = references
             
             # Attach HTML content
             html_part = MIMEText(html_content, "html")

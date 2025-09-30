@@ -1,0 +1,8 @@
+---
+description: This file documents the core coding style guidelines, naming conventions, and engineering practices followed in this project
+globs: 
+alwaysApply: true
+---
+- Always create api endpoint route in a separate file, i.e. in src/routes directory, and then use it in main.py.
+- When in code there is a need to write a database query, always write a function for this in database.py and then call that function where needed.
+- Always check existing code implementation to get familiar and act accordingly

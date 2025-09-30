@@ -1,0 +1,11 @@
+This is a sample product document for testing purposes.
+
+Product Name: Test Product
+Description: This is a test product for API workflow testing.
+Features:
+- Feature 1: Amazing capability
+- Feature 2: Incredible performance
+- Feature 3: Outstanding reliability
+
+Price: $99.99
+Contact: support@example.com 

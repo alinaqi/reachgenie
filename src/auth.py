@@ -50,6 +50,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(H
     return {
         "id": user["id"],
         "email": user["email"],
+        "name": user["name"],
         "created_at": user["created_at"]
     }
 

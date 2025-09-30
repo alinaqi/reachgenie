@@ -57,4 +57,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-wheels/ 
+wheels/
+
+# Local testing
+test_*.py 

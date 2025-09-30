@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReachGenie AI Assistant Demo</title>
+    <!-- Import the Bland.ai client directly from the original source -->
+    <script src="https://www.bland.ai/demo-agent/js/initiate-bland-client.js"></script>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #818cf8;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+            --success-color: #22c55e;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: var(--dark-color);
+            background-color: var(--light-color);
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            color: var(--dark-color);
+            opacity: 0.8;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .demo-section {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.03);
+            padding: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .demo-section h2 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .feature-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feature-card h3 {
+            font-size: 1.4rem;
+            color: var(--primary-color);
+            margin-bottom: 0.8rem;
+        }
+        
+        .feature-card p {
+            color: var(--dark-color);
+            opacity: 0.8;
+        }
+        
+        .button {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .button:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .button-large {
+            font-size: 1.1rem;
+            padding: 1rem 2rem;
+        }
+        
+        .center {
+            text-align: center;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-active {
+            background-color: var(--success-color);
+        }
+        
+        .status-inactive {
+            background-color: #ef4444;
+        }
+        
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+        
+        .status-text {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        
+        #call-controls {
+            display: none;
+            margin-top: 2rem;
+            text-align: center;
+        }
+        
+        #call-status {
+            font-weight: 500;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        #end-call-btn {
+            background-color: #ef4444;
+        }
+        
+        #end-call-btn:hover {
+            background-color: #dc2626;
+        }
+
+        .agent-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .agent-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .agent-controls {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ReachGenie AI Assistant Demo</h1>
+            <p>Experience how our AI-powered assistant can help your sales team scale personalized outreach through natural conversations.</p>
+        </div>
+        
+        <div class="agent-container">
+            <div class="agent-header">
+                <h2>Talk to Our AI Assistant</h2>
+                <p>Click the button below to start a conversation with our AI assistant and learn how ReachGenie can help your sales team.</p>
+            </div>
+            
+            <div class="status-container">
+                <span class="status-indicator status-inactive" id="status-dot"></span>
+                <span class="status-text" id="status-text">Ready to connect</span>
+            </div>
+            
+            <div class="agent-controls">
+                <button id="start-call-btn" class="button button-large">Start Conversation</button>
+                
+                <div id="call-controls">
+                    <div id="call-status">Call in progress...</div>
+                    <button id="end-call-btn" class="button button-large">End Conversation</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>Key Features</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>Personalized Outreach</h3>
+                    <p>Generate highly personalized emails and calls for each prospect automatically using AI-powered research.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Multi-Channel Campaigns</h3>
+                    <p>Create seamless campaigns that integrate email and voice outreach for higher engagement rates.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Authentic Conversations</h3>
+                    <p>Our AI maintains natural, two-way conversations that feel human and build real relationships.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Automatic Meeting Booking</h3>
+                    <p>When prospects express interest, our system handles scheduling without human intervention.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Comprehensive Analytics</h3>
+                    <p>Track campaign performance in real-time with detailed insights on engagement and conversion.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Time-Saving Automation</h3>
+                    <p>Free your sales team to focus on closing deals while AI handles initial outreach and follow-up.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Configuration - Replace with your actual agent ID when available
+        const AGENT_ID = "90f7cfc2-a60b-4c05-b630-0cf6922a8816";
+        
+        // This hardcoded token is for testing only - in production you would generate this securely on your server
+        // For demo purposes, we're using a token directly from Bland's web demo
+        const SESSION_TOKEN = "demo_session_token";
+        
+        let blandClient;
+        let callInProgress = false;
+        
+        // DOM Elements
+        const startCallBtn = document.getElementById('start-call-btn');
+        const endCallBtn = document.getElementById('end-call-btn');
+        const callControls = document.getElementById('call-controls');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        
+        // Initialize when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            // Set up UI event listeners
+            startCallBtn.addEventListener('click', startConversation);
+            endCallBtn.addEventListener('click', endConversation);
+            
+            // Check if BlandWebClient is available
+            if (typeof BlandClient !== 'function') {
+                console.error('BlandClient not found. Make sure the script is loaded properly.');
+                updateStatus('inactive', 'Client not loaded');
+                startCallBtn.disabled = true;
+            } else {
+                updateStatus('inactive', 'Ready to connect');
+            }
+        });
+        
+        // Function to start conversation with the AI agent
+        async function startConversation() {
+            if (callInProgress) return;
+            
+            try {
+                // Update UI
+                updateStatus('connecting', 'Connecting...');
+                startCallBtn.disabled = true;
+                
+                // Initialize Bland client directly with the Bland demo script
+                blandClient = new BlandClient({
+                    agentId: AGENT_ID,
+                    sessionToken: SESSION_TOKEN,
+                    onInitialized: () => {
+                        console.log('Call initialized');
+                        updateStatus('active', 'Connected');
+                        callInProgress = true;
+                        startCallBtn.style.display = 'none';
+                        callControls.style.display = 'block';
+                    },
+                    onError: (error) => {
+                        console.error('Call error:', error);
+                        updateStatus('inactive', 'Error: ' + error.message);
+                        resetCallUI();
+                    },
+                    onTerminated: () => {
+                        console.log('Call terminated');
+                        updateStatus('inactive', 'Call ended');
+                        resetCallUI();
+                    }
+                });
+                
+                // Start the conversation
+                blandClient.start();
+                
+            } catch (error) {
+                console.error('Failed to start conversation:', error);
+                updateStatus('inactive', 'Failed to connect');
+                startCallBtn.disabled = false;
+            }
+        }
+        
+        // Function to end the conversation
+        function endConversation() {
+            if (!callInProgress || !blandClient) return;
+            
+            try {
+                blandClient.stop();
+                updateStatus('inactive', 'Disconnecting...');
+            } catch (error) {
+                console.error('Error ending call:', error);
+            }
+        }
+        
+        // Function to update the status indicator
+        function updateStatus(status, message) {
+            statusText.textContent = message;
+            
+            if (status === 'active') {
+                statusDot.classList.remove('status-inactive');
+                statusDot.classList.add('status-active');
+            } else {
+                statusDot.classList.remove('status-active');
+                statusDot.classList.add('status-inactive');
+            }
+        }
+        
+        // Function to reset the call UI
+        function resetCallUI() {
+            callInProgress = false;
+            startCallBtn.disabled = false;
+            startCallBtn.style.display = 'inline-block';
+            callControls.style.display = 'none';
+        }
+    </script>
+</body>
+</html> 
