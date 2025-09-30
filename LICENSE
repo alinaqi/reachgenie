@@ -1,0 +1,49 @@
+ReachGenie – Community License (AGPL-3.0 + Commercial Exception)
+
+Copyright (C) 2025 Ali Naqi Shaheen
+
+Email: ashaheen@workhub.ai
+
+---
+
+This software is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+with the following additional terms and conditions:
+
+1. NON-COMMERCIAL USE
+   - You are free to use, modify, and distribute this software under the terms of
+     the GNU Affero General Public License v3.0 **only for non-commercial purposes**.
+   - “Non-commercial use” means personal use, academic research, or internal use
+     by non-profit organizations that do not involve selling, monetizing,
+     offering the software as a service, or integrating it into a commercial product.
+
+2. COMMERCIAL USE
+   - Any commercial use of this software **requires a separate commercial license**
+     from the copyright holder.
+   - “Commercial use” includes, but is not limited to:
+       a. Selling, licensing, or sublicensing the software or derivative works.
+       b. Using the software as part of a paid product or service.
+       c. Hosting or offering the software to third parties in exchange for payment.
+   - To obtain a commercial license, please contact:
+     **Ali Naqi Shaheen – ashaheen@workhub.ai**
+
+3. COMPLIANCE WITH AGPL-3.0
+   - For non-commercial use, this software remains licensed under the AGPL-3.0.
+   - This means:
+       - You must make source code available when you run or distribute the software
+         over a network.
+       - You must preserve copyright notices and license text.
+       - You must distribute derivative works under the same license terms.
+
+4. DISCLAIMER
+   - THIS SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+     INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+     PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+     FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+     DEALINGS IN THE SOFTWARE.
+
+---
+
+Full text of the GNU Affero General Public License v3.0:
+https://www.gnu.org/licenses/agpl-3.0.html
+
