@@ -1514,7 +1514,7 @@ See the full documentation in [docs/campaign_summary_email.md](docs/campaign_sum
 
 ## License
 
-MIT License - see LICENSE file for details
+AGPL License - see LICENSE file for details
 
 ---
 
