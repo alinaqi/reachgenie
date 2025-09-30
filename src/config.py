@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"  # Default frontend URL
 
     redis_url: str = "redis://localhost:6379/0"
+    
+    # Unipile/LinkedIn settings
+    unipile_api_key: Optional[str] = None
+    unipile_dsn: Optional[str] = None
+    unipile_webhook_secret: Optional[str] = None
+    linkedin_messaging_enabled: bool = True
+    linkedin_daily_invite_limit: int = 80
+    linkedin_daily_profile_view_limit: int = 100
+    linkedin_message_delay_seconds: int = 20
 
     class Config:
         env_file = ".env"

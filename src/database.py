@@ -226,8 +226,12 @@ async def db_create_product(
     return response.data[0]
 
 async def get_products_by_company(company_id: UUID):
-    response = supabase.table('products').select('*').eq('company_id', str(company_id)).eq('deleted', False).execute()
-    return response.data
+    try:
+        response = supabase.table('products').select('*').eq('company_id', str(company_id)).eq('deleted', False).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        logger.error(f"Error in get_products_by_company for company {company_id}: {str(e)}", exc_info=True)
+        return []
 
 async def create_lead(company_id: UUID, lead_data: dict, upload_task_id: Optional[UUID] = None):
     try:
@@ -281,7 +285,7 @@ async def get_leads_by_company(company_id: UUID, page_number: int = 1, limit: in
     # Build base query
     base_query = supabase.table('leads').select('*', count='exact')\
         .eq('company_id', str(company_id))\
-        .is_('deleted_at', None)  # Exclude soft-deleted leads
+        .is_('deleted_at', 'null')  # Exclude soft-deleted leads
     
     # Add search filter if search_term is provided
     if search_term:
@@ -1681,170 +1685,262 @@ async def mark_invite_token_used(token: str):
         .execute()
     return response.data[0] if response.data else None 
 
-async def get_companies_by_user_id(user_id: UUID, show_stats: bool = False):
+async def get_companies_by_user_id(user_id: Union[UUID, str], show_stats: bool = False):
     """
     Get all companies that a user has access to through user_company_profiles,
     including their products (with campaign counts and total calls) and total leads count if show_stats is True
     
     Args:
-        user_id: UUID of the user
+        user_id: UUID or str of the user
         show_stats: bool, if True includes products (with campaign and call counts) and total leads count in the response
         
     Returns:
         List of companies the user has access to, optionally including array of products (with campaign and call counts) and total leads
     """
-    # Build the select statement based on show_stats
-    select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
-    if show_stats:
-        select_fields += ', products(id, product_name, deleted)'  # Include deleted column for filtering
-    select_fields += ')'
-
-    response = supabase.table('user_company_profiles')\
-        .select(select_fields)\
-        .eq('user_id', str(user_id))\
-        .eq('companies.deleted', False)\
-        .execute()
-
-    # Transform the response to include products and leads count in the desired format
-    companies = []
-    for profile in response.data:
-        company = profile['companies']
+    try:
+        # Convert to string if UUID object is passed
+        user_id_str = str(user_id)
+        logger.info(f"Getting companies for user {user_id_str}")
         
-        # Create base company data
-        company_data = {
-            'id': company['id'],
-            'name': company['name'],
-            'address': company['address'],
-            'industry': company['industry'],
-            'website': company['website'],
-            'created_at': company['created_at'],
-            'role': profile['role'],
-            'user_id': profile['user_id']
-        }
+        # First, let's check if user has any profiles
+        check_response = supabase.table('user_company_profiles')\
+            .select('*')\
+            .eq('user_id', user_id_str)\
+            .execute()
         
-        # Add products and total leads only if show_stats is True
+        logger.info(f"Found {len(check_response.data)} user_company_profiles for user {user_id_str}")
+        
+        # Build the select statement based on show_stats
+        select_fields = 'role, user_id, companies!inner(id, name, address, industry, website, deleted, created_at'
         if show_stats:
-            # Add products if they exist
-            if 'products' in company:
-                products = []
-                for product in company['products']:
-                    # Skip deleted products
-                    if product.get('deleted', False):
-                        continue
-                        
-                    # Get campaign count for this product
-                    campaigns_response = supabase.table('campaigns')\
-                        .select('id', count='exact')\
-                        .eq('product_id', product['id'])\
-                        .execute()
-                    
-                    # Get campaign IDs in a separate query for calls count
-                    campaign_ids_response = supabase.table('campaigns')\
-                        .select('id')\
-                        .eq('product_id', product['id'])\
-                        .execute()
-                    campaign_ids = [campaign['id'] for campaign in campaign_ids_response.data]
+            select_fields += ', products(id, product_name, deleted)'  # Include deleted column for filtering
+        select_fields += ')'
 
-                    # Call the stored postgres function using Supabase RPC
-                    response = supabase.rpc("count_unique_leads_by_campaign", {"campaign_ids": campaign_ids}).execute()
+        response = supabase.table('user_company_profiles')\
+            .select(select_fields)\
+            .eq('user_id', user_id_str)\
+            .execute()
+        
+        logger.info(f"Query returned {len(response.data)} companies (including deleted) for user {user_id_str}")
 
-                    # Extract and print the result
-                    if response.data:
-                        unique_leads_contacted = response.data
-                    else:
-                        unique_leads_contacted = 0
-
-                    # Initialize all statistics variables
-                    total_calls = 0
-                    total_positive_calls = 0
-                    total_sent_emails = 0
-                    total_opened_emails = 0
-                    total_replied_emails = 0
-                    total_meetings_booked_in_calls = 0
-                    total_meetings_booked_in_emails = 0
-
-                    if campaign_ids:  # Only query if there are campaigns
-                        # Fetch all calls for this product
-                        calls_response = supabase.table('calls')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .execute()
-                        total_calls = calls_response.count
-
-                        # Fetch all positive calls for this product
-                        positive_calls_response = supabase.table('calls')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .eq('sentiment', 'positive')\
-                            .execute()
-                        total_positive_calls = positive_calls_response.count
-                    
-                        # Fetch all sent emails for this product
-                        sent_emails_response = supabase.table('email_logs')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .execute()
-                        total_sent_emails = sent_emails_response.count
-
-                        # Fetch all opened emails for this product
-                        opened_emails_response = supabase.table('email_logs')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .eq('has_opened', True)\
-                            .execute()
-                        total_opened_emails = opened_emails_response.count
-
-                        # Fetch all replied emails for this product
-                        replied_emails_response = supabase.table('email_logs')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .eq('has_replied', True)\
-                            .execute()
-                        total_replied_emails = replied_emails_response.count
-
-                        # Fetch all meetings booked in calls for this product
-                        meetings_booked_calls_response = supabase.table('calls')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .eq('has_meeting_booked', True)\
-                            .execute()
-                        total_meetings_booked_in_calls = meetings_booked_calls_response.count
-
-                        # Fetch all meetings booked in emails for this product
-                        meetings_booked_emails_response = supabase.table('email_logs')\
-                            .select('id', count='exact')\
-                            .in_('campaign_id', campaign_ids)\
-                            .eq('has_meeting_booked', True)\
-                            .execute()
-                        total_meetings_booked_in_emails = meetings_booked_emails_response.count
-                    
-                    products.append({
-                        'id': product['id'],
-                        'name': product['product_name'],
-                        'total_campaigns': campaigns_response.count,
-                        'total_calls': total_calls,
-                        'total_positive_calls': total_positive_calls,
-                        'total_sent_emails': total_sent_emails,
-                        'total_opened_emails': total_opened_emails,
-                        'total_replied_emails': total_replied_emails,
-                        'total_meetings_booked_in_calls': total_meetings_booked_in_calls,
-                        'total_meetings_booked_in_emails': total_meetings_booked_in_emails,
-                        'unique_leads_contacted': unique_leads_contacted
-                    })
-                company_data['products'] = products
+        # Filter out deleted companies
+        non_deleted_profiles = []
+        for profile in response.data:
+            if profile.get('companies') and not profile['companies'].get('deleted', False):
+                non_deleted_profiles.append(profile)
             else:
-                company_data['products'] = []
-            
-            # Get total leads count using a separate count query
-            leads_count_response = supabase.table('leads')\
-                .select('id', count='exact')\
-                .eq('company_id', company['id'])\
-                .execute()
-            company_data['total_leads'] = leads_count_response.count
+                logger.debug(f"Skipping deleted company for user {user_id_str}")
+        
+        logger.info(f"After filtering deleted companies: {len(non_deleted_profiles)} companies for user {user_id_str}")
 
-        companies.append(company_data)
+        # If no data, try alternative approach by fetching company roles first
+        if not non_deleted_profiles:
+            logger.info(f"Trying alternative approach: fetching company roles first for user {user_id_str}")
+            company_roles = await get_user_company_roles(user_id)
+            logger.info(f"Found {len(company_roles)} company roles for user {user_id_str}")
+            
+            # Fetch companies individually
+            companies = []
+            for role in company_roles:
+                try:
+                    company = await get_company_by_id(UUID(role['company_id']))
+                    if company and not company.get('deleted', False):
+                        company_data = {
+                            'id': company['id'],
+                            'name': company['name'],
+                            'address': company.get('address'),
+                            'industry': company.get('industry'),
+                            'website': company.get('website'),
+                            'created_at': company.get('created_at'),
+                            'role': role['role'],
+                            'user_id': user_id_str
+                        }
+                        
+                        # Add products and stats if requested
+                        if show_stats:
+                            # Get products
+                            products_data = await get_products_by_company(UUID(company['id']))
+                            products = []
+                            for product in products_data:
+                                if not product.get('deleted', False):
+                                    # Get campaign count for this product
+                                    campaigns_response = supabase.table('campaigns')\
+                                        .select('id', count='exact')\
+                                        .eq('product_id', product['id'])\
+                                        .execute()
+                                    
+                                    products.append({
+                                        'id': product['id'],
+                                        'name': product['product_name'],
+                                        'total_campaigns': campaigns_response.count
+                                    })
+                            company_data['products'] = products
+                            
+                            # Get total leads count
+                            leads_count_response = supabase.table('leads')\
+                                .select('id', count='exact')\
+                                .eq('company_id', company['id'])\
+                                .execute()
+                            company_data['total_leads'] = leads_count_response.count
+                        
+                        companies.append(company_data)
+                except Exception as e:
+                    logger.error(f"Error fetching company {role['company_id']}: {str(e)}")
+                    continue
+            
+            logger.info(f"Alternative approach found {len(companies)} companies for user {user_id_str}")
+            return companies
+
+        # Transform the response to include products and leads count in the desired format
+        companies = []
+        for profile in non_deleted_profiles:
+            company = profile['companies']
+            
+            # Create base company data
+            company_data = {
+                'id': company['id'],
+                'name': company['name'],
+                'address': company['address'],
+                'industry': company['industry'],
+                'website': company['website'],
+                'created_at': company['created_at'],
+                'role': profile['role'],
+                'user_id': profile['user_id']
+            }
+            
+            # Add products and total leads only if show_stats is True
+            if show_stats:
+                # Add products if they exist
+                if 'products' in company:
+                    products = []
+                    for product in company['products']:
+                        # Skip deleted products
+                        if product.get('deleted', False):
+                            continue
+                            
+                        # Get campaign count for this product
+                        campaigns_response = supabase.table('campaigns')\
+                            .select('id', count='exact')\
+                            .eq('product_id', product['id'])\
+                            .execute()
+                        
+                        # Get campaign IDs in a separate query for calls count
+                        campaign_ids_response = supabase.table('campaigns')\
+                            .select('id')\
+                            .eq('product_id', product['id'])\
+                            .execute()
+                        campaign_ids = [campaign['id'] for campaign in campaign_ids_response.data]
     
-    return companies
+                        # Call the stored postgres function using Supabase RPC
+                        if campaign_ids:  # Only call RPC if there are campaign IDs
+                            try:
+                                response = supabase.rpc("count_unique_leads_by_campaign", {"campaign_ids": campaign_ids}).execute()
+                                # Extract and print the result
+                                if response.data is not None:
+                                    unique_leads_contacted = response.data
+                                else:
+                                    unique_leads_contacted = 0
+                            except Exception as rpc_error:
+                                logger.warning(f"Error calling count_unique_leads_by_campaign RPC: {str(rpc_error)}")
+                                unique_leads_contacted = 0
+                        else:
+                            unique_leads_contacted = 0
+    
+                        # Initialize all statistics variables
+                        total_calls = 0
+                        total_positive_calls = 0
+                        total_sent_emails = 0
+                        total_opened_emails = 0
+                        total_replied_emails = 0
+                        total_meetings_booked_in_calls = 0
+                        total_meetings_booked_in_emails = 0
+    
+                        if campaign_ids:  # Only query if there are campaigns
+                            # Fetch all calls for this product
+                            calls_response = supabase.table('calls')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .execute()
+                            total_calls = calls_response.count
+    
+                            # Fetch all positive calls for this product
+                            positive_calls_response = supabase.table('calls')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .eq('sentiment', 'positive')\
+                                .execute()
+                            total_positive_calls = positive_calls_response.count
+                        
+                            # Fetch all sent emails for this product
+                            sent_emails_response = supabase.table('email_logs')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .execute()
+                            total_sent_emails = sent_emails_response.count
+    
+                            # Fetch all opened emails for this product
+                            opened_emails_response = supabase.table('email_logs')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .eq('has_opened', True)\
+                                .execute()
+                            total_opened_emails = opened_emails_response.count
+    
+                            # Fetch all replied emails for this product
+                            replied_emails_response = supabase.table('email_logs')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .eq('has_replied', True)\
+                                .execute()
+                            total_replied_emails = replied_emails_response.count
+    
+                            # Fetch all meetings booked in calls for this product
+                            meetings_booked_calls_response = supabase.table('calls')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .eq('has_meeting_booked', True)\
+                                .execute()
+                            total_meetings_booked_in_calls = meetings_booked_calls_response.count
+    
+                            # Fetch all meetings booked in emails for this product
+                            meetings_booked_emails_response = supabase.table('email_logs')\
+                                .select('id', count='exact')\
+                                .in_('campaign_id', campaign_ids)\
+                                .eq('has_meeting_booked', True)\
+                                .execute()
+                            total_meetings_booked_in_emails = meetings_booked_emails_response.count
+                        
+                        products.append({
+                            'id': product['id'],
+                            'name': product['product_name'],
+                            'total_campaigns': campaigns_response.count,
+                            'total_calls': total_calls,
+                            'total_positive_calls': total_positive_calls,
+                            'total_sent_emails': total_sent_emails,
+                            'total_opened_emails': total_opened_emails,
+                            'total_replied_emails': total_replied_emails,
+                            'total_meetings_booked_in_calls': total_meetings_booked_in_calls,
+                            'total_meetings_booked_in_emails': total_meetings_booked_in_emails,
+                            'unique_leads_contacted': unique_leads_contacted
+                        })
+                    company_data['products'] = products
+                else:
+                    company_data['products'] = []
+                
+                # Get total leads count using a separate count query
+                leads_count_response = supabase.table('leads')\
+                    .select('id', count='exact')\
+                    .eq('company_id', company['id'])\
+                    .execute()
+                company_data['total_leads'] = leads_count_response.count
+    
+            companies.append(company_data)
+        
+        return companies
+    
+    except Exception as e:
+        logger.error(f"Error in get_companies_by_user_id for user {user_id}: {str(e)}", exc_info=True)
+        return []  # Always return a list, even on error
 
 async def get_company_users(company_id: UUID) -> List[dict]:
     """

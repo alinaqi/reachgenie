@@ -25,6 +25,8 @@ from src.routes.partner_applications import router as partner_applications_route
 from src.routes.do_not_email import router as do_not_email_router, check_router as do_not_email_check_router
 from src.routes.email_queues import router as email_queues_router
 from src.routes.campaign_retry import router as campaign_retry_router
+from src.routes.linkedin import router as linkedin_router
+from src.routes.unipile_webhooks import router as unipile_webhooks_router
 from src.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, settings, request_password_reset, reset_password,
@@ -921,16 +923,73 @@ async def get_companies(
     Optionally include products in the response if show_stats is True.
     """
     try:
-        return await get_companies_by_user_id(UUID(current_user["id"]), show_stats)
+        user_id = current_user.get("id")
+        if not user_id:
+            logger.error(f"No user ID found in current_user: {current_user}")
+            return []
+        
+        # Log the request details
+        logger.info(f"=== GET /api/companies request ===")
+        logger.info(f"User ID: {user_id}")
+        logger.info(f"User Email: {current_user.get('email', 'N/A')}")
+        logger.info(f"Show Stats: {show_stats}")
+        
+        companies = await get_companies_by_user_id(user_id, show_stats)
+        
+        logger.info(f"Returned {len(companies)} companies for user {user_id}")
+        
+        if companies is None:
+            logger.warning(f"get_companies_by_user_id returned None for user {user_id}")
+            return []
+        
+        return companies
     except Exception as e:
-        logger.error(f"Error in get_companies: {str(e)}") 
+        logger.error(f"Error in get_companies for user {current_user.get('id')}: {str(e)}", exc_info=True)
+        # Return empty list instead of None to satisfy response model
+        return [] 
+
+@app.get("/api/debug/companies", tags=["Debug"])
+async def debug_companies(
+    current_user: dict = Depends(get_current_user)
+):
+    """Debug endpoint to check company data"""
+    try:
+        user_id = current_user.get("id")
+        
+        # Get company roles
+        company_roles = await get_user_company_roles(UUID(user_id))
+        
+        # Get user company profiles
+        from src.database import supabase
+        profiles_response = supabase.table('user_company_profiles')\
+            .select('*')\
+            .eq('user_id', str(user_id))\
+            .execute()
+        
+        # Get companies with join
+        companies_response = supabase.table('user_company_profiles')\
+            .select('role, user_id, companies!inner(*)')\
+            .eq('user_id', str(user_id))\
+            .execute()
+        
+        return {
+            "user_id": user_id,
+            "company_roles": company_roles,
+            "user_company_profiles_count": len(profiles_response.data),
+            "user_company_profiles": profiles_response.data,
+            "companies_with_join_count": len(companies_response.data),
+            "companies_with_join": companies_response.data
+        }
+    except Exception as e:
+        logger.error(f"Error in debug_companies: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) 
 
 @app.get("/api/companies/{company_id}", response_model=CompanyInDB, tags=["Companies"])
 async def get_company(
     company_id: UUID,
     current_user: dict = Depends(get_current_user)
 ):
-    companies = await get_companies_by_user_id(current_user["id"])
+    companies = await get_companies_by_user_id(UUID(current_user["id"]))
     if not companies or not any(str(company["id"]) == str(company_id) for company in companies):
         raise HTTPException(status_code=404, detail="Company not found")
     
@@ -4334,6 +4393,8 @@ app.include_router(upload_tasks_router)
 app.include_router(skipped_rows_router)  # Add this line
 app.include_router(file_downloads_router)  # Add this line
 app.include_router(companies_router)
+app.include_router(linkedin_router)  # LinkedIn routes
+app.include_router(unipile_webhooks_router)  # Unipile webhook routes
 
 @app.post("/api/campaigns/{campaign_id}/summary-email", response_model=Dict[str, str])
 async def send_campaign_summary_email_endpoint(

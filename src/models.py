@@ -381,6 +381,7 @@ class CampaignType(str, Enum):
     EMAIL = 'email'
     CALL = 'call'
     EMAIL_AND_CALL = 'email_and_call'
+    LINKEDIN = 'linkedin'
 
 class EmailCampaignBase(BaseModel):
     name: str
@@ -914,7 +915,7 @@ class AgentSession(BaseModel):
     analysis: Optional[AnalysisSchema] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PartnershipType(str, Enum):
     RESELLER = "RESELLER"
@@ -977,7 +978,7 @@ class PartnerApplicationNote(PartnerApplicationNoteCreate):
                 "created_at": "2023-01-01T12:00:00Z"
             }
         }
-        orm_mode = True
+        from_attributes = True
 
 class PartnerApplicationResponse(PartnerApplicationBase):
     """Model for partner application responses"""
@@ -1009,7 +1010,7 @@ class PartnerApplicationResponse(PartnerApplicationBase):
                 "notes": []
             }
         }
-        orm_mode = True
+        from_attributes = True
 
 class PartnerApplicationListResponse(BaseModel):
     """Model for paginated partner application list responses"""
@@ -1020,7 +1021,7 @@ class PartnerApplicationListResponse(BaseModel):
     total_pages: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PartnerApplicationStats(BaseModel):
     """Model for partner application statistics"""
@@ -1047,7 +1048,7 @@ class PartnerApplicationStats(BaseModel):
                 "recent_applications": 35
             }
         }
-        orm_mode = True
+        from_attributes = True
 
 class SimplePartnerApplicationResponse(BaseModel):
     """Model for minimal partner application creation response"""
@@ -1061,7 +1062,7 @@ class SimplePartnerApplicationResponse(BaseModel):
                 "message": "Your partnership application has been submitted successfully. We will contact you soon."
             }
         }
-        orm_mode = True
+        from_attributes = True
 
 # Do Not Email Bulk Import Models
 class DoNotEmailBulkImportResponse(BaseModel):
