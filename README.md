@@ -1478,6 +1478,40 @@ For issues, questions, or contributions, please:
 3. Submit issues with detailed reproduction steps
 4. Follow code style and testing requirements
 
+## Campaign Summary Email Feature
+
+ReachGenie now includes a comprehensive Campaign Summary Email feature that provides customers with detailed reports on their campaign performance, prospect enrichment, and email management activities.
+
+### Features
+
+- Detailed prospect enrichment information with examples
+- Automated email management metrics (bounces and unsubscribes)
+- Comprehensive campaign results with industry benchmark comparisons
+- Next steps information and scheduling
+
+### Usage
+
+Send a campaign summary email via API:
+
+```bash
+curl -X POST "https://api.reachgenie.com/api/campaigns/{campaign_id}/summary-email" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"recipient_email": "user@example.com"}'
+```
+
+For testing or manual generation, use the command-line script:
+
+```bash
+# Send the email
+python -m src.scripts.generate_campaign_summary_email <campaign_id> <recipient_email>
+
+# Save to file for testing
+python -m src.scripts.test_campaign_summary <campaign_id> <recipient_email> --save-to-file
+```
+
+See the full documentation in [docs/campaign_summary_email.md](docs/campaign_summary_email.md).
+
 ## License
 
 MIT License - see LICENSE file for details
