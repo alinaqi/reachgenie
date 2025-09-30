@@ -643,17 +643,35 @@ Global and company-specific suppression list.
 
 ### Prerequisites
 - Python 3.12+
-- Docker & Docker Compose
 - PostgreSQL (via Supabase or self-hosted)
 - Redis
 - Required API keys (OpenAI, Bland AI, Stripe, etc.)
 
-### Local Development Setup
+### Installation Methods
+
+#### Option 1: Install from PyPI (Recommended)
+
+```bash
+pip install reachgenie
+```
+
+Then run:
+```bash
+reachgenie
+```
+
+#### Option 2: Install from GitHub
+
+```bash
+pip install git+https://github.com/alinaqi/reachgenie.git
+```
+
+#### Option 3: Development Installation
 
 1. **Clone the repository**
 ```bash
-git clone <repository-url>
-cd backend
+git clone https://github.com/alinaqi/reachgenie.git
+cd reachgenie/backend
 ```
 
 2. **Create virtual environment**
@@ -662,18 +680,24 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-3. **Install dependencies**
+3. **Install in development mode**
 ```bash
-pip install -r requirements.txt
+# Install package in editable mode
+pip install -e .
+
+# Or with development dependencies
+pip install -e ".[dev]"
 ```
 
-4. **Set up environment variables**
+### Configuration
+
+1. **Set up environment variables**
 ```bash
 cp .env.example .env
 # Edit .env with your actual credentials
 ```
 
-5. **Set up database**
+2. **Set up database**
 ```bash
 # Run schema.sql on your PostgreSQL database
 psql -U postgres -d your_database -f schema.sql
@@ -681,6 +705,8 @@ psql -U postgres -d your_database -f schema.sql
 # Run any pending migrations
 # Check the migrations/ directory for migration files
 ```
+
+See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 
 ### Docker Deployment
 
@@ -1514,7 +1540,19 @@ See the full documentation in [docs/campaign_summary_email.md](docs/campaign_sum
 
 ## License
 
-AGPL License - see LICENSE file for details
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+### Commercial Use
+
+For commercial use or if you need a commercial license, please contact:
+**Ali Shaheen** - ashaheen@workhub.ai
+
+The AGPL-3.0 license requires that:
+- Any modifications to the software must be made available under the same license
+- If you run a modified version on a server, you must make the source code available to users
+- Commercial deployments may require a separate commercial license
+
+See the [LICENSE](LICENSE) file for full details.
 
 ---
 

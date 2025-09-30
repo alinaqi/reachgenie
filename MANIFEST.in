@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include requirements.txt
+include .env.example
+include schema.sql
+include postgres_functions.sql
+include leads_fields.json
+recursive-include src/web *.png *.html
+recursive-include src/templates *.py
+recursive-include src/prompts *.py
+recursive-include migrations *.sql
+recursive-include docs *.md
+recursive-include crons *.sh

@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reachgenie"
+version = "0.1.0"
+description = "AI-powered multi-channel sales automation platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "AGPL-3.0"}
+authors = [
+    {name = "Ali Shaheen", email = "ashaheen@workhub.ai"}
+]
+keywords = ["ai", "sales", "automation", "email", "phone", "linkedin", "sdr", "outbound", "campaigns"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Communications :: Email",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/alinaqi/reachgenie"
+Documentation = "https://github.com/alinaqi/reachgenie#readme"
+Repository = "https://github.com/alinaqi/reachgenie"
+"Bug Tracker" = "https://github.com/alinaqi/reachgenie/issues"
+
+[project.scripts]
+reachgenie = "src.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

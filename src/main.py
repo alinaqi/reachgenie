@@ -4505,3 +4505,18 @@ async def get_campaign_run_email_queues(
         limit=limit,
         status=status.value if status != EmailQueueStatus.all else None
     )
+
+def main():
+    """Main entry point for running ReachGenie server"""
+    import uvicorn
+    uvicorn.run(
+        "src.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+if __name__ == "__main__":
+    main()
+
