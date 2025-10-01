@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "AI-powered multi-channel sales automation platform"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "AGPL-3.0"}
+license = "AGPL-3.0-only"
 authors = [
     {name = "Ali Shaheen", email = "ashaheen@workhub.ai"}
 ]
@@ -16,7 +16,6 @@ keywords = ["ai", "sales", "automation", "email", "phone", "linkedin", "sdr", "o
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
